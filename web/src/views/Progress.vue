@@ -123,6 +123,7 @@ async function onDone() {
 
 function onAbandon() {
   Modal.confirm({
+    draggable: true,
     title: '确认废弃',
     content: '确定废弃此任务？',
     onOk: async () => {

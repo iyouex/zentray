@@ -21,31 +21,65 @@ provide('setThemeMode', (mode) => {
 
 let unwatch = () => {}
 
-// 窗口无边框全域拖拽桥接支持
+// 无边框窗口拖拽：空白区域可拖，控件点击不抢占。
+// 必须用 location.href：QWebEngine 同步拦截导航，Wayland 的 startSystemMove 才接得上用户按下。
+const INTERACTIVE_SELECTOR = [
+  'button',
+  'a',
+  'input',
+  'textarea',
+  'select',
+  'label',
+  '.arco-btn',
+  '.arco-input',
+  '.arco-input-wrapper',
+  '.arco-select',
+  '.arco-picker',
+  '.arco-checkbox',
+  '.arco-radio',
+  '.arco-dropdown',
+  '.arco-modal',
+  '.arco-slider',
+  '.arco-switch',
+  '.arco-textarea',
+  '.arco-table',
+  '.no-drag',
+  '.task-card-item',
+].join(', ')
+
 let isDragging = false
 let startScreenX = 0
 let startScreenY = 0
 
+function sendBridgeSignal(url) {
+  window.location.href = url
+}
+
 function handleMouseDown(e) {
-  // 忽略按钮、输入框、可编辑控件及交互组件
-  if (e.target && e.target.closest('button, input, textarea, a, .arco-btn, .arco-input-wrapper, .arco-select, .arco-picker, .arco-checkbox, .arco-radio, .arco-dropdown, .arco-modal')) {
-    return
-  }
+  if (!e.target || e.button !== 0) return
+  if (e.target.closest(INTERACTIVE_SELECTOR)) return
+  // Arco 下拉/日期/级联等弹层 teleport 到 body（#app 之外），点在弹层上绝不触发窗口拖拽
+  const appRoot = document.getElementById('app')
+  if (appRoot && !appRoot.contains(e.target)) return
+
   isDragging = true
   startScreenX = e.screenX
   startScreenY = e.screenY
-  // 优先通知 Python 触发 OS 原生 Wayland/X11 窗口拖拽
-  window.location.href = 'zentray://start_drag'
+  sendBridgeSignal('zentray://start_drag')
 }
 
 function handleMouseMove(e) {
   if (!isDragging) return
+  if ((e.buttons & 1) === 0) {
+    isDragging = false
+    return
+  }
   const dx = e.screenX - startScreenX
   const dy = e.screenY - startScreenY
   if (dx !== 0 || dy !== 0) {
     startScreenX = e.screenX
     startScreenY = e.screenY
-    window.location.href = `zentray://move?dx=${dx}&dy=${dy}`
+    sendBridgeSignal(`zentray://move?dx=${dx}&dy=${dy}`)
   }
 }
 

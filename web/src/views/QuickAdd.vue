@@ -1,5 +1,5 @@
 <template>
-  <div class="quick-add-page">
+  <div class="quick-add-page" data-drag="true">
     <div class="quick-add-box">
       <a-input
         ref="inputRef"

@@ -750,6 +750,7 @@ async function onExportBackup() {
   if (exportInclude.value.includes('env')) {
     const ok = await new Promise((resolve) => {
       Modal.confirm({
+        draggable: true,
         title: '包含密钥',
         content: '导出内容包含 .env（API Key 等）。请妥善保管备份文件，确认继续？',
         okText: '继续导出',
@@ -800,6 +801,7 @@ async function onImportBackup() {
   }
   const ok = await new Promise((resolve) => {
     Modal.confirm({
+      draggable: true,
       title: '确认导入（替换）',
       content:
         '将用备份覆盖本地对应数据，并先自动生成安全备份。导入后建议刷新任务或重启应用。是否继续？',

@@ -36,16 +36,23 @@ if _HAS_WEBENGINE:
 
         def acceptNavigationRequest(self, url, nav_type, is_main_frame):  # noqa: N802
             s = url.toString()
+            if s.startswith(("zentray://start_drag", "zentray://move")):
+                logger.debug("bridge nav: %s", s[:80])
             if s.startswith("zentray://start_drag"):
-                view = self.view()
+                # PySide6 6.11 已移除 QWebEnginePage.view()；_BridgePage 以 view 为父构造
+                view = self.parent()
                 if view:
                     dlg = view.window()
-                    if dlg and dlg.windowHandle():
-                        try:
-                            if dlg.windowHandle().startSystemMove():
-                                return False
-                        except Exception as e:
-                            logger.debug("Failed startSystemMove from Vue: %s", e)
+                    if dlg:
+                        from zentray.ui.dialog_utils import mark_dialog_moved
+
+                        mark_dialog_moved(dlg)
+                        handle = dlg.windowHandle()
+                        if handle:
+                            try:
+                                handle.startSystemMove()
+                            except Exception as e:
+                                logger.debug("Failed startSystemMove from Vue: %s", e)
                 return False
             if s.startswith("zentray://move"):
                 from urllib.parse import parse_qs, urlparse
@@ -54,10 +61,13 @@ if _HAS_WEBENGINE:
                 try:
                     dx = int((q.get("dx") or ["0"])[0])
                     dy = int((q.get("dy") or ["0"])[0])
-                    view = self.view()
+                    view = self.parent()
                     if view:
                         dlg = view.window()
                         if dlg:
+                            from zentray.ui.dialog_utils import mark_dialog_moved
+
+                            mark_dialog_moved(dlg)
                             dlg.move(dlg.x() + dx, dlg.y() + dy)
                 except Exception as e:
                     logger.debug("Failed to handle zentray://move: %s", e)
@@ -104,49 +114,20 @@ class VueDialog(QDialog):
     ):
         super().__init__(parent)
         self.setWindowTitle(title)
-        self.resize(width, height)
         self.result_payload: Any = None
         self.setModal(modal)
 
-        flags = (
-            self.windowFlags()
-            & ~Qt.WindowContextHelpButtonHint
-            & ~Qt.WindowCloseButtonHint
-            & ~Qt.WindowMinimizeButtonHint
-            & ~Qt.WindowMaximizeButtonHint
-            & ~Qt.WindowSystemMenuHint
-        )
-        if frameless:
-            flags = (
-                Qt.FramelessWindowHint
-                | Qt.Tool
-                | (Qt.WindowStaysOnTopHint if stay_on_top else Qt.Widget)
-            )
-        else:
-            flags = (
-                Qt.FramelessWindowHint
-                | Qt.Window
-                | Qt.CustomizeWindowHint
-                | (Qt.WindowStaysOnTopHint if stay_on_top else Qt.Widget)
-            )
-        self.setWindowFlags(flags)
+        from zentray.ui.dialog_utils import apply_dialog_chrome, schedule_center
 
+        apply_dialog_chrome(
+            self,
+            width=width,
+            height=height,
+            stay_on_top=stay_on_top,
+            tool=frameless,
+        )
         if transparent:
             self.setAttribute(Qt.WA_TranslucentBackground, True)
-
-        from zentray.ui.dialog_utils import available_screen_size, center_dialog, enable_dialog_drag
-
-        enable_dialog_drag(self)
-
-        if not frameless:
-            scr = available_screen_size()
-            max_w = max(320, int(scr.width() * 0.92))
-            max_h = max(240, int(scr.height() * 0.92))
-            fixed_w = min(width, max_w)
-            fixed_h = min(height, max_h)
-            self.setFixedSize(fixed_w, fixed_h)
-        else:
-            self.setFixedSize(width, height)
 
         if not _HAS_WEBENGINE:
             layout = QVBoxLayout(self)
@@ -158,7 +139,7 @@ class VueDialog(QDialog):
                     "请使用带 WebEngine 的 PySide6，或设置 ZENTRAY_UI=qt 回退原生对话框。"
                 )
             )
-            center_dialog(self)
+            schedule_center(self)
             return
 
         from zentray.api.server import get_api_server, vue_ui_available
@@ -174,7 +155,7 @@ class VueDialog(QDialog):
                     "或设置 ZENTRAY_UI=qt 使用原生对话框。"
                 )
             )
-            center_dialog(self)
+            schedule_center(self)
             return
 
         server = get_api_server()
@@ -207,17 +188,14 @@ class VueDialog(QDialog):
                 pass
         self.view.load(QUrl(url))
         layout.addWidget(self.view)
-        from PySide6.QtCore import QTimer
-        QTimer.singleShot(10, lambda: center_dialog(self))
+        schedule_center(self)
         logger.info("Vue dialog open: %s", url)
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
-        from PySide6.QtCore import QTimer
-        from zentray.ui.dialog_utils import center_dialog, enable_dialog_drag
+        from zentray.ui.dialog_utils import schedule_center
 
-        QTimer.singleShot(10, lambda: center_dialog(self))
-        enable_dialog_drag(self)
+        schedule_center(self)
 
     def _on_bridge_result(self, payload: object) -> None:
         self.result_payload = payload
@@ -254,6 +232,9 @@ def open_vue_route(
         modal=modal,
     )
     ok = bool(dlg.exec())
+    # deleteLater：让 QDialog/QWebEnginePage 在主线程事件循环里确定性析构，
+    # 避免 Python 引用环交给 cyclic GC 在任意线程（HTTP 处理线程）析构 Qt 对象
+    dlg.deleteLater()
     return ok, dlg.result_payload
 
 

@@ -183,6 +183,7 @@
     <a-modal
       v-model:visible="showAddSec"
       title="添加二级分类"
+      draggable
       @ok="onAddSecondary"
       :ok-loading="addingSec"
     >
@@ -466,6 +467,7 @@ async function confirmReminderConflictsIfNeeded(payload) {
     const list = formatConflictList(data.conflicts)
     return await new Promise((resolve) => {
       Modal.confirm({
+        draggable: true,
         title: '提醒时间冲突',
         content: () =>
           h(

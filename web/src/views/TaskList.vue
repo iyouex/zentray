@@ -156,6 +156,7 @@ async function onDone() {
 function onAbandon() {
   if (!current.value) return
   Modal.confirm({
+    draggable: true,
     title: '确认废弃',
     content: `确定废弃「${current.value.title}」？`,
     onOk: async () => {

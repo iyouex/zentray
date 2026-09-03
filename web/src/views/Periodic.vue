@@ -87,6 +87,7 @@ function onEdit(record) {
 
 function onDelete(record) {
   Modal.confirm({
+    draggable: true,
     title: '删除周期模板',
     content: `确定删除「${record.base_title}」？已生成的实例不会自动删除。`,
     onOk: async () => {

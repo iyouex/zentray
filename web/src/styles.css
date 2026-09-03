@@ -99,6 +99,15 @@ body,
   gap: 12px;
   margin-bottom: 12px;
   flex-shrink: 0;
+  cursor: grab;
+}
+
+.page-header:active {
+  cursor: grabbing;
+}
+
+.page-header :is(button, a, .arco-btn, input, .arco-input-wrapper) {
+  cursor: pointer;
 }
 
 .page-header h2 {
@@ -190,6 +199,7 @@ body,
   justify-content: center;
   padding: 12px;
   background: transparent;
+  cursor: grab;
 }
 
 .quick-add-box {
