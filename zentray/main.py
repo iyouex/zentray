@@ -11,6 +11,7 @@ if sys.platform.startswith("linux"):
     os.environ["QT_IM_MODULE"] = "ibus"
     os.environ.setdefault("XMODIFIERS", "@im=fcitx")
 
+from PySide6.QtCore import QObject
 from PySide6.QtWidgets import QApplication
 from zentray.dependencies import injector, init_tray_controller
 from zentray.core.repository import TaskRepository, PeriodicTemplateRepository
@@ -29,16 +30,49 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class AppRuntime:
-    """运行时持有可热启停的 worker。"""
+class AppRuntime(QObject):
+    """运行时持有可热启停的 worker。
+
+    worker 线程的信号必须连接到本类的 bound method：AutoConnection 会排队回主线程。
+    连接 lambda / 普通函数时 PySide6 走 direct，弹窗会在 worker 线程上创建，
+    导致输入事件错乱（下拉点击失效）甚至 QtWebEngine 线程断言崩溃。
+    """
 
     def __init__(self):
+        super().__init__()
         self.controller = None
         self.nightly = None
         self.reminder_worker = None
         self.watcher = None
         self.overlay = None
         self.hotkey = None
+
+    def on_quick_add(self) -> None:
+        from zentray.ui.vue_commands import try_vue_quick_add
+
+        if try_vue_quick_add(self.controller):
+            return
+        self.overlay.show_center()
+
+    def on_task_overdue(self, task) -> None:
+        if self.controller:
+            self.controller.renderer.show_notification(
+                "⏰ 任务逾期",
+                f"「{task.title}」已逾期，优先级已自动提升为 {task.priority.upper()}",
+            )
+
+    def on_reminder_due(self, task, fire_key: str) -> None:
+        _on_reminder_due(self, task, fire_key)
+
+    def shutdown(self) -> None:
+        """退出前停掉所有 worker，避免 QThread 在运行中被析构导致 abort。"""
+        for worker in (self.reminder_worker, self.watcher, self.nightly):
+            if worker is None:
+                continue
+            try:
+                worker.stop()
+            except Exception:
+                logger.exception("停止 worker 失败")
 
 
 def _start_nightly_if_needed(runtime: AppRuntime, task_repo: TaskRepository) -> None:
@@ -284,15 +318,8 @@ def main():
     runtime.overlay = QuickAddOverlay(task_service=task_service)
     runtime.overlay.task_added.connect(runtime.controller.reload_data)
 
-    def _on_quick_add():
-        from zentray.ui.vue_commands import try_vue_quick_add
-
-        if try_vue_quick_add(runtime.controller):
-            return
-        runtime.overlay.show_center()
-
     runtime.hotkey = HotkeyListener(HOTKEY_QUICK_ADD)
-    runtime.hotkey.triggered.connect(_on_quick_add)
+    runtime.hotkey.triggered.connect(runtime.on_quick_add)
     if not runtime.hotkey.start():
         logger.warning("全局热键不可用（权限/Wayland？），仍可通过托盘菜单新建任务")
 
@@ -300,26 +327,20 @@ def main():
     template_repo = injector.get(PeriodicTemplateRepository)
     runtime.watcher = WatcherWorker(task_repo, template_repo)
     runtime.watcher.tasks_updated.connect(runtime.controller.reload_data)
-    runtime.watcher.task_overdue.connect(
-        lambda task: runtime.controller.renderer.show_notification(
-            "⏰ 任务逾期",
-            f"「{task.title}」已逾期，优先级已自动提升为 {task.priority.upper()}",
-        )
-    )
+    runtime.watcher.task_overdue.connect(runtime.on_task_overdue)
     runtime.watcher.start()
 
     _start_nightly_if_needed(runtime, task_repo)
 
     runtime.reminder_worker = ReminderWorker(task_repo)
-    runtime.reminder_worker.reminder_due.connect(
-        lambda task, key: _on_reminder_due(runtime, task, key)
-    )
+    runtime.reminder_worker.reminder_due.connect(runtime.on_reminder_due)
     runtime.reminder_worker.start()
 
     if warnings:
         for w in warnings:
             logger.warning("配置提示: %s", w)
 
+    app.aboutToQuit.connect(runtime.shutdown)
     sys.exit(app.exec())
 
 

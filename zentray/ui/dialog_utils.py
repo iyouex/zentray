@@ -2,7 +2,9 @@
 """对话框通用布局：横版优先、适配屏幕、按钮文字完整显示。"""
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, QSize, QObject, QEvent
+import weakref
+
+from PySide6.QtCore import Qt, QSize, QObject, QEvent, QPoint, QTimer
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -13,7 +15,68 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QVBoxLayout,
     QWidget,
+    QAbstractButton,
+    QAbstractSpinBox,
+    QComboBox,
+    QLineEdit,
+    QTextEdit,
+    QPlainTextEdit,
+    QSlider,
+    QScrollBar,
+    QAbstractItemView,
+    QTabBar,
+    QMenu,
+    QCalendarWidget,
 )
+
+
+def is_interactive_widget(widget: QObject | None) -> bool:
+    """判断控件是否为按钮、输入框、下拉框、弹出菜单等交互式控件。"""
+    if not widget or not isinstance(widget, QWidget):
+        return False
+    if isinstance(
+        widget,
+        (
+            QAbstractButton,
+            QAbstractSpinBox,
+            QComboBox,
+            QLineEdit,
+            QTextEdit,
+            QPlainTextEdit,
+            QSlider,
+            QScrollBar,
+            QAbstractItemView,
+            QTabBar,
+            QMenu,
+            QCalendarWidget,
+        ),
+    ):
+        return True
+
+    flags = widget.windowFlags()
+    if flags & (Qt.Popup | Qt.Tool):
+        return True
+
+    classname = widget.metaObject().className()
+    interactive_keywords = [
+        "Button",
+        "Edit",
+        "Combo",
+        "Spin",
+        "Slider",
+        "Scroll",
+        "View",
+        "List",
+        "Tree",
+        "Table",
+        "Calendar",
+        "WebEngine",
+        "Menu",
+        "Popup",
+        "Dropdown",
+        "Item",
+    ]
+    return any(k in classname for k in interactive_keywords)
 
 
 class DialogDragFilter(QObject):
@@ -21,50 +84,81 @@ class DialogDragFilter(QObject):
 
     def __init__(self, dialog: QDialog):
         super().__init__(dialog)
-        self.dialog = dialog
+        # weakref：强引用会与 dialog._drag_filter 成环，只能被 cyclic GC 在任意线程
+        # （如 HTTP 处理线程）回收，导致 QDialog/WebEngine 在错误线程析构而崩溃
+        self._dialog_ref = weakref.ref(dialog)
         self.drag_pos = None
+
+    @property
+    def dialog(self) -> QDialog | None:
+        return self._dialog_ref()
 
     def install_recursive(self, target: QObject) -> None:
         if not target:
             return
         try:
-            target.installEventFilter(self)
-            for child in target.findChildren(QObject):
-                # 避开编辑框和按钮，防止抢占输入事件
-                classname = child.metaObject().className()
-                if any(k in classname for k in ["QLineEdit", "QTextEdit", "QPushButton", "QComboBox", "QSpinBox"]):
-                    continue
-                child.installEventFilter(self)
+            if not is_interactive_widget(target):
+                target.installEventFilter(self)
+            for child in target.findChildren(QWidget):
+                if not is_interactive_widget(child):
+                    child.installEventFilter(self)
         except Exception:
             pass
 
     def eventFilter(self, obj: QObject, event: QEvent) -> bool:
         if event.type() == QEvent.Show:
-            from PySide6.QtCore import QTimer
-
-            QTimer.singleShot(0, lambda: center_dialog(self.dialog))
-            QTimer.singleShot(30, lambda: center_dialog(self.dialog))
-            QTimer.singleShot(100, lambda: center_dialog(self.dialog))
+            # 只在对话框自身 Show 时居中；子控件 Show 会频繁触发，不能把窗口拽回中心
+            if obj is self.dialog:
+                schedule_center(self.dialog)
             self.install_recursive(self.dialog)
+            return False
         elif event.type() == QEvent.ChildAdded:
             child = event.child()
-            if child:
+            if child and isinstance(child, QWidget):
                 try:
-                    child.installEventFilter(self)
+                    if not is_interactive_widget(child):
+                        child.installEventFilter(self)
                 except Exception:
                     pass
+            return False
         elif event.type() == QEvent.MouseButtonPress:
             if event.button() == Qt.LeftButton:
+                app = QApplication.instance()
+                if app and app.activePopupWidget():
+                    # 当前有下拉菜单或弹出浮层打开，绝对不触发窗口拖拽
+                    return False
+
+                global_pos = (
+                    event.globalPosition().toPoint()
+                    if hasattr(event, "globalPosition")
+                    else event.globalPos()
+                )
+                hit_widget = app.widgetAt(global_pos) if app else None
+
+                curr = hit_widget
+                while curr:
+                    if curr == self.dialog:
+                        break
+                    if is_interactive_widget(curr):
+                        # 点击在按钮、下拉框、弹出菜单或交互控件上，直接放行，绝不抢占
+                        return False
+                    curr = curr.parentWidget()
+
                 handle = self.dialog.windowHandle()
                 if handle:
                     try:
                         if handle.startSystemMove():
+                            mark_dialog_moved(self.dialog)
                             return True
                     except Exception:
                         pass
-                self.drag_pos = event.globalPosition().toPoint() - self.dialog.frameGeometry().topLeft()
+                self.drag_pos = (
+                    global_pos - self.dialog.frameGeometry().topLeft()
+                )
+                return False
         elif event.type() == QEvent.MouseMove:
             if event.buttons() == Qt.LeftButton and self.drag_pos is not None:
+                mark_dialog_moved(self.dialog)
                 self.dialog.move(event.globalPosition().toPoint() - self.drag_pos)
                 return True
         elif event.type() == QEvent.MouseButtonRelease:
@@ -84,8 +178,15 @@ def available_screen_size() -> QSize:
     return QSize(1280, 720)
 
 
+def mark_dialog_moved(dialog: QDialog) -> None:
+    """用户已拖动窗口后，后续居中定时器不得再把窗口拽回屏幕中心。"""
+    setattr(dialog, "_user_moved", True)
+
+
 def center_dialog(dialog: QDialog) -> None:
-    """将对话框精准居中到当前活跃屏幕可用区域中心。"""
+    """将对话框精准居中到当前光标所在屏幕可用区域中心。用户拖动后不再强制居中。"""
+    if getattr(dialog, "_user_moved", False):
+        return
     app = QApplication.instance()
     if not app:
         return
@@ -99,7 +200,20 @@ def center_dialog(dialog: QDialog) -> None:
     h = dialog.height()
     x = geo.x() + (geo.width() - w) // 2
     y = geo.y() + (geo.height() - h) // 2
-    dialog.move(x, y)
+    dialog.setGeometry(x, y, w, h)
+    handle = dialog.windowHandle()
+    if handle is not None:
+        try:
+            handle.setPosition(QPoint(x, y))
+        except Exception:
+            pass
+
+
+def schedule_center(dialog: QDialog) -> None:
+    # 多阶段重定位：Wayland 首帧窗口几何不稳定，单次定时会错位（见 46d7087 / f7cd0de）。
+    # center_dialog 内含 _user_moved 守卫，拖动过的窗口不会被拽回中心。
+    for delay in (0, 30, 100):
+        QTimer.singleShot(delay, lambda d=dialog: center_dialog(d))
 
 
 def enable_dialog_drag(dialog: QDialog) -> None:
@@ -115,13 +229,16 @@ def apply_dialog_chrome(
     *,
     width: int,
     height: int,
+    stay_on_top: bool = False,
+    tool: bool = False,
 ) -> None:
     """
     统一弹窗 Chrome 形态: 使用 FramelessWindowHint 彻底移除系统标题栏与系统按钮 (最大化/最小化/关闭)。
-    控制页面关闭和大小改由页面内部按钮控制。
+    控制页面关闭和大小改由页面内部按钮控制。默认屏幕居中，空白区域可拖拽移动。
     """
-    stays_on_top = bool(dialog.windowFlags() & Qt.WindowStaysOnTopHint)
-    flags = Qt.FramelessWindowHint | Qt.Window | Qt.CustomizeWindowHint
+    stays_on_top = stay_on_top or bool(dialog.windowFlags() & Qt.WindowStaysOnTopHint)
+    window_type = Qt.Tool if tool else Qt.Dialog
+    flags = Qt.FramelessWindowHint | window_type | Qt.CustomizeWindowHint
     if stays_on_top:
         flags |= Qt.WindowStaysOnTopHint
     dialog.setWindowFlags(flags)
@@ -134,11 +251,7 @@ def apply_dialog_chrome(
 
     dialog.setFixedSize(fixed_w, fixed_h)
     enable_dialog_drag(dialog)
-    from PySide6.QtCore import QTimer
-
-    QTimer.singleShot(0, lambda: center_dialog(dialog))
-    QTimer.singleShot(30, lambda: center_dialog(dialog))
-    QTimer.singleShot(100, lambda: center_dialog(dialog))
+    schedule_center(dialog)
 
 
 def fit_dialog(

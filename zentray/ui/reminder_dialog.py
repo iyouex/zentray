@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import datetime
 
-from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QDialog,
     QHBoxLayout,
@@ -26,8 +25,7 @@ class ReminderDialog(QDialog):
         from zentray.ui.dialog_utils import apply_dialog_chrome, style_action_button
 
         self.setWindowTitle("⏰ 任务提醒")
-        apply_dialog_chrome(self, width=560, height=220)
-        self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
+        apply_dialog_chrome(self, width=560, height=220, stay_on_top=True)
         self.setModal(True)
 
         layout = QVBoxLayout(self)
