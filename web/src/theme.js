@@ -67,3 +67,45 @@ export function watchSystemTheme(getMode, onChange) {
     else if (mq.removeListener) mq.removeListener(handler)
   }
 }
+
+/**
+ * 分类识别色：固定 8 色板稳定映射（spec §2）。
+ * 默认分类「工作/个人/学习」固定落前三席；其余分类按名称 hash，
+ * 保证同名永远同色。
+ */
+const CATEGORY_PALETTE = [
+  '#14b8a6', // teal    工作
+  '#a78bfa', // violet  个人
+  '#fbbf24', // amber   学习
+  '#38bdf8', // sky
+  '#fb7185', // rose
+  '#a3e635', // lime
+  '#94a3b8', // slate
+  '#e879f9', // fuchsia
+]
+const KNOWN_CATEGORY_SEAT = { 工作: 0, 个人: 1, 学习: 2 }
+
+export function categoryColor(name) {
+  const s = String(name || '').trim()
+  if (Object.prototype.hasOwnProperty.call(KNOWN_CATEGORY_SEAT, s)) {
+    return CATEGORY_PALETTE[KNOWN_CATEGORY_SEAT[s]]
+  }
+  let h = 0
+  for (let i = 0; i < s.length; i++) h = (Math.imul(h, 31) + s.charCodeAt(i)) >>> 0
+  return CATEGORY_PALETTE[h % CATEGORY_PALETTE.length]
+}
+
+/**
+ * 外观偏好：动效开关与形状风格（spec §5）。
+ * body class: zt-motion-off / zt-shape-crisp，令牌层按 class 切换档位。
+ */
+export function applyAppearance(prefs) {
+  const motion = prefs?.motion === 'off' ? 'off' : 'full'
+  const shape = prefs?.shape === 'crisp' ? 'crisp' : 'round'
+  const root = document.body
+  root.classList.toggle('zt-motion-off', motion === 'off')
+  root.classList.toggle('zt-shape-crisp', shape === 'crisp')
+  root.dataset.ztMotion = motion
+  root.dataset.ztShape = shape
+  return { motion, shape }
+}
