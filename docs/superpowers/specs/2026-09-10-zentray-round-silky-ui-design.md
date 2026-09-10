@@ -44,19 +44,26 @@
 
 | 组件 | 规格 |
 |---|---|
-| 任务卡 | 高 48px（既有确认值）、圆角 `--zt-radius-card`、左侧 3px 分类色呼吸条（默认上下内缩 12px，hover 时各伸展 4px→内缩 8px）、分类胶囊标签、优先级 chip、4px 分类色进度条；勾选完成播 scale 弹跳（既有确认曲线）；hover 上浮 3px + 投影加深 |
+| 任务卡 | 高 48px（既有确认值）、圆角 `--zt-radius-card`、左侧 3px 分类色呼吸条（默认上下内缩 12px，hover 时各伸展 4px→内缩 8px）、分类胶囊标签、优先级 chip、4px 分类色进度条；勾选完成播 scale 弹跳（既有确认曲线）；hover 上浮 3px + 投影加深；逾期时呼吸条与截止文本改用紧迫度红（优先于分类色） |
 | 快速添加 | 全胶囊；聚焦 teal 描边点亮（1px→1.5px） |
 | 番茄钟 | SVG 环形实色描边、圆头端点；32px 等宽数字（`font-variant-numeric: tabular-nums`）；专注中环体微辉光（`drop-shadow` 半径 ≤3px） |
 | 筛选 chips / 按钮 | 全胶囊；主按钮 hover `scale(1.05)` 弹性；active 档 teal 淡底 |
 | 页内弹层（Arco modal/popover/drawer） | dg-a 源点生长；遮罩 `rgba(2,6,23,.45)` + 2px 背景模糊渐入 |
 | 宿主弹窗页（VueDialog 整窗） | mount 时播放同族入场（源点偏下、scale .97→1 + 淡入） |
 | 页头拖拽栏 | 36px 高（既有确认值），样式随主题令牌刷新 |
+| 表单控件（输入/下拉/开关） | focus：teal 1.5px 亮环；error：红描边 + 一次 180ms 抖动（`--zt-ease-out`） |
+| Message / Toast | 全胶囊圆角 + 顶部滑入淡入 180ms，退出 140ms |
+| 空状态 / 加载 | `a-empty` 图标区圆角化；`a-spin` 取主题主色 |
+| Tabs / 表格行 | tabs 指示条胶囊化；表格行 hover 用 `--color-surface-hover` |
+| 滚动条 | 8px 圆角细条（`::-webkit-scrollbar`），hover 加深 |
 
 ## 4. 动效规格
 
 - 路由：`<router-view>` 外包 `<Transition name="zt-page" mode="out-in">`；`.zt-page-enter-from { opacity:0; transform:scale(.96) }`，260ms spring。
 - 弹层 keyframes：`zt-dlg-in`（源点 scale .8→1 + 淡入，280ms spring）/ `zt-dlg-out`（scale .88 + 淡出，140ms ease-out）。
 - `transform-origin` 注入：Arco modal 打开时按触发元素位置设置（web 侧事件委托，约 15 行）。
+- **列表增删**：`<TransitionGroup>`——新增 180ms 淡入 + 8px 上滑；移除 140ms 淡出 + 4px 下坠。
+- **主题切换**：`body` 背景 200ms 过渡，其余属性不设过渡（防意外动画）。
 - **降级**：`prefers-reduced-motion: reduce` 或设置关档 → 所有过渡降为 140ms 纯淡入，无位移无缩放。
 
 ## 5. 设置项（用户可选）
@@ -103,6 +110,9 @@
 ## 9. 明确不做（YAGNI）
 
 - 窗口级圆角（平台限制，见 §6）
+- 纯 Qt 回退弹窗 QSS 化（主路径为 Vue；回退弹窗仅 QWebEngine 不可用时出场，首启 Qt 向导一次性）
+- 番茄钟数字翻动动画（等宽数字已防布局抖动）
+- 托盘原生菜单（平台原生样式，非 web 管辖）
 - 分类色/优先级色编码独立开关（设置噪音）
 - 氛围色独立开关（绑定动效开关）
 - per-category 自定义颜色 UI
