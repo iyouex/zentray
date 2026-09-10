@@ -474,7 +474,7 @@ class SettingsManager:
             )
         if "appearance" in data:
             a = data["appearance"] or {}
-            theme = (a.get("theme") or "system").lower()
+            theme = str(a.get("theme") or "system").lower()
             if theme not in ("light", "dark", "system"):
                 theme = "system"
             autostart = bool(a.get("autostart", False))
