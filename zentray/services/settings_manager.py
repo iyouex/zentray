@@ -130,10 +130,13 @@ class QuickAddSettings:
 
 @dataclass
 class AppearanceSettings:
-    """系统/外观。theme: light | dark | system；autostart 为开机自启偏好。"""
+    """系统/外观。theme: light | dark | system；autostart 为开机自启偏好；
+    motion: full|off 界面动效开关；shape: round|crisp 形状风格。"""
 
     theme: str = "system"
     autostart: bool = False
+    motion: str = "full"
+    shape: str = "round"
 
 
 @dataclass
@@ -475,9 +478,17 @@ class SettingsManager:
             if theme not in ("light", "dark", "system"):
                 theme = "system"
             autostart = bool(a.get("autostart", False))
+            motion = str(a.get("motion") or "full").lower()
+            if motion not in ("full", "off"):
+                motion = "full"
+            shape = str(a.get("shape") or "round").lower()
+            if shape not in ("round", "crisp"):
+                shape = "round"
             self._settings.appearance = AppearanceSettings(
                 theme=theme,
                 autostart=autostart,
+                motion=motion,
+                shape=shape,
             )
 
         # 用 review 回写 nightly 兼容
