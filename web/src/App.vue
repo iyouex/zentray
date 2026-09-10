@@ -1,12 +1,16 @@
 <template>
   <a-config-provider :update-at-scroll="true">
-    <router-view :key="viewKey" />
+    <router-view :key="viewKey" v-slot="{ Component }">
+      <Transition name="zt-page" mode="out-in">
+        <component :is="Component" />
+      </Transition>
+    </router-view>
   </a-config-provider>
 </template>
 
 <script setup>
 import { onMounted, onUnmounted, provide, ref } from 'vue'
-import { applyTheme, watchSystemTheme } from './theme'
+import { applyAppearance, applyTheme, watchSystemTheme } from './theme'
 import { getSettings } from './api/client'
 
 const themeMode = ref('system')
@@ -111,8 +115,10 @@ onMounted(async () => {
   try {
     const s = await getSettings()
     themeMode.value = s?.appearance?.theme || 'system'
+    applyAppearance(s?.appearance)
   } catch (_) {
     themeMode.value = 'system'
+    applyAppearance()
   }
   themeEffective.value = applyTheme(themeMode.value)
   unwatch = watchSystemTheme(
