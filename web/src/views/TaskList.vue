@@ -27,7 +27,7 @@
               :key="item.id"
               class="task-card-item"
               :class="{ active: item.id === selectedId }"
-              :style="{ '--cat-color': categoryColor(item.category) }"
+              :style="cardStyle(item)"
               @click="selectedId = item.id"
             >
               <div class="task-card-main">
@@ -151,6 +151,14 @@ function deadlineInfo(item) {
   if (diff < 0) return { text: item.deadline, cls: 'zt-dl-late' }
   if (diff < 24 * 3600 * 1000) return { text: item.deadline, cls: 'zt-dl-soon' }
   return { text: item.deadline, cls: '' }
+}
+
+function cardStyle(item) {
+  const dl = deadlineInfo(item)
+  const style = {}
+  if (dl?.cls === 'zt-dl-late') style['--cat-color'] = 'var(--zt-due-late)'
+  else if (item.category) style['--cat-color'] = categoryColor(item.category)
+  return style
 }
 
 const current = computed(() => tasks.value.find((t) => t.id === selectedId.value) || null)

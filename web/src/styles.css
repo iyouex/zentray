@@ -397,6 +397,10 @@ body.zt-motion-off .task-card-item:hover {
   transform: none;
 }
 
+body.zt-motion-off .icon-check-animated {
+  animation: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -410,5 +414,9 @@ body.zt-motion-off .task-card-item:hover {
   .zt-list-leave-to,
   .task-card-item:hover {
     transform: none;
+  }
+
+  .icon-check-animated {
+    animation: none;
   }
 }
