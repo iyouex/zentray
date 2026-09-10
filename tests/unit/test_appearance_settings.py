@@ -40,7 +40,7 @@ def test_appearance_roundtrip(tmp_data_dir):
 def test_appearance_theme_int_dirty_value(tmp_data_dir):
     sf = sm_mod.SETTINGS_FILE
     sf.parent.mkdir(parents=True, exist_ok=True)
-    sf.write_text(json.dumps({"appearance": {"theme": 42}}), encoding="utf-8")
+    sf.write_text(json.dumps({"appearance": {"theme": 42, "motion": "off"}}), encoding="utf-8")
     sm = SettingsManager.reload()
     assert sm.appearance.theme == "system"
-    assert sm.appearance.motion == "full"
+    assert sm.appearance.motion == "off"
