@@ -150,27 +150,48 @@ body,
   }
 }
 
-/* 48px 舒缓型 Task Card 架构 */
+/* 48px 舒缓型 Task Card 架构（spec §3：圆角16 + 分类色呼吸条） */
 .task-card-item {
+  position: relative;
   min-height: var(--task-card-height);
   box-sizing: border-box;
-  padding: 8px 14px;
+  padding: 8px 14px 8px 18px;
   margin-bottom: 8px;
-  border-radius: 10px;
+  border-radius: var(--zt-radius-card, 16px);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: var(--zt-shadow-card);
+  transition: transform var(--zt-dur-fast) var(--zt-ease-out),
+    box-shadow var(--zt-dur-fast) ease, background 0.2s ease;
 }
 
 .task-card-item:hover {
   background: var(--color-surface-hover);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
-  border-color: var(--color-primary);
+  transform: translateY(-3px);
+  box-shadow: var(--zt-shadow-card-hover);
+}
+
+/* 分类色呼吸条：默认内缩 12px，hover 各伸展 4px（逾期红优先由 --cat-color 控制） */
+.task-card-item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 12px;
+  bottom: 12px;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--cat-color, var(--color-border));
+  transition: top var(--zt-dur-fast) var(--zt-ease-out),
+    bottom var(--zt-dur-fast) var(--zt-ease-out);
+}
+
+.task-card-item:hover::before {
+  top: 8px;
+  bottom: 8px;
 }
 
 /* SVG 完成图标波形弹跳动画 */
@@ -217,4 +238,176 @@ body,
   font-size: 18px;
   font-weight: 600;
   padding: 12px 16px;
+}
+
+/* ================= 设计令牌（spec §2） ================= */
+:root {
+  --zt-radius-win: 22px;
+  --zt-radius-card: 16px;
+  --zt-radius-md: 12px;
+  --zt-radius-pill: 999px;
+  --zt-shadow-card: 0 4px 14px rgba(0, 0, 0, 0.25);
+  --zt-shadow-card-hover: 0 10px 26px rgba(0, 0, 0, 0.4);
+  --zt-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --zt-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --zt-dur-fast: 180ms;
+  --zt-dur-page: 260ms;
+  --zt-dur-dialog: 280ms;
+  --zt-dur-off: 140ms;
+  /* 优先级/紧迫度 */
+  --zt-pri-high: #f87171;
+  --zt-pri-mid: #fb923c;
+  --zt-pri-low: #94a3b8;
+  --zt-due-soon: #fbbf24;
+  --zt-due-late: #f87171;
+}
+
+/* 形状两档：利落（spec §5 shape=crisp） */
+body.zt-shape-crisp {
+  --zt-radius-win: 12px;
+  --zt-radius-card: 8px;
+  --zt-radius-md: 6px;
+}
+
+/* 浅色主题投影减半（spec §2） */
+body.theme-light {
+  --zt-shadow-card: 0 4px 14px rgba(15, 23, 42, 0.12);
+  --zt-shadow-card-hover: 0 10px 26px rgba(15, 23, 42, 0.2);
+}
+
+/* ================= Arco 圆角覆盖（spec §6） ================= */
+body {
+  --border-radius-small: 8px;
+  --border-radius-medium: 12px;
+  --border-radius-large: 16px;
+}
+
+body.zt-shape-crisp {
+  --border-radius-small: 4px;
+  --border-radius-medium: 6px;
+  --border-radius-large: 8px;
+}
+
+.arco-btn {
+  border-radius: var(--zt-radius-pill);
+}
+
+.arco-message {
+  border-radius: var(--zt-radius-pill);
+}
+
+/* 滚动条：8px 圆角细条（spec §3） */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-subdued);
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 主题切换：仅背景过渡，防意外动画（spec §4） */
+body {
+  transition: background-color 200ms ease;
+}
+
+/* ================= 优先级 chip / 紧迫度（spec §2） ================= */
+.zt-pri {
+  font-size: 10px;
+  line-height: 1.5;
+  padding: 1px 7px;
+  border-radius: var(--zt-radius-pill);
+  flex: none;
+}
+
+.zt-pri-h { background: color-mix(in srgb, var(--zt-pri-high) 16%, transparent); color: var(--zt-pri-high); }
+.zt-pri-m { background: color-mix(in srgb, var(--zt-pri-mid) 16%, transparent); color: var(--zt-pri-mid); }
+.zt-pri-l { background: color-mix(in srgb, var(--zt-pri-low) 16%, transparent); color: var(--zt-pri-low); }
+
+.zt-dl-late { color: var(--zt-due-late); font-weight: 600; }
+.zt-dl-soon { color: var(--zt-due-soon); }
+
+/* ================= 路由过渡 pt-b 弹性聚拢（spec §4） ================= */
+.zt-page-enter-active {
+  transition: opacity var(--zt-dur-page) var(--zt-ease-spring),
+    transform var(--zt-dur-page) var(--zt-ease-spring);
+}
+
+.zt-page-leave-active {
+  transition: opacity var(--zt-dur-off) ease;
+}
+
+.zt-page-enter-from {
+  opacity: 0;
+  transform: scale(0.96);
+}
+
+.zt-page-leave-to {
+  opacity: 0;
+}
+
+/* ================= 列表增删（spec §4） ================= */
+.zt-list-enter-active {
+  transition: opacity var(--zt-dur-fast) var(--zt-ease-out),
+    transform var(--zt-dur-fast) var(--zt-ease-out);
+}
+
+.zt-list-leave-active {
+  transition: opacity var(--zt-dur-off) ease, transform var(--zt-dur-off) ease;
+  position: absolute;
+  width: 100%;
+}
+
+.zt-list-move {
+  transition: transform var(--zt-dur-fast) var(--zt-ease-out);
+}
+
+.zt-list-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.zt-list-leave-to {
+  opacity: 0;
+  transform: translateY(4px);
+}
+
+/* ================= 动效降级（spec §4） ================= */
+body.zt-motion-off *,
+body.zt-motion-off *::before,
+body.zt-motion-off *::after {
+  transition-duration: var(--zt-dur-off) !important;
+  animation-duration: var(--zt-dur-off) !important;
+  animation-iteration-count: 1 !important;
+}
+
+body.zt-motion-off .zt-page-enter-from,
+body.zt-motion-off .zt-list-enter-from,
+body.zt-motion-off .zt-list-leave-to,
+body.zt-motion-off .task-card-item:hover {
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 140ms !important;
+    animation-duration: 140ms !important;
+  }
+
+  .zt-page-enter-from,
+  .zt-list-enter-from,
+  .task-card-item:hover {
+    transform: none;
+  }
 }
