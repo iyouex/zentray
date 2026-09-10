@@ -21,19 +21,45 @@
     <div class="two-col">
       <a-card title="活跃任务" :bordered="true">
         <a-spin :loading="loading" style="width: 100%">
-          <div v-if="tasks.length" class="task-card-list">
+          <TransitionGroup v-if="tasks.length" name="zt-list" tag="div" class="task-card-list">
             <div
               v-for="item in tasks"
               :key="item.id"
               class="task-card-item"
               :class="{ active: item.id === selectedId }"
+              :style="{ '--cat-color': categoryColor(item.category) }"
               @click="selectedId = item.id"
             >
               <div class="task-card-main">
-                <span class="task-card-title">{{ item.title }}</span>
+                <span class="task-card-title">
+                  {{ item.title }}
+                  <span v-if="item.priority" class="zt-pri" :class="PRI_CLASS[item.priority] || 'zt-pri-l'">
+                    {{ PRI_LABEL[item.priority] || '低' }}
+                  </span>
+                </span>
                 <div class="task-card-meta">
-                  <a-tag size="small" color="arcoblue" v-if="item.category">{{ item.category }}</a-tag>
-                  <span class="task-card-sub">优先级: {{ item.priority }} · 进度: {{ item.progress || 0 }}%</span>
+                  <a-tag
+                    v-if="item.category"
+                    size="small"
+                    :style="{
+                      color: categoryColor(item.category),
+                      background: categoryColor(item.category) + '24',
+                      borderRadius: '999px',
+                    }"
+                  >
+                    {{ item.category }}
+                  </a-tag>
+                  <span class="task-card-sub">进度: {{ item.progress || 0 }}%</span>
+                  <span
+                    v-if="deadlineInfo(item)"
+                    class="task-card-sub"
+                    :class="deadlineInfo(item).cls"
+                  >
+                    截止: {{ deadlineInfo(item).text }}
+                  </span>
+                </div>
+                <div v-if="item.progress" class="zt-card-prog">
+                  <i :style="{ width: (item.progress || 0) + '%', background: categoryColor(item.category) }" />
                 </div>
               </div>
               <PhCheckCircle
@@ -43,7 +69,7 @@
                 weight="fill"
               />
             </div>
-          </div>
+          </TransitionGroup>
           <a-empty v-else-if="!loading" description="暂无活跃任务" />
         </a-spin>
       </a-card>
@@ -100,6 +126,7 @@ import {
   markDone,
   selectTask,
 } from '@/api/client'
+import { categoryColor } from '@/theme'
 
 const route = useRoute()
 const router = useRouter()
@@ -112,6 +139,19 @@ watch(() => route.path, (newPath) => {
 })
 const tasks = ref([])
 const selectedId = ref(null)
+
+const PRI_CLASS = { high: 'zt-pri-h', medium: 'zt-pri-m', low: 'zt-pri-l' }
+const PRI_LABEL = { high: '高', medium: '中', low: '低' }
+
+function deadlineInfo(item) {
+  if (!item.deadline) return null
+  const t = new Date(String(item.deadline).replace(' ', 'T')).getTime()
+  if (Number.isNaN(t)) return null
+  const diff = t - Date.now()
+  if (diff < 0) return { text: item.deadline, cls: 'zt-dl-late' }
+  if (diff < 24 * 3600 * 1000) return { text: item.deadline, cls: 'zt-dl-soon' }
+  return { text: item.deadline, cls: '' }
+}
 
 const current = computed(() => tasks.value.find((t) => t.id === selectedId.value) || null)
 
@@ -174,6 +214,7 @@ onMounted(reload)
 .task-card-list {
   display: flex;
   flex-direction: column;
+  position: relative;
 }
 .task-card-main {
   display: flex;
@@ -206,5 +247,18 @@ onMounted(reload)
   color: var(--color-text-muted, #94a3b8);
   font-size: 13px;
   margin: 0 0 16px;
+}
+.zt-card-prog {
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.18);
+  margin-top: 6px;
+  overflow: hidden;
+}
+
+.zt-card-prog i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
 }
 </style>

@@ -407,6 +407,7 @@ body.zt-motion-off .task-card-item:hover {
 
   .zt-page-enter-from,
   .zt-list-enter-from,
+  .zt-list-leave-to,
   .task-card-item:hover {
     transform: none;
   }
