@@ -392,6 +392,22 @@
                       <a-radio value="dark">深色</a-radio>
                     </a-radio-group>
                   </a-form-item>
+                  <a-form-item label="界面动效">
+                    <a-switch
+                      v-model="form.appearance.motion"
+                      checked-value="full"
+                      unchecked-value="off"
+                      checked-text="开"
+                      unchecked-text="关"
+                      @change="onAppearancePreview"
+                    />
+                  </a-form-item>
+                  <a-form-item label="形状风格">
+                    <a-radio-group v-model="form.appearance.shape" @change="onAppearancePreview">
+                      <a-radio value="round">圆润</a-radio>
+                      <a-radio value="crisp">利落</a-radio>
+                    </a-radio-group>
+                  </a-form-item>
                   <a-alert type="info">主题预览立即生效；点底部「保存设置」写入配置。</a-alert>
                 </a-form>
               </a-card>
@@ -495,7 +511,7 @@ import {
   saveSettings,
   setAutostart,
 } from '@/api/client'
-import { applyTheme } from '@/theme'
+import { applyAppearance, applyTheme } from '@/theme'
 import JobEditor from '@/components/JobEditor.vue'
 import NumberSpinner from '@/components/NumberSpinner.vue'
 
@@ -570,7 +586,7 @@ function emptyForm() {
       primary_list: [],
     },
     quick_add: { default_category: '工作', default_priority: 'medium' },
-    appearance: { theme: 'system', autostart: false },
+    appearance: { theme: 'system', autostart: false, motion: 'full', shape: 'round' },
   }
 }
 
@@ -703,6 +719,10 @@ function onThemePreview() {
   const mode = form.appearance?.theme || 'system'
   if (setThemeMode) setThemeMode(mode)
   else applyTheme(mode)
+}
+
+function onAppearancePreview() {
+  applyAppearance(form.appearance)
 }
 
 async function loadSystemStatus() {
@@ -885,6 +905,8 @@ function normalizeLoaded(s) {
   ensureFixedChannels(form.notification)
   if (!form.appearance) form.appearance = { theme: 'system', autostart: false }
   if (form.appearance.autostart == null) form.appearance.autostart = false
+  if (form.appearance.motion == null) form.appearance.motion = 'full'
+  if (form.appearance.shape == null) form.appearance.shape = 'round'
   if (!form.categories) form.categories = emptyForm().categories
   if (!Array.isArray(form.categories.primary_list)) form.categories.primary_list = []
   // 括号强制成对
