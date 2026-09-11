@@ -20,13 +20,25 @@
 
     <div class="two-col">
       <a-card title="活跃任务" :bordered="true">
+        <div v-if="filterChips.length > 1" class="filter-row" role="group" aria-label="分类筛选">
+          <button
+            v-for="c in filterChips"
+            :key="c.key"
+            class="fchip"
+            type="button"
+            :aria-pressed="String(filter === c.key)"
+            @click="setFilter(c.key)"
+          >
+            {{ c.label }} · {{ c.count }}
+          </button>
+        </div>
         <a-spin :loading="loading" style="width: 100%">
-          <TransitionGroup v-if="tasks.length" name="zt-list" tag="div" class="task-card-list">
+          <TransitionGroup v-if="tasks.length" ref="listRef" name="zt-list" tag="div" class="task-card-list">
             <div
               v-for="item in tasks"
               :key="item.id"
               class="task-card-item"
-              :class="{ active: item.id === selectedId }"
+              :class="{ active: item.id === selectedId, 'flip-gone': !matchesFilter(item) }"
               :style="cardStyle(item)"
               @click="selectedId = item.id"
             >
@@ -114,7 +126,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Message, Modal } from '@arco-design/web-vue'
 import { PhPlus, PhRepeat, PhX, PhArrowsCounterClockwise, PhPencil, PhCheck, PhTrash, PhCheckCircle } from '@phosphor-icons/vue'
@@ -127,6 +139,7 @@ import {
   selectTask,
 } from '@/api/client'
 import { categoryColor } from '@/theme'
+import { gsap, Flip, EASE, DUR, dur, motionOff, isReduced } from '@/motion'
 
 const route = useRoute()
 const router = useRouter()
@@ -161,12 +174,63 @@ function cardStyle(item) {
   return style
 }
 
+// ---- 分类筛选 + Flip 布局流动（spec §3.2，原型场景 2） ----
+// 过滤用 class 隐藏而非 v-if：TransitionGroup 把节点移除当增删动画，会与 Flip 打架。
+const filter = ref('all')
+const listRef = ref(null)
+
+const filterChips = computed(() => {
+  const counts = new Map()
+  for (const t of tasks.value) {
+    const k = t.category || '未分类'
+    counts.set(k, (counts.get(k) || 0) + 1)
+  }
+  const chips = [{ key: 'all', label: '全部', count: tasks.value.length }]
+  for (const [k, n] of counts) chips.push({ key: k, label: k, count: n })
+  return chips.slice(0, 6)
+})
+
+function matchesFilter(item) {
+  return filter.value === 'all' || (item.category || '未分类') === filter.value
+}
+
+function setFilter(k) {
+  if (filter.value === k) return
+  runFlip(() => {
+    filter.value = k
+  })
+}
+
+/** DOM 集合变化前后捕获/回放：幸存卡片流动，离场收缩淡出、回归弹性放大 */
+async function runFlip(mutate) {
+  const root = listRef.value?.$el ?? listRef.value // TransitionGroup 的 ref 是组件实例，$el 才是 tag 渲染的 div
+  if (!root || motionOff() || isReduced()) {
+    await mutate()
+    return
+  }
+  const cards = root.querySelectorAll('.task-card-item')
+  const state = Flip.getState(cards)
+  await mutate()
+  await nextTick()
+  Flip.from(state, {
+    duration: DUR.flip,
+    ease: EASE.spring,
+    stagger: 0.02,
+    absolute: true,
+    onEnter: (els) => gsap.fromTo(els, { opacity: 0, scale: 0.88 }, { opacity: 1, scale: 1, duration: DUR.enter, ease: EASE.spring, clearProps: 'all' }),
+    onLeave: (els) => gsap.to(els, { opacity: 0, scale: 0.88, duration: 0.2, ease: EASE.out }),
+  })
+}
+
 const current = computed(() => tasks.value.find((t) => t.id === selectedId.value) || null)
 
 async function reload() {
   loading.value = true
   try {
-    tasks.value = await listTasks()
+    const fresh = await listTasks()
+    runFlip(() => {
+      tasks.value = fresh
+    })
     if (!selectedId.value && tasks.value.length) {
       selectedId.value = tasks.value[0].id
     }
@@ -268,5 +332,33 @@ onMounted(reload)
   display: block;
   height: 100%;
   border-radius: 999px;
+}
+.filter-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.filter-row .fchip {
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--zt-radius-pill);
+  padding: 5px 14px;
+  transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
+}
+.filter-row .fchip:hover {
+  color: var(--color-text-primary);
+}
+.filter-row .fchip[aria-pressed='true'] {
+  background: var(--color-primary-glow);
+  color: var(--color-primary-hover);
+  border-color: var(--color-primary);
+}
+.flip-gone {
+  display: none;
 }
 </style>
