@@ -184,6 +184,7 @@
       v-model:visible="showAddSec"
       title="添加二级分类"
       draggable
+      unmount-on-close
       @ok="onAddSecondary"
       :ok-loading="addingSec"
     >

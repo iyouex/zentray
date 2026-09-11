@@ -18,7 +18,7 @@
 import { nextTick, onMounted, ref } from 'vue'
 import { Message } from '@arco-design/web-vue'
 import { cancelHost, closeHost, createTask, getMeta } from '@/api/client'
-import { gsap, EASE, dur, motionOff } from '@/motion'
+import { gsap, EASE, motionOff } from '@/motion'
 
 const title = ref('')
 const inputRef = ref(null)

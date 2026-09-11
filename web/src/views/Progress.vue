@@ -61,7 +61,7 @@ import {
   markDone,
   updateProgress,
 } from '@/api/client'
-import { gsap, EASE, DUR, dur, motionOff } from '@/motion'
+import { gsap, EASE, DUR, motionOff } from '@/motion'
 
 const props = defineProps({ id: String })
 const route = useRoute()
