@@ -436,11 +436,90 @@ body.zt-motion-off .arco-icon-spin {
   .zt-page-enter-from,
   .zt-list-enter-from,
   .zt-list-leave-to,
-  .task-card-item:hover {
+  .task-card-item:hover,
+  #app {
     transform: none;
   }
 
   .icon-check-animated {
     animation: none;
   }
+}
+
+/* ================= 弹层 dg-a 源点生长（spec §4） ================= */
+@keyframes zt-dlg-in {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+}
+
+@keyframes zt-mask-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.arco-modal,
+.arco-drawer {
+  transform-origin: 50% 100%;
+  animation: zt-dlg-in var(--zt-dur-dialog) var(--zt-ease-spring);
+}
+
+.arco-modal-mask,
+.arco-drawer-mask {
+  background-color: rgba(2, 6, 23, 0.45);
+  backdrop-filter: blur(2px);
+  animation: zt-mask-in var(--zt-dur-dialog) ease;
+}
+
+/* 退出：140ms 反向无回弹（压 Arco 自带 leave 时长，面板收缩淡出） */
+.fade-modal-leave-active,
+.fade-drawer-leave-active {
+  transition-duration: var(--zt-dur-off) !important;
+  transition-timing-function: ease !important;
+}
+
+.fade-modal-leave-active .arco-modal {
+  transition: transform var(--zt-dur-off) ease, opacity var(--zt-dur-off) ease;
+  transform: scale(0.88);
+  opacity: 0;
+}
+
+/* 下拉/气泡小面板：自触发侧生长（动画只挂在内容层，不碰 Arco 定位用的 transform） */
+.arco-dropdown,
+.arco-popover {
+  animation: zt-dlg-in var(--zt-dur-fast) var(--zt-ease-spring);
+}
+
+/* Message 顶部滑入淡入（spec §3） */
+.fade-message-enter-active {
+  transition: opacity var(--zt-dur-fast) var(--zt-ease-out),
+    transform var(--zt-dur-fast) var(--zt-ease-out);
+}
+
+.fade-message-enter-from {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+
+.fade-message-leave-active {
+  transition: opacity var(--zt-dur-off) ease;
+}
+
+.fade-message-leave-to {
+  opacity: 0;
+}
+
+/* ================= 宿主弹窗页整窗入场（spec §3，一次） ================= */
+@keyframes zt-host-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(6px);
+  }
+}
+
+#app {
+  transform-origin: 50% 100%;
+  animation: zt-host-in var(--zt-dur-dialog) var(--zt-ease-spring);
 }
