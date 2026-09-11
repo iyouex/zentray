@@ -1013,7 +1013,7 @@ onMounted(async () => {
   align-items: stretch;
 }
 .nav-main {
-  border-radius: 8px;
+  border-radius: var(--zt-radius-card);
   border: 1px solid var(--color-border-2);
   height: fit-content;
   max-height: 100%;

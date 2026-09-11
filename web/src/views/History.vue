@@ -647,7 +647,7 @@ onMounted(reload)
   gap: 6px;
   align-items: start;
   padding: 8px 8px 8px 2px;
-  border-radius: 8px;
+  border-radius: var(--zt-radius-md);
   cursor: pointer;
   min-height: 44px;
 }
@@ -731,7 +731,7 @@ onMounted(reload)
   min-height: 0;
   padding: 8px 10px;
   border: 1px solid var(--color-border-2);
-  border-radius: 8px;
+  border-radius: var(--zt-radius-md);
   background: var(--color-fill-1);
 }
 .detail-head {
@@ -787,7 +787,7 @@ onMounted(reload)
 }
 .date-item {
   padding: 10px 8px;
-  border-radius: 8px;
+  border-radius: var(--zt-radius-md);
   cursor: pointer;
   margin-bottom: 2px;
 }

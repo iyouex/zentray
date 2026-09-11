@@ -79,7 +79,7 @@ function nudge(dir) {
   gap: 0;
   height: 28px;
   border: 1px solid var(--color-border-2, #e5e6eb);
-  border-radius: 6px;
+  border-radius: var(--zt-radius-md);
   background: var(--color-bg-2, #fff);
   overflow: hidden;
 }
