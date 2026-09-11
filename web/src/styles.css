@@ -322,7 +322,7 @@ body.zt-shape-crisp .arco-btn {
 /* 表单控件 teal 聚焦亮环（spec §3；error 红描边沿用 Arco 内置） */
 .arco-input-wrapper:focus-within,
 .arco-textarea-wrapper:focus-within {
-  border-color: rgb(var(--primary-6));
+  border-color: var(--color-primary-hover);
   box-shadow: 0 0 0 1.5px var(--color-primary-glow);
 }
 
@@ -420,8 +420,8 @@ body.zt-motion-off *::after {
 }
 
 /* 载入指示器是功能反馈而非装饰动效，豁免（spec §3 a-spin 取主题主色） */
-body.zt-motion-off .arco-spin-icon,
-body.zt-motion-off .arco-spin-loading {
+body.zt-motion-off .arco-icon-loading,
+body.zt-motion-off .arco-icon-spin {
   animation: arco-loading-circle 1s infinite cubic-bezier(0, 0, 1, 1) !important;
 }
 

@@ -83,7 +83,7 @@ body.zt-shape-crisp .arco-btn {
 /* 表单控件 teal 聚焦亮环（spec §3；error 红描边沿用 Arco 内置） */
 .arco-input-wrapper:focus-within,
 .arco-textarea-wrapper:focus-within {
-  border-color: rgb(var(--primary-6));
+  border-color: var(--color-primary-hover);
   box-shadow: 0 0 0 1.5px var(--color-primary-glow);
 }
 ```
@@ -102,8 +102,8 @@ body.zt-motion-off *::after {
 }
 
 /* 载入指示器是功能反馈而非装饰动效，豁免（spec §3 a-spin 取主题主色） */
-body.zt-motion-off .arco-spin-icon,
-body.zt-motion-off .arco-spin-loading {
+body.zt-motion-off .arco-icon-loading,
+body.zt-motion-off .arco-icon-spin {
   animation: arco-loading-circle 1s infinite cubic-bezier(0, 0, 1, 1) !important;
 }
 ```
@@ -425,5 +425,5 @@ TaskForm / Reminder / TaskAction / Periodic / SetupWizard / Home 全部由 `styl
 
 - **Spec 覆盖**：§6 修订版接线层（Task 1）✓ §4 dg-a/leave/宿主入场（Task 2）✓ §3 快速添加/Message/表格行/聚焦环（Task 1/2/3）✓ §7 P2 视图 + dist（Task 1-5 全局层 + 零改动验证）✓ §7 P3 视图（Task 4）✓ 验收 §8 的 1/2/6 由 Task 5 覆盖、3/4/5 归手测清单。
 - **占位符扫描**：无 TBD/TODO；所有 CSS 步骤含完整代码。
-- **机制核验**：`.arco-modal` 等在构建产物中无 transform 定位冲突（定位在 `.arco-modal-container`/trigger 外层）；`.fade-modal-leave-*` 类名取自构建产物 grep（2026-09-11）；`arco-loading-circle` keyframe 与 `.arco-spin-icon`/`.arco-spin-loading` 类名取自构建产物 grep。
+- **机制核验**：`.arco-modal` 等在构建产物中无 transform 定位冲突（定位在 `.arco-modal-container`/trigger 外层）；`.fade-modal-leave-*` 类名取自构建产物 grep（2026-09-11）；`arco-loading-circle` keyframe 与 `.arco-icon-loading`/`.arco-icon-spin` 类名取自构建产物 grep。
 - **已知取舍**：dg-a 的「按触发元素位置设 transform-origin」简化为固定源点偏下（50% 100%）——事件委托注入 origin 属增强，固定源点已满足「源点生长」观感且零 JS；spec §4 的 origin 注入行已在修订中隐含放宽。留待用户手测反馈后再决定是否加 JS 注入。
