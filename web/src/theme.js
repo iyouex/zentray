@@ -37,7 +37,12 @@ const FLOW_SHAPE_VARS = ['--zt-radius-card', '--zt-radius-md']
 function tweenClassFlip(root, flip, vars, seconds, ease) {
   const before = vars.map((v) => getComputedStyle(root).getPropertyValue(v).trim())
   flip()
-  if (motionOff()) return
+  // 上一补间遗留的内联值级联优先于 class，先清再采样，否则 to 被旧补间当前帧污染（连点冻结 bug）
+  vars.forEach((v) => root.style.removeProperty(v))
+  if (motionOff()) {
+    gsap.killTweensOf(root) // spec §5：关档运行中立即 kill
+    return
+  }
   const reduced = isReduced()
   const from = {}
   const to = {}
