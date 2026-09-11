@@ -127,7 +127,7 @@ git commit -m "fix(ui): Arco 大表面接线 zt 令牌——卡片/按钮/标签
 ### Task 2: styles.css — 页内弹层 dg-a 源点生长 + 宿主整窗入场 + Message 滑入
 
 **Files:**
-- Modify: `web/src/styles.css`（文件末尾追加一块；`@media (prefers-reduced-motion: reduce)` 块的选择器列表追加 `#app`）
+- Modify: `web/src/styles.css`（文件末尾追加两块：弹层动效块 + reduced-motion keyframes 重定义块；既有 `@media (prefers-reduced-motion: reduce)` 块不动）
 
 **Interfaces:**
 - Consumes: Task 1 后的 styles.css 令牌（`--zt-dur-*`、`--zt-ease-spring`）。
@@ -163,17 +163,38 @@ git commit -m "fix(ui): Arco 大表面接线 zt 令牌——卡片/按钮/标签
   animation: zt-mask-in var(--zt-dur-dialog) ease;
 }
 
-/* 退出：140ms 反向无回弹（压 Arco 自带 leave 时长，面板收缩淡出） */
+/* 退出：140ms 反向无回弹。Arco 实际结构：zoom-modal-* 挂面板、fade-modal-* 挂遮罩 */
 .fade-modal-leave-active,
 .fade-drawer-leave-active {
   transition-duration: var(--zt-dur-off) !important;
   transition-timing-function: ease !important;
 }
 
-.fade-modal-leave-active .arco-modal {
-  transition: transform var(--zt-dur-off) ease, opacity var(--zt-dur-off) ease;
+.zoom-modal-enter-active {
+  transition: none !important; /* 入场交给 zt-dlg-in keyframe，避免与 Arco 400ms zoom 竞速回落 */
+}
+
+.zoom-modal-leave-active {
+  transition: transform var(--zt-dur-off) ease, opacity var(--zt-dur-off) ease !important;
+}
+
+.zoom-modal-leave-to {
   transform: scale(0.88);
   opacity: 0;
+}
+
+.slide-left-drawer-leave-active,
+.slide-right-drawer-leave-active,
+.slide-top-drawer-leave-active,
+.slide-bottom-drawer-leave-active {
+  transition-duration: var(--zt-dur-off) !important;
+  transition-timing-function: ease !important;
+}
+
+/* 遮罩入场交给 zt-mask-in keyframe，关掉 Arco 400ms 淡入竞速 */
+.fade-modal-enter-active,
+.fade-drawer-enter-active {
+  transition: none !important;
 }
 
 /* 下拉/气泡小面板：自触发侧生长（动画只挂在内容层，不碰 Arco 定位用的 transform） */
@@ -215,30 +236,28 @@ git commit -m "fix(ui): Arco 大表面接线 zt 令牌——卡片/按钮/标签
 }
 ```
 
-- [ ] **Step 2: reduced-motion 块追加 `#app`**
+- [ ] **Step 2: reduced-motion 下入场动画降级为纯淡入**
 
-把 `@media (prefers-reduced-motion: reduce)` 内的选择器列表：
-
-```css
-  .zt-page-enter-from,
-  .zt-list-enter-from,
-  .zt-list-leave-to,
-  .task-card-item:hover {
-    transform: none;
-  }
-```
-
-改为（仅追加一行 `#app`）：
+`@media (prefers-reduced-motion: reduce)` 内的既有选择器列表**保持原样**（`transform: none` 压不过 keyframe 的 animation origin，追加 `#app` 无效且会误导后人）。改为在**文件末尾**追加独立降级块：
 
 ```css
-  .zt-page-enter-from,
-  .zt-list-enter-from,
-  .zt-list-leave-to,
-  .task-card-item:hover,
-  #app {
-    transform: none;
+/* ================= reduced-motion：入场动画降级为纯淡入（spec §4） ================= */
+@media (prefers-reduced-motion: reduce) {
+  @keyframes zt-dlg-in {
+    from {
+      opacity: 0;
+    }
   }
+
+  @keyframes zt-host-in {
+    from {
+      opacity: 0;
+    }
+  }
+}
 ```
+
+（keyframes 在 media 内重定义即覆盖原定义——配合既有 `* { animation-duration: 140ms !important }` 得到 140ms 纯淡入；不用 `transform: none !important`，避免影响 draggable modal 的 inline 偏移。）
 
 - [ ] **Step 3: 编译校验 + 产物断言**
 
