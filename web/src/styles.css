@@ -436,8 +436,7 @@ body.zt-motion-off .arco-icon-spin {
   .zt-page-enter-from,
   .zt-list-enter-from,
   .zt-list-leave-to,
-  .task-card-item:hover,
-  #app {
+  .task-card-item:hover {
     transform: none;
   }
 
@@ -473,17 +472,38 @@ body.zt-motion-off .arco-icon-spin {
   animation: zt-mask-in var(--zt-dur-dialog) ease;
 }
 
-/* 退出：140ms 反向无回弹（压 Arco 自带 leave 时长，面板收缩淡出） */
+/* 退出：140ms 反向无回弹。Arco 实际结构：zoom-modal-* 挂面板、fade-modal-* 挂遮罩 */
 .fade-modal-leave-active,
 .fade-drawer-leave-active {
   transition-duration: var(--zt-dur-off) !important;
   transition-timing-function: ease !important;
 }
 
-.fade-modal-leave-active .arco-modal {
-  transition: transform var(--zt-dur-off) ease, opacity var(--zt-dur-off) ease;
+.zoom-modal-enter-active {
+  transition: none !important; /* 入场交给 zt-dlg-in keyframe，避免与 Arco 400ms zoom 竞速回落 */
+}
+
+.zoom-modal-leave-active {
+  transition: transform var(--zt-dur-off) ease, opacity var(--zt-dur-off) ease !important;
+}
+
+.zoom-modal-leave-to {
   transform: scale(0.88);
   opacity: 0;
+}
+
+.slide-left-drawer-leave-active,
+.slide-right-drawer-leave-active,
+.slide-top-drawer-leave-active,
+.slide-bottom-drawer-leave-active {
+  transition-duration: var(--zt-dur-off) !important;
+  transition-timing-function: ease !important;
+}
+
+/* 遮罩入场交给 zt-mask-in keyframe，关掉 Arco 400ms 淡入竞速 */
+.fade-modal-enter-active,
+.fade-drawer-enter-active {
+  transition: none !important;
 }
 
 /* 下拉/气泡小面板：自触发侧生长（动画只挂在内容层，不碰 Arco 定位用的 transform） */
@@ -522,4 +542,19 @@ body.zt-motion-off .arco-icon-spin {
 #app {
   transform-origin: 50% 100%;
   animation: zt-host-in var(--zt-dur-dialog) var(--zt-ease-spring);
+}
+
+/* ================= reduced-motion：入场动画降级为纯淡入（spec §4） ================= */
+@media (prefers-reduced-motion: reduce) {
+  @keyframes zt-dlg-in {
+    from {
+      opacity: 0;
+    }
+  }
+
+  @keyframes zt-host-in {
+    from {
+      opacity: 0;
+    }
+  }
 }
