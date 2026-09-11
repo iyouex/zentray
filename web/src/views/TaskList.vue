@@ -139,7 +139,7 @@ import {
   selectTask,
 } from '@/api/client'
 import { categoryColor } from '@/theme'
-import { gsap, Flip, EASE, DUR, dur, motionOff, isReduced } from '@/motion'
+import { gsap, Flip, EASE, DUR, motionOff, isReduced } from '@/motion'
 
 const route = useRoute()
 const router = useRouter()
@@ -200,6 +200,11 @@ function setFilter(k) {
     filter.value = k
   })
 }
+
+// 分类在数据刷新后消失时回退到「全部」，避免假空列表
+watch(filterChips, (chips) => {
+  if (!chips.some((c) => c.key === filter.value)) filter.value = 'all'
+})
 
 /** DOM 集合变化前后捕获/回放：幸存卡片流动，离场收缩淡出、回归弹性放大 */
 async function runFlip(mutate) {
