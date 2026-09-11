@@ -1,5 +1,20 @@
 /* ZenTray Global Design System Styles & Theme Tokens */
 
+/* ================= 令牌可补间注册（GSAP 主题/形状流动，spec §3.4） =================
+   只注册跨主题会变值的令牌（success/warning/danger 四主题同值，不注册）。 */
+@property --color-bg-base { syntax: '<color>'; inherits: true; initial-value: #0f172a; }
+@property --color-surface { syntax: '<color>'; inherits: true; initial-value: #1e293b; }
+@property --color-surface-hover { syntax: '<color>'; inherits: true; initial-value: rgba(255, 255, 255, 0.04); }
+@property --color-border { syntax: '<color>'; inherits: true; initial-value: #334155; }
+@property --color-primary { syntax: '<color>'; inherits: true; initial-value: #0d9488; }
+@property --color-primary-hover { syntax: '<color>'; inherits: true; initial-value: #14b8a6; }
+@property --color-primary-glow { syntax: '<color>'; inherits: true; initial-value: rgba(20, 184, 166, 0.25); }
+@property --color-text-primary { syntax: '<color>'; inherits: true; initial-value: #f8fafc; }
+@property --color-text-muted { syntax: '<color>'; inherits: true; initial-value: #94a3b8; }
+@property --color-text-subdued { syntax: '<color>'; inherits: true; initial-value: #64748b; }
+@property --zt-radius-card { syntax: '<length>'; inherits: true; initial-value: 16px; }
+@property --zt-radius-md { syntax: '<length>'; inherits: true; initial-value: 12px; }
+
 :root {
   /* Default ZenSlate Dark */
   --color-bg-base: #0f172a;

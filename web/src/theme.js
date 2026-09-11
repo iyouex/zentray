@@ -3,6 +3,8 @@
  * mode: light | dark | system
  */
 
+import { gsap, EASE, DUR, dur, motionOff, isReduced } from './motion'
+
 export function resolveEffectiveTheme(mode) {
   const m = (mode || 'system').toLowerCase()
   if (m === 'light' || m === 'dark' || m === 'oled-dark' || m === 'slate-dark') {
@@ -20,6 +22,41 @@ export function resolveEffectiveTheme(mode) {
   return 'slate-dark'
 }
 
+/** 跨主题流动的令牌（与 styles.css @property 注册块一一对应） */
+const FLOW_COLOR_VARS = [
+  '--color-bg-base', '--color-surface', '--color-surface-hover', '--color-border',
+  '--color-primary', '--color-primary-hover', '--color-primary-glow',
+  '--color-text-primary', '--color-text-muted', '--color-text-subdued',
+]
+const FLOW_SHAPE_VARS = ['--zt-radius-card', '--zt-radius-md']
+
+/**
+ * class 翻转补间：先取旧值 → 翻转 → 取新值 → fromTo 内联覆盖，结束清除内联。
+ * 关档瞬时；系统减动效 140ms 无缓动。中断时 overwrite:auto 从当前值接管。
+ */
+function tweenClassFlip(root, flip, vars, seconds, ease) {
+  const before = vars.map((v) => getComputedStyle(root).getPropertyValue(v).trim())
+  flip()
+  if (motionOff()) return
+  const reduced = isReduced()
+  const from = {}
+  const to = {}
+  vars.forEach((v, i) => {
+    const after = getComputedStyle(root).getPropertyValue(v).trim()
+    from[v] = before[i]
+    to[v] = after
+  })
+  gsap.fromTo(root, from, {
+    ...to,
+    duration: reduced ? DUR.reduce : dur(seconds),
+    ease: reduced ? 'none' : ease,
+    overwrite: 'auto',
+    onComplete() {
+      vars.forEach((v) => root.style.removeProperty(v))
+    },
+  })
+}
+
 /**
  * 应用 Arco + 页面 CSS 变量
  * @param {string} mode light | dark | oled-dark | slate-dark | system
@@ -28,24 +65,27 @@ export function resolveEffectiveTheme(mode) {
 export function applyTheme(mode) {
   const effective = resolveEffectiveTheme(mode)
   const root = document.body
-
-  // 清除旧主题 class
-  root.classList.remove('theme-light', 'theme-dark', 'theme-slate-dark', 'theme-oled-dark')
-
-  if (effective === 'light') {
-    root.removeAttribute('arco-theme')
-    root.classList.add('theme-light')
-  } else if (effective === 'oled-dark') {
-    root.setAttribute('arco-theme', 'dark')
-    root.classList.add('theme-dark', 'theme-oled-dark')
-  } else {
-    // dark or slate-dark
-    root.setAttribute('arco-theme', 'dark')
-    root.classList.add('theme-dark', 'theme-slate-dark')
-  }
-
-  root.dataset.themeMode = mode || 'system'
-  root.dataset.themeEffective = effective
+  tweenClassFlip(
+    root,
+    () => {
+      root.classList.remove('theme-light', 'theme-dark', 'theme-slate-dark', 'theme-oled-dark')
+      if (effective === 'light') {
+        root.removeAttribute('arco-theme')
+        root.classList.add('theme-light')
+      } else if (effective === 'oled-dark') {
+        root.setAttribute('arco-theme', 'dark')
+        root.classList.add('theme-dark', 'theme-oled-dark')
+      } else {
+        root.setAttribute('arco-theme', 'dark')
+        root.classList.add('theme-dark', 'theme-slate-dark')
+      }
+      root.dataset.themeMode = mode || 'system'
+      root.dataset.themeEffective = effective
+    },
+    FLOW_COLOR_VARS,
+    DUR.theme,
+    EASE.out,
+  )
   return effective
 }
 
@@ -103,8 +143,16 @@ export function applyAppearance(prefs) {
   const motion = prefs?.motion === 'off' ? 'off' : 'full'
   const shape = prefs?.shape === 'crisp' ? 'crisp' : 'round'
   const root = document.body
-  root.classList.toggle('zt-motion-off', motion === 'off')
-  root.classList.toggle('zt-shape-crisp', shape === 'crisp')
+  tweenClassFlip(
+    root,
+    () => {
+      root.classList.toggle('zt-motion-off', motion === 'off')
+      root.classList.toggle('zt-shape-crisp', shape === 'crisp')
+    },
+    FLOW_SHAPE_VARS,
+    DUR.shape,
+    EASE.spring,
+  )
   root.dataset.ztMotion = motion
   root.dataset.ztShape = shape
   return { motion, shape }
