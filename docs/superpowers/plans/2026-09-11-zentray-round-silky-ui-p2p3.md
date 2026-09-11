@@ -433,6 +433,8 @@ git commit -m "feat(ui): 重建 web/dist——圆润丝滑全局铺开构建产�
 3. 各页面（任务列表/新建任务/快速录入/更新进度/提醒/选择操作/周期任务/历史/设置/向导）卡片圆润、投影柔和、按钮胶囊、聚焦 teal 亮环。
 4. TaskForm「添加二级分类」弹层、Periodic「删除确认」弹层：源点生长入场、140ms 收缩退出、遮罩带模糊。
 5. 保存设置后重开应用，形状/动效选择持久生效。
+6. 切换 4 主题 × 2 形状 × 2 动效抽查 TaskList/Home/一个表单视图无破版（§8.3）。
+7. 页头拖拽移动窗口、`zentray://` 桥接链接点击正常（§8.6）。
 
 ---
 
@@ -446,3 +448,9 @@ TaskForm / Reminder / TaskAction / Periodic / SetupWizard / Home 全部由 `styl
 - **占位符扫描**：无 TBD/TODO；所有 CSS 步骤含完整代码。
 - **机制核验**：`.arco-modal` 等在构建产物中无 transform 定位冲突（定位在 `.arco-modal-container`/trigger 外层）；`.fade-modal-leave-*` 类名取自构建产物 grep（2026-09-11）；`arco-loading-circle` keyframe 与 `.arco-icon-loading`/`.arco-icon-spin` 类名取自构建产物 grep。
 - **已知取舍**：dg-a 的「按触发元素位置设 transform-origin」简化为固定源点偏下（50% 100%）——事件委托注入 origin 属增强，固定源点已满足「源点生长」观感且零 JS；spec §4 的 origin 注入行已在修订中隐含放宽。留待用户手测反馈后再决定是否加 JS 注入。
+
+## 终评遗留备忘（2026-09-11）
+
+- P1 遗留杂项（`--zt-radius-win` 零消费者属平台约束保留、OLED 投影加深未做、`--zt-pri-*` 无浅色调亮档、QuickAdd 主阴影硬编码）见 final-review.md #6，影响趋零，待全控件 teal 主色任务（R7）时顺手清。
+- dg-a 按触发元素 origin 注入 JS 待用户手测反馈。
+- motion-off 下 hover scale 为瞬时跳变（彻底关闭语义，预期）。

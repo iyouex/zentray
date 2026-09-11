@@ -45,7 +45,7 @@
 | 组件 | 规格 |
 |---|---|
 | 任务卡 | 高 48px（既有确认值）、圆角 `--zt-radius-card`、左侧 3px 分类色呼吸条（默认上下内缩 12px，hover 时各伸展 4px→内缩 8px）、分类胶囊标签、优先级 chip、4px 分类色进度条；勾选完成播 scale 弹跳（既有确认曲线）；hover 上浮 3px + 投影加深；逾期时呼吸条与截止文本改用紧迫度红（优先于分类色） |
-| 快速添加 | 全胶囊；聚焦 teal 描边点亮（1px→1.5px） |
+| 快速添加 | 全胶囊（利落档用 --zt-radius-md）；聚焦 teal 描边点亮（1px→1.5px） |
 | 番茄钟 | SVG 环形实色描边、圆头端点；32px 等宽数字（`font-variant-numeric: tabular-nums`）；专注中环体微辉光（`drop-shadow` 半径 ≤3px） |
 | 筛选 chips / 按钮 | 全胶囊；主按钮 hover `scale(1.05)` 弹性；active 档 teal 淡底 |
 | 页内弹层（Arco modal/popover/drawer） | dg-a 源点生长；遮罩 `rgba(2,6,23,.45)` + 2px 背景模糊渐入 |
@@ -60,11 +60,11 @@
 ## 4. 动效规格
 
 - 路由：`<router-view>` 外包 `<Transition name="zt-page" mode="out-in">`；`.zt-page-enter-from { opacity:0; transform:scale(.96) }`，260ms spring。
-- 弹层 keyframes：`zt-dlg-in`（源点 scale .8→1 + 淡入，280ms spring）/ `zt-dlg-out`（scale .88 + 淡出，140ms ease-out）。
-- `transform-origin` 注入：Arco modal 打开时按触发元素位置设置（web 侧事件委托，约 15 行）。
+- 弹层 keyframes：`zt-dlg-in`（源点 scale .8→1 + 淡入，280ms spring）；退出复用 Arco leave 过渡类压 140ms ease（`zoom-modal-leave-to` scale .88 + 淡出），不另设 `zt-dlg-out` keyframes。
+- `transform-origin` 注入：Arco modal 打开时按触发元素位置设置（web 侧事件委托，约 15 行）（R4 取舍：固定源点 50% 100%，origin 注入 JS 待手测反馈）。
 - **列表增删**：`<TransitionGroup>`——新增 180ms 淡入 + 8px 上滑；移除 140ms 淡出 + 4px 下坠。
 - **主题切换**：`body` 背景 200ms 过渡，其余属性不设过渡（防意外动画）。
-- **降级**：`prefers-reduced-motion: reduce` 或设置关档 → 所有过渡降为 140ms 纯淡入，无位移无缩放。
+- **降级**：`prefers-reduced-motion: reduce` → 所有过渡降为 140ms 纯淡入，无位移无缩放。
 
 ## 5. 设置项（用户可选）
 
@@ -102,7 +102,7 @@
 
 ## 8. 验收标准
 
-1. Python 108 项单测全绿。
+1. Python 112 项单测全绿。
 2. `npm run build` 通过；dist 新 hash 与旧资源删除成对入库（避免坏树）。
 3. 4 主题 × 2 形状 × 2 动效 = 16 组合，抽查 TaskList / Home / 一个表单视图无破版。
 4. 对比度断言（脚本检查令牌）：主文本 ≥7:1（AAA）、副文本 ≥4.5:1（AA）。

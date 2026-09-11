@@ -323,6 +323,23 @@ body.zt-shape-crisp .arco-btn {
   border-radius: var(--zt-radius-pill);
 }
 
+/* 空状态图标区圆角化（spec §3） */
+.arco-empty .arco-empty-image {
+  border-radius: var(--zt-radius-md);
+}
+
+/* 主按钮 hover 弹性放大（spec §3 / §1 支柱 3）。transition 在 Arco 默认
+   `all 0.1s cubic-bezier(0,0,1,1)` 基础上扩展追加 transform 弹性档，
+   不整体替换以免丢失 Arco 的颜色过渡；同特异度后置导入胜出 */
+.arco-btn-primary {
+  transition: all 0.1s cubic-bezier(0, 0, 1, 1),
+    transform var(--zt-dur-fast) var(--zt-ease-spring);
+}
+
+.arco-btn-primary:hover {
+  transform: scale(1.05);
+}
+
 /* 表格行 hover（spec §3） */
 .arco-table-tr .arco-table-td {
   transition: background-color var(--zt-dur-fast) ease;
@@ -446,10 +463,17 @@ body.zt-motion-off .arco-icon-spin {
     animation-duration: 140ms !important;
   }
 
+  /* 载入圈是功能指示器，与 motion-off 豁免对称：压过 * 的 140ms 限速，防 7 转/秒闪烁 */
+  .arco-icon-loading,
+  .arco-icon-spin {
+    animation-duration: 1s !important;
+  }
+
   .zt-page-enter-from,
   .zt-list-enter-from,
   .zt-list-leave-to,
-  .task-card-item:hover {
+  .task-card-item:hover,
+  .arco-btn-primary:hover {
     transform: none;
   }
 
@@ -569,5 +593,11 @@ body.zt-motion-off .arco-icon-spin {
     from {
       opacity: 0;
     }
+  }
+
+  /* Message 入场 reduce 下只淡入不滑 8px。base 规则 .fade-message-enter-from
+     定义在上方 :534、晚于前一个 media 块，须后置同特异度才能覆盖 */
+  .fade-message-enter-from {
+    transform: none;
   }
 }
