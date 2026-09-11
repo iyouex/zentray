@@ -279,7 +279,6 @@ body.zt-shape-crisp .quick-add-box {
   --zt-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --zt-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   --zt-dur-fast: 180ms;
-  --zt-dur-page: 260ms;
   --zt-dur-dialog: 280ms;
   --zt-dur-off: 140ms;
   /* 优先级/紧迫度 */
@@ -411,25 +410,6 @@ body {
 .zt-dl-late { color: var(--zt-due-late); font-weight: 600; }
 .zt-dl-soon { color: var(--zt-due-soon); }
 
-/* ================= 路由过渡 pt-b 弹性聚拢（spec §4） ================= */
-.zt-page-enter-active {
-  transition: opacity var(--zt-dur-page) var(--zt-ease-spring),
-    transform var(--zt-dur-page) var(--zt-ease-spring);
-}
-
-.zt-page-leave-active {
-  transition: opacity var(--zt-dur-off) ease;
-}
-
-.zt-page-enter-from {
-  opacity: 0;
-  transform: scale(0.96);
-}
-
-.zt-page-leave-to {
-  opacity: 0;
-}
-
 /* ================= 列表增删（spec §4） ================= */
 .zt-list-enter-active {
   transition: opacity var(--zt-dur-fast) var(--zt-ease-out),
@@ -484,7 +464,6 @@ body.zt-motion-off .arco-icon-spin {
     animation-duration: 1s !important;
   }
 
-  .zt-page-enter-from,
   .zt-list-enter-from,
   .zt-list-leave-to,
   .task-card-item:hover,
@@ -583,28 +562,9 @@ body.zt-motion-off .arco-icon-spin {
   opacity: 0;
 }
 
-/* ================= 宿主弹窗页整窗入场（spec §3，一次） ================= */
-@keyframes zt-host-in {
-  from {
-    opacity: 0;
-    transform: scale(0.97) translateY(6px);
-  }
-}
-
-#app {
-  transform-origin: 50% 100%;
-  animation: zt-host-in var(--zt-dur-dialog) var(--zt-ease-spring);
-}
-
 /* ================= reduced-motion：入场动画降级为纯淡入（spec §4） ================= */
 @media (prefers-reduced-motion: reduce) {
   @keyframes zt-dlg-in {
-    from {
-      opacity: 0;
-    }
-  }
-
-  @keyframes zt-host-in {
     from {
       opacity: 0;
     }

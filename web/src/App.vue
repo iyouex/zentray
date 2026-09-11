@@ -1,7 +1,7 @@
 <template>
   <a-config-provider :update-at-scroll="true">
     <router-view :key="viewKey" v-slot="{ Component }">
-      <Transition name="zt-page" mode="out-in">
+      <Transition :css="false" mode="out-in" @enter="onPageEnter" @leave="onPageLeave">
         <component :is="Component" />
       </Transition>
     </router-view>
@@ -12,6 +12,7 @@
 import { onMounted, onUnmounted, provide, ref } from 'vue'
 import { applyAppearance, applyTheme, watchSystemTheme } from './theme'
 import { getSettings } from './api/client'
+import { gsap, SplitText, EASE, DUR, motionOff, isReduced } from './motion'
 
 const themeMode = ref('system')
 const themeEffective = ref('dark')
@@ -22,6 +23,65 @@ const themeEffective = ref('dark')
 const viewKey = ref(0)
 const handleReopen = () => {
   viewKey.value++
+}
+
+// ---- 页面转场（spec §3.1）：CSS 类退役，GSAP timeline 接管 ----
+// 退场：根直接子块依次下沉淡出；入场：标题逐字浮升 + 其余子块弹簧 stagger。
+function onPageLeave(el, done) {
+  if (motionOff()) {
+    done()
+    return
+  }
+  if (isReduced()) {
+    gsap.to(el, { autoAlpha: 0, duration: DUR.reduce, ease: 'none', onComplete: done })
+    return
+  }
+  gsap.to(el.querySelectorAll(':scope > *'), {
+    y: 10,
+    autoAlpha: 0,
+    duration: DUR.leave,
+    stagger: 0.015,
+    ease: EASE.out,
+    onComplete: done,
+  })
+}
+
+function onPageEnter(el, done) {
+  gsap.set(el, { autoAlpha: 1 })
+  if (motionOff()) {
+    done()
+    return
+  }
+  if (isReduced()) {
+    gsap.from(el, { autoAlpha: 0, duration: DUR.reduce, ease: 'none', onComplete: done })
+    return
+  }
+  const blocks = el.querySelectorAll(':scope > *:not(.page-header)')
+  const title = el.querySelector('.page-header h2')
+  const tl = gsap.timeline({ onComplete: done })
+  let split = null
+  try {
+    if (title) split = new SplitText(title, { type: 'chars' })
+  } catch (e) {
+    /* 标题整体动画回退 */
+  }
+  if (split && split.chars && split.chars.length) {
+    tl.from(
+      split.chars,
+      { yPercent: 110, autoAlpha: 0, duration: DUR.enter, stagger: DUR.staggerChars, ease: EASE.spring },
+      0,
+    )
+  } else if (title) {
+    tl.from(title, { y: 14, autoAlpha: 0, duration: 0.2, ease: EASE.spring }, 0)
+  }
+  if (blocks.length) {
+    tl.from(
+      blocks,
+      { y: 26, autoAlpha: 0, duration: DUR.enter, stagger: DUR.staggerCards, ease: EASE.spring, clearProps: 'all' },
+      0.02,
+    )
+  }
+  if (split) tl.add(() => split.revert())
 }
 
 provide('themeMode', themeMode)
