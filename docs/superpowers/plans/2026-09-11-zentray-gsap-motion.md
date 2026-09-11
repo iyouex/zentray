@@ -429,7 +429,7 @@ function setFilter(k) {
 
 /** DOM 集合变化前后捕获/回放：幸存卡片流动，离场收缩淡出、回归弹性放大 */
 async function runFlip(mutate) {
-  const root = listRef.value
+  const root = listRef.value?.$el ?? listRef.value // TransitionGroup 的 ref 是组件实例，$el 才是 tag 渲染的 div
   if (!root || motionOff() || isReduced()) {
     await mutate()
     return
@@ -568,9 +568,9 @@ function celebrate() {
   if (pct) {
     gsap.fromTo(pct, { scale: 1 }, { scale: 1.18, duration: 0.28, ease: EASE.spring, yoyo: true, repeat: 1, transformOrigin: '50% 50%' })
   }
-  const card = document.querySelector('.progress-page .arco-card')
-  if (card) {
-    gsap.fromTo(card, { scale: 1 }, { scale: 1.012, duration: 0.22, ease: EASE.spring, yoyo: true, repeat: 1, transformOrigin: '50% 100%' })
+  const body = document.querySelector('.progress-body')
+  if (body) {
+    gsap.fromTo(body, { scale: 1 }, { scale: 1.012, duration: 0.22, ease: EASE.spring, yoyo: true, repeat: 1, transformOrigin: '50% 100%' })
   }
 }
 ```
@@ -599,7 +599,7 @@ import { gsap, EASE, motionOff } from '@/motion'
 /** 卡片离场庆祝：卡片弹性收缩浮起，邻居轻微让位（spec §3.5） */
 function celebrateCard(itemId) {
   if (motionOff()) return false
-  const root = listRef.value
+  const root = listRef.value?.$el ?? listRef.value // 同 Task 4：组件实例 → $el
   if (!root) return false
   const cards = Array.from(root.querySelectorAll('.task-card-item'))
   const idx = cards.findIndex((c) => c.dataset.taskId === String(itemId))
