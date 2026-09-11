@@ -225,11 +225,24 @@ body,
 
 .quick-add-box {
   width: min(640px, 100%);
-  border-radius: 14px;
+  border-radius: var(--zt-radius-pill);
   padding: 4px;
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
+  transition: border-color var(--zt-dur-fast) ease,
+    box-shadow var(--zt-dur-fast) ease;
+}
+
+/* 聚焦 teal 描边点亮（spec §3 快速添加） */
+.quick-add-box:focus-within {
+  border-color: var(--color-primary);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45),
+    0 0 0 1.5px var(--color-primary-glow);
+}
+
+body.zt-shape-crisp .quick-add-box {
+  border-radius: var(--zt-radius-md);
 }
 
 .quick-add-box .arco-input-wrapper {

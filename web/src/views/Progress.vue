@@ -187,6 +187,7 @@ onMounted(async () => {
   font-size: 22px;
   font-weight: 700;
   min-width: 56px;
+  font-variant-numeric: tabular-nums;
   color: rgb(var(--primary-6));
 }
 .action-row {
