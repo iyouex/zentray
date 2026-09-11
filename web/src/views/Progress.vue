@@ -61,6 +61,7 @@ import {
   markDone,
   updateProgress,
 } from '@/api/client'
+import { gsap, EASE, DUR, dur, motionOff } from '@/motion'
 
 const props = defineProps({ id: String })
 const route = useRoute()
@@ -102,12 +103,30 @@ function formatTime(t) {
   return String(t).replace('T', ' ').slice(0, 19)
 }
 
+/** 100% 达成庆祝（spec §3.5，原型场景 5）：百分比数字弹性绽放 + 页面轻微脉冲 */
+function celebrate() {
+  if (motionOff()) return
+  const pct = document.querySelector('.pct-label')
+  if (pct) {
+    gsap.fromTo(pct, { scale: 1 }, { scale: 1.18, duration: 0.28, ease: EASE.spring, yoyo: true, repeat: 1, transformOrigin: '50% 50%' })
+  }
+  const body = document.querySelector('.progress-body')
+  if (body) {
+    gsap.fromTo(body, { scale: 1 }, { scale: 1.012, duration: 0.22, ease: EASE.spring, yoyo: true, repeat: 1, transformOrigin: '50% 100%' })
+  }
+}
+
 async function onSave() {
   saving.value = true
   try {
     await updateProgress(taskId.value, snap10(percent.value), note.value)
     Message.success('已保存')
-    handleExit({ action: 'progress', percent: snap10(percent.value) })
+    if (Number(percent.value) >= 100) {
+      celebrate()
+      setTimeout(() => handleExit({ action: 'progress', percent: snap10(percent.value) }), DUR.theme * 1000)
+    } else {
+      handleExit({ action: 'progress', percent: snap10(percent.value) })
+    }
   } catch (e) {
     Message.error(e?.message || '保存失败')
   } finally {
@@ -118,7 +137,8 @@ async function onSave() {
 async function onDone() {
   await markDone(taskId.value)
   Message.success('已完成')
-  handleExit({ action: 'done' })
+  celebrate()
+  setTimeout(() => handleExit({ action: 'done' }), 600)
 }
 
 function onAbandon() {

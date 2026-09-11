@@ -39,6 +39,7 @@
               :key="item.id"
               class="task-card-item"
               :class="{ active: item.id === selectedId, 'flip-gone': !matchesFilter(item) }"
+              :data-task-id="item.id"
               :style="cardStyle(item)"
               @click="selectedId = item.id"
             >
@@ -263,11 +264,35 @@ function goEdit() {
   router.push({ path: `/tasks/${current.value.id}/edit`, query: { from: 'list' } })
 }
 
+/** 卡片离场庆祝：卡片弹性收缩浮起，邻居轻微让位（spec §3.5） */
+function celebrateCard(itemId) {
+  if (motionOff()) return false
+  const root = listRef.value?.$el ?? listRef.value // 同 Task 4：组件实例 → $el
+  if (!root) return false
+  const cards = Array.from(root.querySelectorAll('.task-card-item'))
+  const idx = cards.findIndex((c) => c.dataset.taskId === String(itemId))
+  const target = idx >= 0 ? cards[idx] : null
+  if (target) {
+    gsap.to(target, { scale: 1.02, y: -3, duration: 0.2, ease: EASE.spring })
+    gsap.to(target, { autoAlpha: 0, scale: 0.88, y: -8, duration: 0.26, ease: EASE.out, delay: 0.18 })
+  }
+  cards.forEach((c, j) => {
+    if (!target || c === target) return
+    const dir = j < idx ? -1 : 1
+    gsap.fromTo(c, { y: dir * 2 }, { y: 0, duration: 0.5, ease: EASE.spring })
+  })
+  return true
+}
+
 async function onDone() {
   if (!current.value) return
   await markDone(current.value.id)
   Message.success('已完成')
-  closeHost({ action: 'done', id: current.value.id })
+  if (celebrateCard(current.value.id)) {
+    setTimeout(() => closeHost({ action: 'done', id: current.value.id }), 520)
+  } else {
+    closeHost({ action: 'done', id: current.value.id })
+  }
 }
 
 function onAbandon() {
@@ -279,7 +304,11 @@ function onAbandon() {
     onOk: async () => {
       await abandonTask(current.value.id)
       Message.success('已废弃')
-      closeHost({ action: 'abandon', id: current.value.id })
+      if (celebrateCard(current.value.id)) {
+        setTimeout(() => closeHost({ action: 'abandon', id: current.value.id }), 520)
+      } else {
+        closeHost({ action: 'abandon', id: current.value.id })
+      }
     },
   })
 }

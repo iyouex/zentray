@@ -1,6 +1,6 @@
 <template>
   <div class="quick-add-page" data-drag="true">
-    <div class="quick-add-box">
+    <div class="quick-add-box" ref="boxRef">
       <a-input
         ref="inputRef"
         v-model="title"
@@ -18,6 +18,7 @@
 import { nextTick, onMounted, ref } from 'vue'
 import { Message } from '@arco-design/web-vue'
 import { cancelHost, closeHost, createTask, getMeta } from '@/api/client'
+import { gsap, EASE, dur, motionOff } from '@/motion'
 
 const title = ref('')
 const inputRef = ref(null)
@@ -55,5 +56,20 @@ onMounted(async () => {
   } catch (_) {}
   await nextTick()
   inputRef.value?.focus?.()
+})
+
+/** 聚焦弹性绽放（spec §3.5）：聚焦时输入盒轻微放大，失焦回落；亮环仍由 CSS :focus-within 负责 */
+const boxRef = ref(null)
+onMounted(() => {
+  const box = boxRef.value
+  const input = inputRef.value?.$el?.querySelector('input') || inputRef.value?.$el
+  input?.addEventListener('focus', () => {
+    if (motionOff()) return
+    gsap.to(box, { scale: 1.012, duration: 0.3, ease: EASE.spring, overwrite: 'auto' })
+  })
+  input?.addEventListener('blur', () => {
+    if (motionOff()) return
+    gsap.to(box, { scale: 1, duration: 0.28, ease: EASE.out, overwrite: 'auto' })
+  })
 })
 </script>

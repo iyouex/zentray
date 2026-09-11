@@ -187,10 +187,12 @@
       @ok="onAddSecondary"
       :ok-loading="addingSec"
     >
-      <a-input v-model="newSecName" placeholder="二级分类名称" @press-enter="onAddSecondary" />
-      <p class="muted" style="margin-top: 8px">
-        将添加到一级「{{ primaryName() }}」下（一级仅能选择已有项）。
-      </p>
+      <div v-stagger>
+        <a-input v-model="newSecName" placeholder="二级分类名称" @press-enter="onAddSecondary" />
+        <p class="muted" style="margin-top: 8px">
+          将添加到一级「{{ primaryName() }}」下（一级仅能选择已有项）。
+        </p>
+      </div>
     </a-modal>
   </div>
 </template>
