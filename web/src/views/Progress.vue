@@ -61,7 +61,7 @@ import {
   markDone,
   updateProgress,
 } from '@/api/client'
-import { gsap, EASE, DUR, motionOff } from '@/motion'
+import { gsap, EASE, DUR, motionOff, isReduced } from '@/motion'
 
 const props = defineProps({ id: String })
 const route = useRoute()
@@ -105,7 +105,7 @@ function formatTime(t) {
 
 /** 100% 达成庆祝（spec §3.5，原型场景 5）：百分比数字弹性绽放 + 页面轻微脉冲 */
 function celebrate() {
-  if (motionOff()) return
+  if (motionOff() || isReduced()) return
   const pct = document.querySelector('.pct-label')
   if (pct) {
     gsap.fromTo(pct, { scale: 1 }, { scale: 1.18, duration: 0.28, ease: EASE.spring, yoyo: true, repeat: 1, transformOrigin: '50% 50%' })
@@ -123,6 +123,8 @@ async function onSave() {
     Message.success('已保存')
     if (Number(percent.value) >= 100) {
       celebrate()
+      // 庆祝窗口内保持按钮禁用，窗口即将退出无需复位
+      saving.value = true
       setTimeout(() => handleExit({ action: 'progress', percent: snap10(percent.value) }), DUR.theme * 1000)
     } else {
       handleExit({ action: 'progress', percent: snap10(percent.value) })

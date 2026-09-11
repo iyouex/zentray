@@ -215,6 +215,8 @@ async function runFlip(mutate) {
     return
   }
   const cards = root.querySelectorAll('.task-card-item')
+  // 上一次 Flip 未完时接管，从当前视觉位置继续
+  gsap.killTweensOf(cards)
   const state = Flip.getState(cards)
   await mutate()
   await nextTick()
@@ -266,7 +268,7 @@ function goEdit() {
 
 /** 卡片离场庆祝：卡片弹性收缩浮起，邻居轻微让位（spec §3.5） */
 function celebrateCard(itemId) {
-  if (motionOff()) return false
+  if (motionOff() || isReduced()) return false
   const root = listRef.value?.$el ?? listRef.value // 同 Task 4：组件实例 → $el
   if (!root) return false
   const cards = Array.from(root.querySelectorAll('.task-card-item'))
@@ -281,7 +283,7 @@ function celebrateCard(itemId) {
     const dir = j < idx ? -1 : 1
     gsap.fromTo(c, { y: dir * 2 }, { y: 0, duration: 0.5, ease: EASE.spring })
   })
-  return true
+  return !!target
 }
 
 async function onDone() {

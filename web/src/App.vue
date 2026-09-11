@@ -36,6 +36,8 @@ function onPageLeave(el, done) {
     gsap.to(el, { autoAlpha: 0, duration: DUR.reduce, ease: 'none', onComplete: done })
     return
   }
+  // 接管上一场未完的入场补间，避免并发写
+  gsap.killTweensOf(el.querySelectorAll(':scope > *'))
   gsap.to(el.querySelectorAll(':scope > *'), {
     y: 10,
     autoAlpha: 0,

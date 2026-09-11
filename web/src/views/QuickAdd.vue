@@ -18,7 +18,7 @@
 import { nextTick, onMounted, ref } from 'vue'
 import { Message } from '@arco-design/web-vue'
 import { cancelHost, closeHost, createTask, getMeta } from '@/api/client'
-import { gsap, EASE, motionOff } from '@/motion'
+import { gsap, EASE, motionOff, isReduced } from '@/motion'
 
 const title = ref('')
 const inputRef = ref(null)
@@ -64,11 +64,11 @@ onMounted(() => {
   const box = boxRef.value
   const input = inputRef.value?.$el?.querySelector('input') || inputRef.value?.$el
   input?.addEventListener('focus', () => {
-    if (motionOff()) return
+    if (motionOff() || isReduced()) return
     gsap.to(box, { scale: 1.012, duration: 0.3, ease: EASE.spring, overwrite: 'auto' })
   })
   input?.addEventListener('blur', () => {
-    if (motionOff()) return
+    if (motionOff() || isReduced()) return
     gsap.to(box, { scale: 1, duration: 0.28, ease: EASE.out, overwrite: 'auto' })
   })
 })
