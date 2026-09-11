@@ -51,10 +51,10 @@
 | 页内弹层（Arco modal/popover/drawer） | dg-a 源点生长；遮罩 `rgba(2,6,23,.45)` + 2px 背景模糊渐入 |
 | 宿主弹窗页（VueDialog 整窗） | mount 时播放同族入场（源点偏下、scale .97→1 + 淡入） |
 | 页头拖拽栏 | 36px 高（既有确认值），样式随主题令牌刷新 |
-| 表单控件（输入/下拉/开关） | focus：teal 1.5px 亮环；error：红描边 + 一次 180ms 抖动（`--zt-ease-out`） |
+| 表单控件（输入/下拉/开关） | focus：teal 1.5px 亮环；error：红描边沿用 Arco 内置（抖动延后：Arco 校验消息常驻重渲染，抖动会随输入反复触发） |
 | Message / Toast | 全胶囊圆角 + 顶部滑入淡入 180ms，退出 140ms |
 | 空状态 / 加载 | `a-empty` 图标区圆角化；`a-spin` 取主题主色 |
-| Tabs / 表格行 | tabs 指示条胶囊化；表格行 hover 用 `--color-surface-hover` |
+| Tabs / 表格行 | tabs 用 Arco 内置 `type="rounded"`（不自绘指示条）；表格行 hover 用 `--color-surface-hover` |
 | 滚动条 | 8px 圆角细条（`::-webkit-scrollbar`），hover 加深 |
 
 ## 4. 动效规格
@@ -78,13 +78,15 @@
 - Python 改动面：`settings_manager` 两个默认键 + `Settings.vue` 外观区两个控件（合计约 20 行）。
 - 氛围色不设独立开关：`motion=off` 时氛围呼吸同步关闭。
 
-## 6. 落地架构（方案 1 · 令牌层 + Arco 变量覆盖）
+## 6. 落地架构（方案 1 · 令牌层 + Arco 接线层）
+
+> **2026-09-11 修订**：P1 验证发现「仅靠覆盖 `--border-radius-small/medium/large` 变量」不够——Arco 大表面不消费这些变量（`.arco-card` 写死 `var(--border-radius-none)`=0px，输入/弹层等各写各的）。变量覆盖保留（123 处消费仍生效），**新增组件接线层**：把关键 Arco 表面直接接到 `--zt-*` 令牌，两档经令牌翻转自动生效。同时修正两处语义：**crisp 档按钮不用胶囊**（用 `--zt-radius-md`，使形状档在按钮上可见）；**motion=off 彻底关闭**（过渡 0s、动画 none），与 `prefers-reduced-motion` 的 140ms 纯淡入降级区分。
 
 | 文件 | 改动 |
 |---|---|
-| `web/src/styles.css` | 令牌定义（body class 作用域）+ `.zt-*` 组件类 + Arco 覆盖（`--border-radius-small/medium/large`：圆润档 8/12/16、利落档 4/6/8，随形状档切换；`arco-btn` 圆角胶囊化） |
-| `web/src/theme.js` | `categoryColor(name)` 工具（hash→色板，约 15 行）+ `applyAppearance()` body class |
-| `web/src/App.vue` | `<Transition>` 包装（约 5 行） |
+| `web/src/styles.css` | 令牌定义（body class 作用域）+ `.zt-*` 组件类 + Arco 变量覆盖（small/medium/large：圆润 8/12/16、利落 4/6/8）+ **Arco 接线层**（`.arco-card→--zt-radius-card`；输入/下拉/菜单/弹层/表格→`--zt-radius-md`；tag/tabs/消息→pill；圆润档按钮 pill、利落档按钮 md） |
+| `web/src/theme.js` | `categoryColor(name)` 工具（hash→色板）+ `applyAppearance()` body class |
+| `web/src/App.vue` | `<Transition>` 包装 |
 | `zentray/services/settings_manager.py` | appearance 两个默认键 |
 | 各视图 | 按分期套用 `.zt-*` 类与语义色 |
 
@@ -94,7 +96,7 @@
 
 - **P1 核心面**：令牌层 + theme.js + App.vue 过渡 + 设置项（含 Python 键）+ TaskList / Home 视图改造。
 - **P2 交互面**：Progress / TaskForm / QuickAdd / Reminder / TaskAction + 页内弹层 dg-a + `npm run build` 重出 dist。
-- **P3 收尾面**：Settings / History / Periodic / SetupWizard 样式统一 + 专注模式氛围色。
+- **P3 收尾面**：Settings / History / Periodic / SetupWizard 样式统一。（专注模式氛围色延后：番茄钟为托盘服务，web 侧无专注状态消费面，待出现专注页面时再做）
 
 每期结束跑全量回归（Python 单测 + `npm run build`），P1/P2 之间可独立交付验证。
 
