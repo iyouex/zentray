@@ -23,14 +23,14 @@
 | stagger | 卡片 40ms、弹层内容 30ms、标题词 35ms | 编排节奏 |
 | Flip 弹簧 | spring，dur 400ms | 列表重排 |
 
-- 全部数值集中在 `motion/index.js` 导出（单一事实源），不散落各组件。
+- 全部令牌表数值集中在 `motion/index.js` 导出（单一事实源），不散落各组件；场景级编排的细节时长/延迟（如庆祝各段、防抖间隔）允许内联于组件。
 
 ## 3. 场景规格
 
 ### 3.1 页面转场（替换现 zt-page CSS 类）
 - 保留 `<Transition name="zt-page" mode="out-in">` 骨架，CSS 过渡类退役，JS 钩子（`@leave`/`@enter`）调 timeline。
-- **退场** 120ms：视图根直接子块（卡片/分组）`translateY(8px)` + 淡出，stagger 15ms，ease-out。
-- **入场** 260ms：页面标题 SplitText 逐词浮升（mask 上移）+ 内容卡片 stagger 40ms 弹簧浮升。
+- **退场** 120ms：视图根直接子块（卡片/分组）`translateY(10px)` + 淡出，stagger 15ms，ease-out。
+- **入场** 260ms：页面标题 SplitText 逐字浮升（中文按字切分）+ 内容卡片 stagger 40ms 弹簧浮升。
 - `zentray:reopen` 的 viewKey 重入场复用入场编排。
 - **窗口首开**：`#app` 整窗缩放 CSS 动画退役，改为首屏卡片 stagger 浮升（+遮罩快淡入）。
 
@@ -45,15 +45,15 @@
 - 指令挂在我们自己的内容根节点上，不依赖 Arco 内部结构；Arco modal 经 teleport 渲染不受影响。
 
 ### 3.4 主题/形状切换（@property + 补间）
-- 全部主题色令牌（4 主题块的颜色变量）与圆角令牌（`--zt-radius-card/md/win`）注册 `@property`（`<color>` / `<length>`，`inherits:true`）。
+- 全部主题色令牌（4 主题块的颜色变量）与圆角令牌（`--zt-radius-card/md`；`--zt-radius-win` 全仓零消费者，不注册）注册 `@property`（`<color>` / `<length>`，`inherits:true`）。已知取舍：Arco 内部 `--border-radius-*` 与阴影令牌（`@property` 无 `<shadow>` 语法）不补间，切换瞬时。
 - 切主题：`applyAppearance` 翻转 body class 后，GSAP 补间 body 上旧→新值，450ms——全界面色彩流动渐变。
 - 切形状：圆角令牌补间 350ms，界面平滑变形。
 - 补间期间重复切换：GSAP overwrite 自动从当前值接管，无跳变。
 - 动效=关：不补间，瞬时切换（现行为）。
 
 ### 3.5 关键时刻
-- **任务完成**：对勾 scale 弹性 pop（elastic）+ 涟漪环扩散 + 相邻卡片 2px 让位回弹（弹簧），~500ms 总编排。
-- **快速录入聚焦**：输入区 scale(1.01) 弹性 + 阴影绽放（与 CSS 聚焦亮环叠加）。
+- **任务完成**（以实施为准）：卡片弹性收缩浮起淡出 + 相邻卡片 2px 让位回弹（弹簧），~520ms 后关窗。对勾 pop / 涟漪环在关窗编排下不做。
+- **快速录入聚焦**（以实施为准）：输入区 scale(1.012) 弹性（teal 聚焦亮环归 CSS `:focus-within`；阴影绽放不做）。
 - 不做：文字打字机、3D 视差、数字翻滚（旧 spec 已排）。
 
 ## 4. 架构
