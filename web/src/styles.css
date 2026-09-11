@@ -275,7 +275,7 @@ body.theme-light {
   --zt-shadow-card-hover: 0 10px 26px rgba(15, 23, 42, 0.2);
 }
 
-/* ================= Arco 圆角覆盖（spec §6） ================= */
+/* ================= Arco 接线层（spec §6 2026-09-11 修订） ================= */
 body {
   --border-radius-small: 8px;
   --border-radius-medium: 12px;
@@ -288,12 +288,42 @@ body.zt-shape-crisp {
   --border-radius-large: 8px;
 }
 
+/* 大表面接线：Arco 不消费 radius 变量的部分直接接 zt 令牌 */
+.arco-card {
+  border-radius: var(--zt-radius-card);
+}
+
+.arco-tag {
+  border-radius: var(--zt-radius-pill);
+}
+
+/* 按钮：圆润=胶囊、利落=小圆角（spec §6 修订，形状档在按钮上可见） */
 .arco-btn {
   border-radius: var(--zt-radius-pill);
 }
 
+body.zt-shape-crisp .arco-btn {
+  border-radius: var(--zt-radius-md);
+}
+
 .arco-message {
   border-radius: var(--zt-radius-pill);
+}
+
+/* 表格行 hover（spec §3） */
+.arco-table-tr .arco-table-td {
+  transition: background-color var(--zt-dur-fast) ease;
+}
+
+.arco-table-tr:not(.arco-table-tr-empty):hover .arco-table-td {
+  background-color: var(--color-surface-hover);
+}
+
+/* 表单控件 teal 聚焦亮环（spec §3；error 红描边沿用 Arco 内置） */
+.arco-input-wrapper:focus-within,
+.arco-textarea-wrapper:focus-within {
+  border-color: rgb(var(--primary-6));
+  box-shadow: 0 0 0 1.5px var(--color-primary-glow);
 }
 
 /* 滚动条：8px 圆角细条（spec §3） */
@@ -381,24 +411,18 @@ body {
   transform: translateY(4px);
 }
 
-/* ================= 动效降级（spec §4） ================= */
+/* ================= 动效降级（spec §6 修订：off = 彻底关闭） ================= */
 body.zt-motion-off *,
 body.zt-motion-off *::before,
 body.zt-motion-off *::after {
-  transition-duration: var(--zt-dur-off) !important;
-  animation-duration: var(--zt-dur-off) !important;
-  animation-iteration-count: 1 !important;
+  transition-duration: 0s !important;
+  animation: none !important;
 }
 
-body.zt-motion-off .zt-page-enter-from,
-body.zt-motion-off .zt-list-enter-from,
-body.zt-motion-off .zt-list-leave-to,
-body.zt-motion-off .task-card-item:hover {
-  transform: none;
-}
-
-body.zt-motion-off .icon-check-animated {
-  animation: none;
+/* 载入指示器是功能反馈而非装饰动效，豁免（spec §3 a-spin 取主题主色） */
+body.zt-motion-off .arco-spin-icon,
+body.zt-motion-off .arco-spin-loading {
+  animation: arco-loading-circle 1s infinite cubic-bezier(0, 0, 1, 1) !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
