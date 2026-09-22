@@ -111,6 +111,7 @@ def _on_reminder_due(runtime: AppRuntime, task, fire_key: str) -> None:
         from zentray.ui.vue_commands import try_vue_reminder
         from zentray.ui.vue_commands import try_vue_progress
         from zentray.ui.web_host import use_vue_ui
+        from zentray.ui.dialog_utils import run_modal_loop
 
         action = "dismiss"
         snooze_minutes = 10
@@ -123,7 +124,7 @@ def _on_reminder_due(runtime: AppRuntime, task, fire_key: str) -> None:
                 snooze_minutes = 10
         else:
             dlg = ReminderDialog(task)
-            dlg.exec()
+            run_modal_loop(dlg)
             action = dlg.result_action
             snooze_minutes = getattr(dlg, "snooze_minutes", 10) or 10
 
@@ -162,7 +163,7 @@ def _on_reminder_due(runtime: AppRuntime, task, fire_key: str) -> None:
                 from zentray.ui.dialogs import ProgressDialog
 
                 progress = ProgressDialog(task=fresh)
-                if progress.exec():
+                if run_modal_loop(progress):
                     percent, note = progress.get_data()
                     task_service.update_progress(task.id, percent, note)
             if runtime.controller:

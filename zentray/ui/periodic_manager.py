@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
 
 from zentray.core.models import PeriodicTemplate
 from zentray.ui.dialogs import TaskDialog
-from zentray.ui.dialog_utils import apply_dialog_chrome, style_action_button
+from zentray.ui.dialog_utils import apply_dialog_chrome, run_modal_loop, style_action_button
 
 
 class PeriodicManagerDialog(QDialog):
@@ -83,7 +83,7 @@ class PeriodicManagerDialog(QDialog):
         # 强制周期模式
         dlg.rb_periodic.setChecked(True)
         dlg._on_type_toggled()
-        if dlg.exec():
+        if run_modal_loop(dlg):
             data = dlg.get_data()
             data["task_type"] = "periodic"
             self.task_service.create_task(data)
@@ -97,7 +97,7 @@ class PeriodicManagerDialog(QDialog):
         if not tmpl:
             return
         dlg = TaskDialog(self, task=tmpl)
-        if dlg.exec():
+        if run_modal_loop(dlg):
             data = dlg.get_data()
             self.task_service.update_template(tid, data)
             self._reload()

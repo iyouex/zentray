@@ -368,6 +368,8 @@ def should_show_wizard() -> bool:
 
 def show_setup_wizard(parent=None) -> bool:
     """显示配置向导，返回 True 表示用户完成配置"""
+    from zentray.ui.dialog_utils import run_modal_loop
+
     wizard = SetupWizard(parent)
-    return wizard.exec() == QDialog.Accepted
+    return run_modal_loop(wizard)
 

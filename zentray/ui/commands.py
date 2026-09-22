@@ -8,6 +8,8 @@
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
+from zentray.ui.dialog_utils import run_modal_loop
+
 if TYPE_CHECKING:
     from .controller import TrayController
 
@@ -36,7 +38,7 @@ class NewTaskCommand(ActionCommand):
         from zentray.ui.dialogs import TaskDialog
 
         dialog = TaskDialog()
-        if dialog.exec():
+        if run_modal_loop(dialog):
             data = dialog.get_data()
             controller.task_service.create_task(data)
             controller.update_display()
@@ -82,7 +84,7 @@ class TaskListCommand(ActionCommand):
         from zentray.ui.task_list_dialog import TaskListDialog
 
         dialog = TaskListDialog(controller.task_service)
-        if not dialog.exec():
+        if not run_modal_loop(dialog):
             return
         result = dialog.get_selected_action()
         if not result:
@@ -103,7 +105,7 @@ def _run_progress_dialog(controller: "TrayController", task) -> None:
     from zentray.ui.dialogs import ProgressDialog
 
     dialog = ProgressDialog(task=task)
-    if not dialog.exec():
+    if not run_modal_loop(dialog):
         return
     action = getattr(dialog, "result_action", "save")
     if action == "done":
@@ -131,7 +133,7 @@ class EditCommand(ActionCommand):
         from zentray.ui.dialogs import TaskDialog
 
         dialog = TaskDialog(task=fresh)
-        if dialog.exec():
+        if run_modal_loop(dialog):
             data = dialog.get_data()
             # 保留实例类型，勿被表单误改成 one-time 丢 template_id
             if getattr(fresh, "task_type", None) == "periodic_instance":
@@ -183,7 +185,7 @@ class SettingsCommand(ActionCommand):
         from zentray.ui.settings_dialog import SettingsDialog
 
         dialog = SettingsDialog()
-        if dialog.exec():
+        if run_modal_loop(dialog):
             # 设置已保存，刷新控制器以应用新设置
             controller.apply_settings()
             controller.update_display()
@@ -217,7 +219,7 @@ class PeriodicManageCommand(ActionCommand):
         from zentray.ui.periodic_manager import PeriodicManagerDialog
 
         dialog = PeriodicManagerDialog(controller.task_service)
-        dialog.exec()
+        run_modal_loop(dialog)
         controller.reload_data()
 
 
@@ -280,7 +282,7 @@ class TaskActionCommand(ActionCommand):
         from zentray.ui.dialogs import TaskActionDialog
 
         dialog = TaskActionDialog(task=task)
-        if dialog.exec():
+        if run_modal_loop(dialog):
             action = dialog.get_selected_action()
             if action:
                 _dispatch_task_action(action, task, controller)
@@ -328,7 +330,7 @@ class CurrentTaskCommand(ActionCommand):
         from zentray.ui.dialogs import TaskActionDialog
 
         dialog = TaskActionDialog(task=task)
-        if dialog.exec():
+        if run_modal_loop(dialog):
             action = dialog.get_selected_action()
             if action:
                 _dispatch_task_action(action, task, controller)
@@ -404,7 +406,7 @@ def _dispatch_task_action(action: str, task, controller: "TrayController") -> No
         from zentray.ui.dialogs import TaskDialog
 
         dialog = TaskDialog(task=task)
-        if dialog.exec():
+        if run_modal_loop(dialog):
             data = dialog.get_data()
             if getattr(task, "task_type", None) == "periodic_instance":
                 data["task_type"] = "periodic_instance"
