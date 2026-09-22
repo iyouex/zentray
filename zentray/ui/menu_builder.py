@@ -55,11 +55,6 @@ class MenuBuilder:
 
         items = [
             {
-                "id": "current_task",
-                "label": "📌 当前任务",
-                "enabled": task_exists and not is_pomodoro,
-            },
-            {
                 "id": "task_list",
                 "label": "📋 任务列表",
                 "enabled": not is_pomodoro,

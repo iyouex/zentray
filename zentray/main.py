@@ -109,7 +109,7 @@ def _start_nightly_if_needed(runtime: AppRuntime, task_repo: TaskRepository) -> 
 def _on_reminder_due(runtime: AppRuntime, task, fire_key: str) -> None:
     try:
         from zentray.ui.vue_commands import try_vue_reminder
-        from zentray.ui.vue_commands import try_vue_progress
+        from zentray.ui.vue_commands import try_vue_task_list
         from zentray.ui.web_host import use_vue_ui
         from zentray.ui.dialog_utils import run_modal_loop
 
@@ -158,7 +158,8 @@ def _on_reminder_due(runtime: AppRuntime, task, fire_key: str) -> None:
         elif action == "update":
             fresh = task_service.find_task(task.id) or task
             if use_vue_ui() and runtime.controller:
-                try_vue_progress(runtime.controller, fresh)
+                # 更新进度并入任务列表右栏：直达选中该任务
+                try_vue_task_list(runtime.controller, select_id=fresh.id)
             else:
                 from zentray.ui.dialogs import ProgressDialog
 
