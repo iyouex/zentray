@@ -332,13 +332,14 @@ const filter = ref('all') // 分类
 const listRef = ref(null)
 
 const typeChips = computed(() => [
-  { key: 'all', label: '全部', count: tasks.value.length },
+  { key: 'all', label: '全部', count: leftItems.value.length },
   { key: 'onetime', label: '一次性', count: tasks.value.length - periodicTasks.value.length },
   { key: 'periodic', label: '周期', count: periodicTasks.value.length + dormantTemplates.value.length },
 ])
 
 function matchesType(item) {
-  if (typeFilter.value === 'all') return item.kind === 'task'
+  // 全部 = 任务实例 + 休眠模板：完成实例后模板原地转休眠，任何视图下周期任务不断档
+  if (typeFilter.value === 'all') return true
   if (typeFilter.value === 'onetime') return item.kind === 'task' && item.task_type !== 'periodic_instance'
   return item.kind === 'tmpl' || item.task_type === 'periodic_instance'
 }
