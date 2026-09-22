@@ -15,16 +15,28 @@
 
     <div class="two-col">
       <a-card title="活跃任务" :bordered="true">
-        <div class="filter-row" role="group" aria-label="构成筛选">
+        <div class="filter-row" role="group" aria-label="视图切换">
           <button
-            v-for="c in typeChips"
+            v-for="c in tabChips"
             :key="c.key"
             class="fchip"
             type="button"
-            :aria-pressed="String(typeFilter === c.key)"
-            @click="setType(c.key)"
+            :aria-pressed="String(viewTab === c.key)"
+            @click="setTab(c.key)"
           >
             {{ c.label }} · {{ c.count }}
+          </button>
+        </div>
+        <div v-if="viewTab === 'history' && archivedLoaded" class="filter-row" role="group" aria-label="状态筛选">
+          <button
+            v-for="c in histStatusChips"
+            :key="c.key"
+            class="fchip"
+            type="button"
+            :aria-pressed="String(histStatus === c.key)"
+            @click="setHistStatus(c.key)"
+          >
+            {{ c.label }} · {{ histStatusCount(c.key) }}
           </button>
         </div>
         <div v-if="categoryChips.length > 1" class="filter-row" role="group" aria-label="分类筛选">
@@ -39,7 +51,7 @@
             {{ c.label }} · {{ c.count }}
           </button>
         </div>
-        <a-spin :loading="loading" style="width: 100%">
+        <a-spin :loading="loading || histLoading" style="width: 100%">
           <TransitionGroup v-if="leftItems.length" ref="listRef" name="zt-list" tag="div" class="task-card-list">
             <div
               v-for="item in leftItems"
@@ -47,7 +59,7 @@
               class="task-card-item"
               :class="{
                 active: item.key === selectedKey,
-                dormant: item.kind === 'tmpl',
+                dormant: item.kind === 'tmpl' && !item.instance,
                 'flip-gone': !matches(item),
               }"
               :data-task-id="item.kind === 'task' ? item.id : undefined"
@@ -88,13 +100,34 @@
                       截止: {{ deadlineInfo(item).text }}
                     </span>
                   </template>
-                  <span v-else class="task-card-sub">
-                    {{ periodLabel(item) }} · {{ item.paused ? '已暂停' : '下次派发 ' + (item.next_spawn_date || '—') }}
-                  </span>
+                  <template v-else-if="item.kind === 'tmpl'">
+                    <span class="task-card-sub">
+                      {{ periodLabel(item) }} · {{ item.paused ? '已暂停' : '下次派发 ' + (item.next_spawn_date || '—') }}
+                    </span>
+                    <span v-if="item.instance" class="task-card-sub">
+                      本周期: {{ item.instance.title }}
+                    </span>
+                  </template>
+                  <template v-else>
+                    <span class="task-card-sub">{{ formatTime(item.archived_at) }}</span>
+                    <a-tag size="small" :color="STATUS_FAMILY[item.status] === 'done' ? 'green' : 'red'">
+                      {{ STATUS_LABEL[item.status] || item.status }}
+                    </a-tag>
+                  </template>
                 </div>
                 <div v-if="item.kind === 'task' && item.progress" class="zt-card-prog">
                   <i :style="{ width: (item.progress || 0) + '%', background: categoryColor(item.category) }" />
                 </div>
+              </div>
+              <!-- 模板卡当前周期实例：迷你进度 + 行内完成（阻止冒泡，不触发选中） -->
+              <div v-if="item.kind === 'tmpl' && item.instance" class="zt-inst-row">
+                <div class="zt-card-prog" style="flex: 1">
+                  <i :style="{ width: (item.instance.progress || 0) + '%', background: categoryColor(item.category) }" />
+                </div>
+                <span class="task-card-sub">{{ item.instance.progress || 0 }}%</span>
+                <a-button size="mini" type="primary" status="success" @click.stop="onInstanceDone(item.instance)">
+                  完成
+                </a-button>
               </div>
               <PhCheckCircle
                 v-if="item.kind === 'task' && item.progress === 100"
@@ -104,7 +137,7 @@
               />
             </div>
           </TransitionGroup>
-          <a-empty v-else-if="!loading" description="暂无活跃任务" />
+          <a-empty v-else-if="!loading" :description="emptyText" />
         </a-spin>
       </a-card>
 
@@ -117,10 +150,11 @@
             进度: {{ currentTask.progress || 0 }}%
             <br v-if="currentTask.deadline" />
             <span v-if="currentTask.deadline">截止: {{ currentTask.deadline }}</span>
-            <span v-if="currentTask.task_type === 'periodic_instance'" class="zt-origin">
+            <span v-if="currentTask.task_type === 'periodic_instance' && !currentTask.orphan" class="zt-origin">
               周期实例
               <a-link @click="goTemplateEdit">编辑模板</a-link>
             </span>
+            <span v-else-if="currentTask.orphan" class="zt-origin">周期实例（模板已删除）</span>
             <span v-if="reminderText(currentTask)">　提醒: {{ reminderText(currentTask) }}</span>
             <span v-if="currentTask.auto_abandon_on_overdue">　[逾期自动废弃]</span>
           </p>
@@ -212,6 +246,67 @@
               删除模板
             </a-button>
           </a-space>
+
+          <!-- 当前周期实例区（与任务模式共用同一组操作函数/状态） -->
+          <template v-if="currentTmpl.instance">
+            <div class="zt-inst-panel">
+              <p class="title">{{ currentTmpl.instance.title }}</p>
+              <p class="meta">
+                进度: {{ currentTmpl.instance.progress || 0 }}%
+                <span v-if="currentTmpl.instance.deadline">　截止: {{ currentTmpl.instance.deadline }}</span>
+              </p>
+              <div class="inline-prog">
+                <div class="pct-row">
+                  <span ref="pctRef" class="pct-label">{{ percent }}%</span>
+                  <a-slider
+                    class="theme-slider"
+                    v-model="percent"
+                    :min="0"
+                    :max="100"
+                    :step="10"
+                    :style="{ flex: 1 }"
+                  />
+                </div>
+                <div class="prog-actions">
+                  <a-input v-model="note" placeholder="本次进展描述（选填）" allow-clear size="small" style="flex: 1" />
+                  <a-button type="primary" size="small" :loading="progressSaving" @click="onProgressSave">记录</a-button>
+                </div>
+              </div>
+              <a-space fill style="width: 100%; margin-top: 12px">
+                <a-button type="primary" status="success" style="flex: 1" @click="onDone">
+                  <template #icon><PhCheck :size="16" /></template>
+                  完成实例
+                </a-button>
+                <a-button status="danger" style="flex: 1" @click="onAbandon">
+                  <template #icon><PhTrash :size="16" /></template>
+                  废弃实例
+                </a-button>
+              </a-space>
+              <div v-if="recentLogs.length" class="recent">
+                <div class="recent-head">最近进展</div>
+                <div v-for="(log, i) in recentLogs" :key="i" class="recent-item">
+                  <span>{{ log.percent }}%</span>
+                  <span class="note">{{ formatTime(log.time) }} · {{ log.note || '无备注' }}</span>
+                </div>
+              </div>
+            </div>
+          </template>
+          <p v-else class="meta" style="margin-top: 12px">
+            {{ currentTmpl.paused ? '已暂停派发，恢复后将为当前周期生成一次' : '当前周期暂无实例，到期自动派发' }}
+          </p>
+        </template>
+
+        <!-- 历史任务（只读） -->
+        <template v-else-if="currentHist">
+          <p class="title">{{ currentHist.title }}</p>
+          <p class="meta">
+            {{ STATUS_LABEL[currentHist.status] || currentHist.status }} · {{ formatTime(currentHist.archived_at) }}
+            　分类: {{ currentHist.category || '未分类' }}
+            优先级: {{ PRI_LABEL[currentHist.priority] || '低' }}
+            <br />
+            <span v-if="currentHist.attachment_count">附件数: {{ currentHist.attachment_count }}</span>
+          </p>
+          <p v-if="currentHist.details" class="details">{{ currentHist.details }}</p>
         </template>
 
         <a-empty v-else description="请选择左侧任务" />
@@ -230,6 +325,7 @@ import {
   cancelHost,
   closeHost,
   deleteTemplate,
+  listArchivedTasks,
   listTasks,
   listTemplates,
   markDone,
@@ -253,6 +349,9 @@ watch(() => route.path, (newPath) => {
 const tasks = ref([])
 const templates = ref([])
 const selectedKey = ref(null)
+const archived = ref([]) // 历史任务（懒加载）
+const archivedLoaded = ref(false)
+const histLoading = ref(false)
 
 const PRI_CLASS = { high: 'zt-pri-h', medium: 'zt-pri-m', low: 'zt-pri-l' }
 const PRI_LABEL = { high: '高', medium: '中', low: '低' }
@@ -304,44 +403,75 @@ function formatTime(t) {
   return String(t).replace('T', ' ').slice(0, 19)
 }
 
-// ---- 混排数据：任务 + 休眠模板（无活跃实例） ----
+// ---- 三视图数据：单次任务 / 周期任务（模板为中心） / 历史任务 ----
 const periodicTasks = computed(() => tasks.value.filter((t) => t.task_type === 'periodic_instance'))
-const activeTmplIds = computed(() => new Set(periodicTasks.value.map((t) => t.template_id)))
-const dormantTemplates = computed(() =>
-  templates.value.filter((t) => !activeTmplIds.value.has(t.template_id))
-)
+const instanceByTmpl = computed(() => new Map(periodicTasks.value.map((t) => [t.template_id, t])))
+const knownTemplateIds = computed(() => new Set(templates.value.map((t) => t.template_id)))
+/** 孤儿实例：模板已删但实例仍在 */
+const orphanTasks = computed(() => periodicTasks.value.filter((t) => !knownTemplateIds.value.has(t.template_id)))
 
-/** 左栏统一条目：任务 key='t:'+id，模板 key='m:'+template_id（Flip 靠前缀隔离） */
+/** 左栏统一条目：任务 key='t:'+id（孤儿周期实例带 orphan 标），模板 key='m:'+tid（挂当前实例），历史 key='h:'+时间+序号 */
 const leftItems = computed(() => [
-  ...tasks.value.map((t) => ({ ...t, key: `t:${t.id}`, kind: 'task', title: t.title })),
-  ...dormantTemplates.value.map((t) => ({
+  ...tasks.value.map((t) => ({
+    ...t,
+    key: `t:${t.id}`,
+    kind: 'task',
+    title: t.title,
+    orphan: t.task_type === 'periodic_instance' && !knownTemplateIds.value.has(t.template_id),
+  })),
+  ...templates.value.map((t) => ({
     ...t,
     key: `m:${t.template_id}`,
     kind: 'tmpl',
     title: t.base_title,
+    instance: instanceByTmpl.value.get(t.template_id) || null,
+  })),
+  ...archived.value.map((a, i) => ({
+    ...a,
+    key: `h:${a.archived_at}:${i}`,
+    kind: 'hist',
+    title: a.title,
   })),
 ])
 
 const current = computed(() => leftItems.value.find((i) => i.key === selectedKey.value) || null)
 const currentTask = computed(() => (current.value?.kind === 'task' ? current.value : null))
 const currentTmpl = computed(() => (current.value?.kind === 'tmpl' ? current.value : null))
+const currentHist = computed(() => (current.value?.kind === 'hist' ? current.value : null))
+/** 详情面板操作的实例：单次/孤儿任务本身，或模板卡挂载的当前周期实例 */
+const activePanelInstance = computed(() => currentTask.value || currentTmpl.value?.instance || null)
 
-// ---- 构成筛选（全部/一次性/周期）+ 分类筛选：双层 AND，class 隐藏配 Flip ----
-const typeFilter = ref('all')
+// ---- 视图 tab（单次/周期/历史）+ 分类筛选：双层 AND，class 隐藏配 Flip ----
+const viewTab = ref('onetime')
 const filter = ref('all') // 分类
 const listRef = ref(null)
 
-const typeChips = computed(() => [
-  { key: 'all', label: '全部', count: leftItems.value.length },
-  { key: 'onetime', label: '一次性', count: tasks.value.length - periodicTasks.value.length },
-  { key: 'periodic', label: '周期', count: periodicTasks.value.length + dormantTemplates.value.length },
+const STATUS_LABEL = { DONE: '已完成', ABANDONED: '已废弃', ABANDONED_OVERDUE: '逾期废弃' }
+const STATUS_FAMILY = { DONE: 'done', ABANDONED: 'abandoned', ABANDONED_OVERDUE: 'abandoned' }
+const histStatus = ref('all') // 历史状态筛选（客户端过滤）
+
+const tabChips = computed(() => [
+  { key: 'onetime', label: '单次任务', count: tasks.value.length - periodicTasks.value.length },
+  { key: 'periodic', label: '周期任务', count: templates.value.length + orphanTasks.value.length },
+  { key: 'history', label: '历史任务', count: archived.value.length },
 ])
 
+const histStatusChips = [
+  { key: 'all', label: '全部' },
+  { key: 'done', label: '已完成' },
+  { key: 'abandoned', label: '已废弃' },
+]
+
+function histStatusCount(k) {
+  if (k === 'all') return archived.value.length
+  return archived.value.filter((a) => STATUS_FAMILY[a.status] === k).length
+}
+
 function matchesType(item) {
-  // 全部 = 任务实例 + 休眠模板：完成实例后模板原地转休眠，任何视图下周期任务不断档
-  if (typeFilter.value === 'all') return true
-  if (typeFilter.value === 'onetime') return item.kind === 'task' && item.task_type !== 'periodic_instance'
-  return item.kind === 'tmpl' || item.task_type === 'periodic_instance'
+  // 单次 = 一次性任务；周期 = 模板（含当前实例）+ 孤儿实例；历史 = 归档条目
+  if (viewTab.value === 'onetime') return item.kind === 'task' && item.task_type !== 'periodic_instance'
+  if (viewTab.value === 'periodic') return item.kind === 'tmpl' || item.orphan
+  return item.kind === 'hist' && (histStatus.value === 'all' || STATUS_FAMILY[item.status] === histStatus.value)
 }
 
 function matches(item) {
@@ -362,12 +492,37 @@ const categoryChips = computed(() => {
   return chips.slice(0, 6)
 })
 
-function setType(k) {
-  if (typeFilter.value === k) return
+function setTab(k) {
+  if (viewTab.value === k) return
   runFlip(() => {
-    typeFilter.value = k
+    viewTab.value = k
+  })
+  if (k === 'history' && !archivedLoaded.value) loadArchived()
+  ensureSelectionVisible()
+}
+
+function setHistStatus(k) {
+  if (histStatus.value === k) return
+  runFlip(() => {
+    histStatus.value = k
   })
   ensureSelectionVisible()
+}
+
+/** 历史任务懒加载：状态筛选客户端做（与分类 chips 同机制，Flip 连续） */
+async function loadArchived() {
+  histLoading.value = true
+  try {
+    archived.value = await listArchivedTasks({ days: 90 })
+    archivedLoaded.value = true
+    if (viewTab.value === 'history' && !selectedKey.value) {
+      selectedKey.value = leftItems.value.find(matches)?.key || null
+    }
+  } catch (e) {
+    Message.error(e?.message || '历史加载失败')
+  } finally {
+    histLoading.value = false
+  }
 }
 
 function setFilter(k) {
@@ -422,12 +577,21 @@ async function reload() {
       templates.value = freshTemplates
     })
     if (!selectedKey.value) {
-      // 外部入口（提醒等）经 ?select= 直达选中
+      // 外部入口（提醒等）经 ?select= 直达选中：周期实例跳到其模板卡
       const want = route.query.select
       if (want && freshTasks.some((t) => t.id === want)) {
-        selectedKey.value = `t:${want}`
+        const t = freshTasks.find((x) => x.id === want)
+        if (t.task_type === 'periodic_instance') {
+          viewTab.value = 'periodic'
+          selectedKey.value = freshTemplates.some((x) => x.template_id === t.template_id)
+            ? `m:${t.template_id}`
+            : `t:${t.id}`
+        } else {
+          viewTab.value = 'onetime'
+          selectedKey.value = `t:${t.id}`
+        }
       } else {
-        selectedKey.value = leftItems.value[0]?.key || null
+        selectedKey.value = leftItems.value.find(matches)?.key || null
       }
     }
   } catch (e) {
@@ -438,13 +602,17 @@ async function reload() {
 }
 
 // ---- 头部 ----
-const mainBtnLabel = computed(() => (typeFilter.value === 'periodic' ? '新建周期任务' : '新建'))
+const mainBtnLabel = computed(() => (viewTab.value === 'periodic' ? '新建周期任务' : '新建'))
 
 function goNew() {
   const query = { from: 'list' }
-  if (typeFilter.value === 'periodic') query.mode = 'periodic'
+  if (viewTab.value === 'periodic') query.mode = 'periodic'
   router.push({ path: '/tasks/new', query })
 }
+
+const emptyText = computed(() =>
+  viewTab.value === 'onetime' ? '暂无单次任务' : viewTab.value === 'periodic' ? '暂无周期任务' : '暂无历史记录'
+)
 
 // ---- 内联进度 ----
 const percent = ref(0)
@@ -452,13 +620,13 @@ const note = ref('')
 const progressSaving = ref(false)
 const pctRef = ref(null)
 
-watch(current, (c) => {
-  percent.value = c?.kind === 'task' ? snap10(c.progress || 0) : 0
+watch(current, () => {
+  percent.value = snap10(activePanelInstance.value?.progress || 0)
   note.value = ''
 })
 
 const recentLogs = computed(() =>
-  currentTask.value ? [...(currentTask.value.progress_logs || [])].slice(-3).reverse() : []
+  activePanelInstance.value ? [...(activePanelInstance.value.progress_logs || [])].slice(-3).reverse() : []
 )
 
 /** 100% 达成庆祝：百分比数字弹性绽放（spec §3.5 关键时刻，单元素编排放行） */
@@ -470,7 +638,7 @@ function celebrateProgress() {
 }
 
 async function onProgressSave() {
-  const t = currentTask.value
+  const t = activePanelInstance.value
   if (!t) return
   progressSaving.value = true
   try {
@@ -487,17 +655,19 @@ async function onProgressSave() {
   }
 }
 
-// ---- 实例操作 ----
+// ---- 实例操作（单次/孤儿任务 或 模板的当前实例） ----
 async function onSelect() {
-  if (!currentTask.value) return
-  await selectTask(currentTask.value.id)
+  const t = activePanelInstance.value
+  if (!t) return
+  await selectTask(t.id)
   Message.success('已切换')
-  closeHost({ action: 'select', id: currentTask.value.id })
+  closeHost({ action: 'select', id: t.id })
 }
 
 function goEdit() {
-  if (!currentTask.value) return
-  router.push({ path: `/tasks/${currentTask.value.id}/edit`, query: { from: 'list' } })
+  const t = activePanelInstance.value
+  if (!t) return
+  router.push({ path: `/tasks/${t.id}/edit`, query: { from: 'list' } })
 }
 
 function goTemplateEdit() {
@@ -534,24 +704,37 @@ function finishAndRefresh(taskId) {
 }
 
 async function onDone() {
-  if (!currentTask.value) return
-  await markDone(currentTask.value.id)
+  const t = activePanelInstance.value
+  if (!t) return
+  await markDone(t.id)
   Message.success('已完成')
-  finishAndRefresh(currentTask.value.id)
+  if (currentTmpl.value) reload() // 模板卡不离场：选中停在模板卡，实例区随刷新消失
+  else finishAndRefresh(t.id)
 }
 
 function onAbandon() {
-  if (!currentTask.value) return
+  const t = activePanelInstance.value
+  if (!t) return
   Modal.confirm({
     draggable: true,
     title: '确认废弃',
-    content: `确定废弃「${currentTask.value.title}」？`,
+    content: `确定废弃「${t.title}」？`,
     onOk: async () => {
-      await abandonTask(currentTask.value.id)
+      await abandonTask(t.id)
       Message.success('已废弃')
-      finishAndRefresh(currentTask.value.id)
+      if (currentTmpl.value) reload()
+      else finishAndRefresh(t.id)
     },
   })
+}
+
+/** 模板卡行内完成当前周期实例：卡片常驻，不触发离场动画 */
+async function onInstanceDone(inst) {
+  if (!inst) return
+  await markDone(inst.id)
+  Message.success('已完成')
+  selectedKey.value = `m:${inst.template_id}`
+  reload()
 }
 
 // ---- 模板操作 ----
@@ -668,6 +851,17 @@ onMounted(reload)
   display: block;
   height: 100%;
   border-radius: 999px;
+}
+.zt-inst-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+.zt-inst-panel {
+  margin-top: 14px;
+  border-top: 1px solid var(--color-border-2);
+  padding-top: 10px;
 }
 .filter-row {
   display: flex;

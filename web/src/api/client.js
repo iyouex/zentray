@@ -80,6 +80,12 @@ export async function listTemplates() {
   return data.items || []
 }
 
+/** 历史任务：归档的已完成/废弃任务（时间倒序） */
+export async function listArchivedTasks({ status = 'all', category = '', days = 90 } = {}) {
+  const { data } = await http.get('/api/tasks/archived', { params: { status, category, days } })
+  return data.items || []
+}
+
 export async function getTemplate(id) {
   const { data } = await http.get(`/api/templates/${id}`)
   return data.item
