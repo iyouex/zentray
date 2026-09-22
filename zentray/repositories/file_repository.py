@@ -1,5 +1,6 @@
 # zentray/repositories/file_repository.py
 import datetime
+import re
 from pathlib import Path
 from typing import List, Optional
 
@@ -7,6 +8,41 @@ from zentray.config import ACTIVE_TASKS_FILE, ARCHIVE_DIR
 from zentray.core.file_io import append_text_line, load_json_list, path_lock, save_json_list
 from zentray.core.models import Task
 from zentray.core.repository import TaskRepository
+
+# archive() 写出行的读侧镜像：[时间] [状态: X] [分类: Y] [PRI] title - details (附件数: n)
+_ARCHIVE_LINE_RE = re.compile(
+    r"^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\] \[状态: (\w+)\] "
+    r"\[分类: ([^\]]*)\] \[(HIGH|MEDIUM|LOW)\] (.*)$"
+)
+_ATTACH_RE = re.compile(r" \(附件数: (\d+)\)$")
+
+
+def parse_archive_line(line: str) -> Optional[dict]:
+    """尽力解析一行归档文本；格式不符返回 None（调用方跳过）。"""
+    m = _ARCHIVE_LINE_RE.match(line.strip())
+    if not m:
+        return None
+    ts, status, category, pri, tail = m.groups()
+    n = 0
+    am = _ATTACH_RE.search(tail)
+    if am:
+        n = int(am.group(1))
+        tail = _ATTACH_RE.sub("", tail)
+    if tail.endswith(" - "):  # details 为空时写入方产出 "title - "
+        title, details = tail[:-3], ""
+    elif " - " in tail:
+        title, _, details = tail.rpartition(" - ")  # title 含 " - " 时贪心归 title
+    else:
+        title, details = tail, ""
+    return {
+        "archived_at": ts,
+        "status": status,
+        "category": category,
+        "priority": pri.lower(),
+        "title": title,
+        "details": details,
+        "attachment_count": n,
+    }
 
 
 class FileTaskRepository(TaskRepository):
@@ -71,3 +107,36 @@ class FileTaskRepository(TaskRepository):
             f"(附件数: {len(task.attachments)})\n"
         )
         append_text_line(archive_file, log_line)
+
+    def list_archived(
+        self, status: Optional[str] = None, category: Optional[str] = None, days: int = 90
+    ) -> List[dict]:
+        """解析 archive/*.log 返回归档任务（时间倒序）。status: done|abandoned。"""
+        cutoff = datetime.date.today() - datetime.timedelta(days=max(1, int(days or 90)))
+        try:
+            files = sorted(self.archive_dir.glob("*.log"), reverse=True)
+        except OSError:
+            return []
+        out: List[dict] = []
+        for f in files:
+            try:
+                if datetime.date.fromisoformat(f.stem) < cutoff:
+                    continue
+            except ValueError:
+                continue  # 非 YYYY-MM-DD 命名跳过
+            try:
+                lines = f.read_text(encoding="utf-8").splitlines()
+            except OSError:
+                continue
+            for line in reversed(lines):
+                item = parse_archive_line(line)
+                if not item:
+                    continue
+                if status == "done" and item["status"] != "DONE":
+                    continue
+                if status == "abandoned" and item["status"] not in ("ABANDONED", "ABANDONED_OVERDUE"):
+                    continue
+                if category and item["category"] != category:
+                    continue
+                out.append(item)
+        return out

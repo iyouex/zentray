@@ -39,6 +39,12 @@ class TaskService:
         """获取所有任务"""
         return self.task_repo.find_all()
 
+    def list_archived(
+        self, status: Optional[str] = None, category: Optional[str] = None, days: int = 90
+    ) -> List[dict]:
+        """归档任务列表（历史视图）：完成/废弃记录，时间倒序。"""
+        return self.task_repo.list_archived(status=status, category=category, days=days)
+
     def get_current_task(self) -> Optional[Task]:
         """获取当前轮播焦点任务（始终为仓库中的原始任务，不含展示前缀）"""
         return self.scheduler.get_current()

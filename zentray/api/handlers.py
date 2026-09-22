@@ -85,6 +85,9 @@ def handle_request(
         if method == "GET" and path == "/api/tasks":
             return 200, {"items": [_task_dict(t) for t in _ctx.task_service.get_all_tasks()]}
 
+        if method == "GET" and path == "/api/tasks/archived":
+            return _archived_list(query)
+
         if method == "GET" and path.startswith("/api/tasks/"):
             tid = path[len("/api/tasks/") :]
             if "/" in tid:
@@ -327,6 +330,22 @@ def _save_settings(data: dict) -> None:
         apply_app_theme()
     except Exception:
         pass
+
+
+def _archived_list(query: dict) -> tuple[int, dict]:
+    """归档任务列表（历史视图）：解析 archive/*.log，支持状态/分类/天数筛选。"""
+    try:
+        days = int(query.get("days") or 90)
+    except (TypeError, ValueError):
+        days = 90
+    status = (query.get("status") or "all").strip() or "all"
+    category = (query.get("category") or "").strip()
+    items = _ctx.task_service.list_archived(
+        status=None if status == "all" else status,
+        category=category or None,
+        days=days,
+    )
+    return 200, {"items": items}
 
 
 def _history_list(query: dict) -> tuple[int, dict]:
