@@ -4,7 +4,7 @@ Section: utils
 Priority: optional
 Architecture: amd64
 Maintainer: Zen-Geek <zentray@local>
-Depends: libgl1 | libgl1-mesa-glx, libxkbcommon0, libdbus-1-3, libglib2.0-0, libxcb-cursor0
+Depends: libgl1 | libgl1-mesa-glx, libxkbcommon0, libdbus-1-3, libglib2.0-0, libxcb-cursor0, python3
 Recommends: gir1.2-ayatanaappindicator3-0.1 | gir1.2-appindicator3-0.1, python3-gi
 Description: ZenTray — 个人任务管理与专注效率工具
  跨平台系统托盘 GTD + 番茄钟 + 可选 AI 复盘。
