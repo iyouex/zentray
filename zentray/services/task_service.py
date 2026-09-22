@@ -175,6 +175,28 @@ class TaskService:
         self.template_repo.save_all(templates)
         return len(templates) < before
 
+    def skip_template(
+        self, template_id: str, count: int
+    ) -> Optional[PeriodicTemplate]:
+        """跳过接下来 count 个未派发周期（推进水位，不产生实例）。"""
+        tmpl = self.find_template(template_id)
+        if not tmpl:
+            return None
+        from zentray.core.periodic import skip_watermark_key
+
+        # 原地改水位（不走 _template_from_data，避免白名单重建丢字段），不触发派发
+        tmpl.last_generated_period = skip_watermark_key(
+            tmpl, datetime.date.today(), max(1, int(count))
+        )
+        templates = self.template_repo.find_all()
+        for i, t in enumerate(templates):
+            if t.template_id == template_id:
+                templates[i] = tmpl
+                break
+        self.template_repo.save_all(templates)
+        self._refresh_scheduler()
+        return tmpl
+
     def find_template(self, template_id: str) -> Optional[PeriodicTemplate]:
         for t in self.template_repo.find_all():
             if t.template_id == template_id:
@@ -365,41 +387,14 @@ class TaskService:
 
     def _spawn_template_instance_if_needed(self, tmpl: PeriodicTemplate) -> None:
         """若当前周期尚未派发，则创建实例任务。"""
-        from zentray.core.periodic import (
-            compute_instance_deadline,
-            period_display_prefix,
-            should_spawn,
-            spawn_key_after_create,
-        )
+        from zentray.core.periodic import build_due_instance
 
-        today = datetime.date.today()
-        if not should_spawn(tmpl, today):
+        new_task = build_due_instance(tmpl, datetime.date.today())
+        if new_task is None:
             return
-
-        prefix = period_display_prefix(
-            tmpl.periodicity, today, getattr(tmpl, "interval", 1) or 1
-        )
-        deadline = compute_instance_deadline(tmpl, today)
-        new_task = Task(
-            id=str(uuid.uuid4()),
-            title=f"【{prefix}】{tmpl.base_title}",
-            category=tmpl.category,
-            details=tmpl.details,
-            priority=tmpl.priority,
-            deadline=deadline or "",
-            task_type="periodic_instance",
-            template_id=tmpl.template_id,
-            category_primary_id=getattr(tmpl, "category_primary_id", None),
-            category_secondary_id=getattr(tmpl, "category_secondary_id", None),
-            reminder=getattr(tmpl, "reminder", None),
-            auto_abandon_on_overdue=bool(
-                getattr(tmpl, "auto_abandon_on_overdue", False)
-            ),
-        )
         tasks = self.task_repo.find_all()
         tasks.append(new_task)
         self.task_repo.save_all(tasks)
-        tmpl.last_generated_period = spawn_key_after_create(tmpl, today)
 
     def _template_from_data(self, data: dict) -> PeriodicTemplate:
         from zentray.core.reminder import TaskReminder
@@ -432,6 +427,7 @@ class TaskService:
             auto_abandon_on_overdue=bool(data.get("auto_abandon_on_overdue", False)),
             long_term=long_term,
             schedule_end_date=(data.get("schedule_end_date") or None) or None,
+            paused=bool(data.get("paused", False)),
             template_id=data.get("template_id") or str(uuid.uuid4()),
             last_generated_period=data.get("last_generated_period"),
         )

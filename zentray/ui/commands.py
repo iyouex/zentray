@@ -64,15 +64,6 @@ class AbandonCommand(ActionCommand):
             controller.update_display()
 
 
-class ProgressCommand(ActionCommand):
-    """更新进度（当前轮播任务）"""
-
-    def execute(self, controller: "TrayController") -> None:
-        task = controller.task_service.get_current_task()
-        if task:
-            _run_progress_dialog(controller, task)
-
-
 class TaskListCommand(ActionCommand):
     """打开任务列表面板（左列表 + 右操作）"""
 
@@ -98,10 +89,7 @@ class TaskListCommand(ActionCommand):
 
 
 def _run_progress_dialog(controller: "TrayController", task) -> None:
-    from zentray.ui.vue_commands import try_vue_progress
-
-    if try_vue_progress(controller, task):
-        return
+    """Qt 回退：进度对话框（Vue 路径的进度更新已并入任务列表右栏）。"""
     from zentray.ui.dialogs import ProgressDialog
 
     dialog = ProgressDialog(task=task)
@@ -208,21 +196,6 @@ class HistoryCommand(ActionCommand):
             )
 
 
-class PeriodicManageCommand(ActionCommand):
-    """周期任务管理"""
-
-    def execute(self, controller: "TrayController") -> None:
-        from zentray.ui.vue_commands import try_vue_periodic
-
-        if try_vue_periodic(controller):
-            return
-        from zentray.ui.periodic_manager import PeriodicManagerDialog
-
-        dialog = PeriodicManagerDialog(controller.task_service)
-        run_modal_loop(dialog)
-        controller.reload_data()
-
-
 class AiReviewNowCommand(ActionCommand):
     """立即执行 AI 复盘（不受「每天一次 / 周末节假日跳过」限制）。"""
 
@@ -265,29 +238,6 @@ class AiReviewNowCommand(ActionCommand):
 # 任务列表命令
 # ==========================================
 
-class TaskActionCommand(ActionCommand):
-    """任务列表中的操作（弹出操作对话框）"""
-
-    def __init__(self, task_id: str):
-        self.task_id = task_id
-
-    def execute(self, controller: "TrayController") -> None:
-        task = controller.task_service.find_task(self.task_id)
-        if not task:
-            return
-        from zentray.ui.vue_commands import try_vue_task_action
-
-        if try_vue_task_action(controller, task):
-            return
-        from zentray.ui.dialogs import TaskActionDialog
-
-        dialog = TaskActionDialog(task=task)
-        if run_modal_loop(dialog):
-            action = dialog.get_selected_action()
-            if action:
-                _dispatch_task_action(action, task, controller)
-
-
 class SelectTaskCommand(ActionCommand):
     """切换到指定任务"""
 
@@ -316,33 +266,12 @@ class ExtensionCommand(ActionCommand):
                 break
 
 
-class CurrentTaskCommand(ActionCommand):
-    """当前任务：打开当前轮播任务的操作页/对话框"""
-
-    def execute(self, controller: "TrayController") -> None:
-        task = controller.task_service.get_current_task()
-        if not task:
-            return
-        from zentray.ui.vue_commands import try_vue_task_action
-
-        if try_vue_task_action(controller, task):
-            return
-        from zentray.ui.dialogs import TaskActionDialog
-
-        dialog = TaskActionDialog(task=task)
-        if run_modal_loop(dialog):
-            action = dialog.get_selected_action()
-            if action:
-                _dispatch_task_action(action, task, controller)
-
-
 # ==========================================
 # 命令注册与路由
 # ==========================================
 
 # 静态命令映射
 COMMAND_MAP = {
-    "current_task": CurrentTaskCommand(),
     "done": DoneCommand(),
     "abandon": AbandonCommand(),
     "task_list": TaskListCommand(),
@@ -369,11 +298,6 @@ def dispatch(action_id: str, controller: "TrayController") -> bool:
         return True
 
     # 2. 解析带参数的动态命令
-    if action_id.startswith("task_action_"):
-        task_id = action_id[len("task_action_"):]
-        TaskActionCommand(task_id).execute(controller)
-        return True
-
     if action_id.startswith("select_task_"):
         task_id = action_id[len("select_task_"):]
         SelectTaskCommand(task_id).execute(controller)

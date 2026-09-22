@@ -38,25 +38,12 @@ def try_vue_edit_task(controller: "TrayController", task) -> bool:
     return True
 
 
-def try_vue_progress(controller: "TrayController", task) -> bool:
-    if not use_vue_ui() or not task:
-        return False
-    ok, payload = open_vue_route(
-        f"/tasks/{task.id}/progress",
-        title="更新进度",
-        width=440,
-        height=320,
-    )
-    if ok:
-        controller.update_display()
-        logger.debug("progress vue result: %s", payload)
-    return True
-
-
-def try_vue_task_list(controller: "TrayController") -> bool:
+def try_vue_task_list(controller: "TrayController", select_id: str = None) -> bool:
+    """任务列表（任务中枢）。select_id 用于外部入口（如提醒）直达选中某任务。"""
     if not use_vue_ui():
         return False
-    ok, _ = open_vue_route("/tasks", title="任务列表", width=900, height=540)
+    query = {"select": select_id} if select_id else None
+    ok, _ = open_vue_route("/tasks", title="任务列表", width=960, height=600, query=query)
     if ok:
         controller.update_display()
     return True
@@ -76,34 +63,6 @@ def try_vue_history(controller: "TrayController") -> bool:
     if not use_vue_ui():
         return False
     open_vue_route("/history", title="历史记录", width=980, height=660)
-    return True
-
-
-def try_vue_periodic(controller: "TrayController") -> bool:
-    if not use_vue_ui():
-        return False
-    open_vue_route("/periodic", title="周期任务", width=900, height=500)
-    controller.reload_data()
-    return True
-
-
-def try_vue_task_action(controller: "TrayController", task) -> bool:
-    if not use_vue_ui() or not task:
-        return False
-    ok, payload = open_vue_route(
-        f"/tasks/{task.id}/action",
-        title="选择操作",
-        width=560,
-        height=260,
-    )
-    if not ok or not isinstance(payload, dict):
-        return True
-    action = payload.get("action")
-    if not action or action == "cancelled":
-        return True
-    from zentray.ui.commands import _dispatch_task_action
-
-    _dispatch_task_action(action, task, controller)
     return True
 
 
