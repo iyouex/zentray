@@ -43,7 +43,7 @@ def try_vue_task_list(controller: "TrayController", select_id: str = None) -> bo
     if not use_vue_ui():
         return False
     query = {"select": select_id} if select_id else None
-    ok, _ = open_vue_route("/tasks", title="任务列表", width=900, height=540, query=query)
+    ok, _ = open_vue_route("/tasks", title="任务列表", width=960, height=600, query=query)
     if ok:
         controller.update_display()
     return True

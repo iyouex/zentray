@@ -99,6 +99,12 @@ export async function deleteTemplate(id) {
   await http.delete(`/api/templates/${id}`)
 }
 
+/** 周期模板：跳过接下来 count 次派发 */
+export async function skipTemplate(id, count = 1) {
+  const { data } = await http.post(`/api/templates/${id}/skip`, { count })
+  return data.item
+}
+
 export async function getSettings() {
   const { data } = await http.get('/api/settings')
   return data.settings
