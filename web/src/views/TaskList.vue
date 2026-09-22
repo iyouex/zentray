@@ -308,7 +308,7 @@ function formatTime(t) {
 const periodicTasks = computed(() => tasks.value.filter((t) => t.task_type === 'periodic_instance'))
 const activeTmplIds = computed(() => new Set(periodicTasks.value.map((t) => t.template_id)))
 const dormantTemplates = computed(() =>
-  templates.value.filter((t) => !activeTmplIds.has(t.template_id))
+  templates.value.filter((t) => !activeTmplIds.value.has(t.template_id))
 )
 
 /** 左栏统一条目：任务 key='t:'+id，模板 key='m:'+template_id（Flip 靠前缀隔离） */
