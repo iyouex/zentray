@@ -22,7 +22,14 @@ def _task_dict(task) -> dict:
 def _template_dict(tmpl) -> dict:
     if tmpl is None:
         return {}
-    return tmpl.to_dict() if hasattr(tmpl, "to_dict") else asdict(tmpl)
+    d = tmpl.to_dict() if hasattr(tmpl, "to_dict") else asdict(tmpl)
+    import datetime as _dt
+
+    from zentray.core.periodic import next_spawn_date
+
+    ns = next_spawn_date(tmpl, _dt.date.today())
+    d["next_spawn_date"] = ns.isoformat() if ns else None
+    return d
 
 
 class ApiContext:
@@ -163,6 +170,18 @@ def handle_request(
             ok = _ctx.task_service.delete_template(tid)
             _ctx.on_changed()
             return 200, {"ok": bool(ok)}
+
+        if method == "POST" and path.startswith("/api/templates/") and path.endswith("/skip"):
+            tid = path[len("/api/templates/") : -len("/skip")]
+            try:
+                count = int(body.get("count", 1))
+            except (TypeError, ValueError):
+                count = 1
+            tmpl = _ctx.task_service.skip_template(tid, max(1, min(52, count)))
+            if not tmpl:
+                return 404, {"error": "template not found"}
+            _ctx.on_changed()
+            return 200, {"item": _template_dict(tmpl)}
 
         if method == "GET" and path == "/api/settings":
             return 200, {"settings": _settings_dict()}

@@ -1,6 +1,9 @@
 # tests/unit/test_task_service.py
 """TaskService 单元测试（使用临时数据目录）"""
+import datetime
+
 from zentray.core.models import PeriodicTemplate, Task
+from zentray.core.periodic import should_spawn
 
 
 class TestTaskService:
@@ -85,3 +88,45 @@ class TestTaskService:
         assert len(task_service.scheduler._active_queue) + len(
             task_service.scheduler._overdue_queue
         ) >= 2
+
+    # ---- v3.10 暂停 / 跳过 ----
+
+    def test_skip_template_advances_watermark_without_spawning(
+        self, task_service, template_repo, task_repo
+    ):
+        tmpl = task_service.create_task({
+            "title": "日报",
+            "category": "工作",
+            "task_type": "periodic",
+            "periodicity": "daily",
+        })
+        tasks_before = len(task_repo.find_all())  # 创建时已派发今天实例
+
+        got = task_service.skip_template(tmpl.template_id, 2)
+        assert got is not None
+        assert len(task_repo.find_all()) == tasks_before  # 跳过不产生实例
+
+        t2 = template_repo.find_all()[0]
+        today = datetime.date.today()
+        assert not should_spawn(t2, today + datetime.timedelta(days=1))
+        assert not should_spawn(t2, today + datetime.timedelta(days=2))
+        assert should_spawn(t2, today + datetime.timedelta(days=3))
+
+    def test_update_template_preserves_paused(self, task_service, task_repo):
+        tmpl = task_service.create_task({
+            "title": "暂停模板",
+            "category": "工作",
+            "task_type": "periodic",
+            "periodicity": "daily",
+        })
+        task_service.update_template(tmpl.template_id, {"paused": True})
+        t = task_service.find_template(tmpl.template_id)
+        assert t.paused is True
+
+        # 再 PUT 其他字段：白名单重建不得丢 paused，且暂停期不派发
+        tasks_before = len(task_repo.find_all())
+        task_service.update_template(tmpl.template_id, {"priority": "high"})
+        t = task_service.find_template(tmpl.template_id)
+        assert t.paused is True
+        assert t.priority == "high"
+        assert len(task_repo.find_all()) == tasks_before

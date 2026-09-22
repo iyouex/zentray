@@ -92,6 +92,8 @@ class PeriodicTemplate:
     auto_abandon_on_overdue: bool = False
     long_term: bool = True  # True=长期有效；False 时看 schedule_end_date
     schedule_end_date: Optional[str] = None  # YYYY-MM-DD 停止派发日
+    # v3.10 暂停派发（恢复后为当前周期生成一次，不回填历史）
+    paused: bool = False
 
     def __post_init__(self):
         if self.details is None:

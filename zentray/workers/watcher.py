@@ -1,16 +1,9 @@
 import datetime
 import time
-import uuid
 
 from PySide6.QtCore import QThread, Signal
 
-from zentray.core.models import Task
-from zentray.core.periodic import (
-    compute_instance_deadline,
-    period_display_prefix,
-    should_spawn,
-    spawn_key_after_create,
-)
+from zentray.core.periodic import build_due_instance
 from zentray.core.repository import PeriodicTemplateRepository, TaskRepository
 
 
@@ -116,30 +109,10 @@ class WatcherWorker(QThread):
         new_instances = []
 
         for tmpl in templates:
-            if not should_spawn(tmpl, today):
+            new_task = build_due_instance(tmpl, today)
+            if new_task is None:
                 continue
-            prefix = period_display_prefix(
-                tmpl.periodicity, today, getattr(tmpl, "interval", 1) or 1
-            )
-            deadline = compute_instance_deadline(tmpl, today)
-            new_task = Task(
-                id=str(uuid.uuid4()),
-                title=f"【{prefix}】{tmpl.base_title}",
-                category=tmpl.category,
-                details=tmpl.details,
-                priority=tmpl.priority,
-                deadline=deadline or "",
-                task_type="periodic_instance",
-                template_id=tmpl.template_id,
-                category_primary_id=getattr(tmpl, "category_primary_id", None),
-                category_secondary_id=getattr(tmpl, "category_secondary_id", None),
-                reminder=getattr(tmpl, "reminder", None),
-                auto_abandon_on_overdue=bool(
-                    getattr(tmpl, "auto_abandon_on_overdue", False)
-                ),
-            )
             new_instances.append(new_task)
-            tmpl.last_generated_period = spawn_key_after_create(tmpl, today)
             tmpl_changed = True
 
         if new_instances:
