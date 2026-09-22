@@ -1,7 +1,14 @@
 # tests/unit/test_file_periodic_repository.py
 from zentray.repositories.file_periodic_repository import FilePeriodicTemplateRepository
 from zentray.core.models import PeriodicTemplate
+import glob
 import os
+
+
+def _cleanup(repo):
+    """清理主文件及 .bak/.corrupt 残留（.bak 残留会触发 load 自愈）。"""
+    for p in glob.glob(str(repo.filepath) + "*"):
+        os.remove(p)
 
 
 def test_template_save_and_load():
@@ -19,15 +26,13 @@ def test_template_save_and_load():
     assert loaded[0].periodicity == "daily"
 
     # 清理测试文件
-    if repo.filepath.exists():
-        os.remove(repo.filepath)
+    _cleanup(repo)
 
 
 def test_load_empty_when_file_missing():
-    """验证文件不存在时返回空列表"""
+    """验证文件不存在（且无 .bak）时返回空列表"""
     repo = FilePeriodicTemplateRepository()
-    # 确保文件不存在
-    if repo.filepath.exists():
-        os.remove(repo.filepath)
+    _cleanup(repo)
     result = repo.find_all()
     assert result == []
+    _cleanup(repo)
