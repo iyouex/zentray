@@ -219,17 +219,44 @@ class AIJobSettings:
 
 
 @dataclass
+class AIFeatureSettings:
+    """AI 场景能力开关（智能解析/图片识别/任务建议），默认全关。"""
+
+    smart_parse: bool = False
+    image_ocr: bool = False
+    task_suggest: bool = False
+
+    def to_dict(self) -> dict:
+        return {
+            "smart_parse": bool(self.smart_parse),
+            "image_ocr": bool(self.image_ocr),
+            "task_suggest": bool(self.task_suggest),
+        }
+
+    @classmethod
+    def from_dict(cls, data: Optional[dict]) -> "AIFeatureSettings":
+        data = data or {}
+        return cls(
+            smart_parse=bool(data.get("smart_parse", False)),
+            image_ocr=bool(data.get("image_ocr", False)),
+            task_suggest=bool(data.get("task_suggest", False)),
+        )
+
+
+@dataclass
 class AISettings:
     """
     AI 总配置：
       - api_profiles + active_api_id：多 Key，单启用
       - plan / review：每日计划与每日复盘
+      - features：场景化 AI 能力开关（docs/AI-FEATURES.md）
     旧字段 api_key/base_url/model/enabled/styles 在迁移时并入。
     """
 
     api_profiles: List[AIApiProfile] = field(default_factory=list)
     active_api_id: str = ""
     plan: AIJobSettings = field(default_factory=lambda: AIJobSettings.from_dict(None, kind="plan"))
+    features: AIFeatureSettings = field(default_factory=AIFeatureSettings)
     review: AIJobSettings = field(
         default_factory=lambda: AIJobSettings.from_dict(
             {"trigger_hour": 23, "trigger_minute": 30}, kind="review"
@@ -291,6 +318,7 @@ class AISettings:
             "active_api_id": self.active_api_id,
             "plan": self.plan.to_dict(),
             "review": self.review.to_dict(),
+            "features": self.features.to_dict(),
             # 兼容旧客户端
             "enabled": bool(self.plan.enabled or self.review.enabled),
             "api_key": self.api_key,
@@ -550,6 +578,7 @@ class SettingsManager:
             active_api_id=active_api_id,
             plan=plan,
             review=review,
+            features=AIFeatureSettings.from_dict(a.get("features")),
             enabled=bool(plan.enabled or review.enabled),
             api_key=a.get("api_key") or "",
             base_url=a.get("base_url") or "https://api.openai.com/v1",

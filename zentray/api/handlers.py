@@ -219,6 +219,14 @@ def handle_request(
             name = unquote(path[len("/api/history/ai/") :])
             return _history_ai_content(name)
 
+        # —— AI 场景能力：文本解析 / 图片识别 / 任务建议（docs/AI-FEATURES.md）——
+        if method == "POST" and path == "/api/ai/parse":
+            return _ai_parse(body)
+        if method == "POST" and path == "/api/ai/ocr":
+            return _ai_ocr(body)
+        if method == "POST" and path == "/api/ai/suggest":
+            return _ai_suggest(body)
+
         # —— 系统：自启 + 数据迁移 ——
         if method == "GET" and path == "/api/system/status":
             return _system_status()
@@ -292,7 +300,109 @@ def _meta() -> dict:
         "categories": cats,
         "quick_add": asdict(sm.quick_add),
         "pomodoro": asdict(sm.pomodoro),
+        "ai_features": sm.ai.features.to_dict(),
     }
+
+
+def _ai_gate(feature: str) -> tuple[int, dict] | None:
+    """功能开关门控：未开启返回 403 响应，通过返回 None。"""
+    from zentray.services.settings_manager import SettingsManager
+
+    on = bool(getattr(SettingsManager().ai.features, feature, False))
+    if not on:
+        return 403, {"error": "AI 功能未开启，请在 设置 → AI 能力 中开启", "feature": feature}
+    return None
+
+
+def _category_names() -> list:
+    from zentray.services.settings_manager import SettingsManager
+
+    cats = SettingsManager().categories
+    names = []
+    for p in cats.primary_list or []:
+        names.append(p.name)
+        for s in p.secondaries or []:
+            names.append(f"{p.name}{cats.level_separator}{s.name}" if cats.level_separator else f"{p.name}-{s.name}")
+    return names
+
+
+def _ai_parse(body: dict) -> tuple[int, dict]:
+    from zentray.services.ai_assist import AIAssistError, AIAssistService
+
+    denied = _ai_gate("smart_parse")
+    if denied:
+        return denied
+    text = str(body.get("text") or "").strip()
+    if not text:
+        return 400, {"error": "text 必填"}
+    import datetime
+
+    try:
+        draft = AIAssistService.parse_text(
+            text, _category_names(), datetime.date.today().isoformat()
+        )
+        return 200, {"draft": draft}
+    except AIAssistError as e:
+        return 502, {"error": str(e), "feature": e.feature}
+
+
+def _ai_ocr(body: dict) -> tuple[int, dict]:
+    from zentray.services.ai_assist import AIAssistError, AIAssistService
+
+    denied = _ai_gate("image_ocr")
+    if denied:
+        return denied
+    image = str(body.get("image") or "")
+    if not image:
+        return 400, {"error": "image 必填（data:image/*;base64,...）"}
+    import datetime
+
+    try:
+        drafts = AIAssistService.parse_image(
+            image, _category_names(), datetime.date.today().isoformat()
+        )
+        return 200, {"drafts": drafts}
+    except AIAssistError as e:
+        return 502, {"error": str(e), "feature": e.feature}
+
+
+def _ai_suggest(body: dict) -> tuple[int, dict]:
+    from zentray.services.ai_assist import AIAssistError, AIAssistService
+
+    denied = _ai_gate("task_suggest")
+    if denied:
+        return denied
+    ts = _ctx.task_service
+    if not ts:
+        return 500, {"error": "task service unavailable"}
+    import datetime
+
+    focus_id = str(body.get("focus_id") or "")
+    focus_title = ""
+    summary = []
+    for t in ts.get_all_tasks():
+        if getattr(t, "task_type", "one-time") == "periodic_instance":
+            continue  # 周期实例与一次性任务一起看会重复计数，聚焦手动任务
+        subs = t.subtasks or []
+        summary.append(
+            {
+                "title": t.title,
+                "category": t.category or "",
+                "priority": t.priority or "medium",
+                "deadline": t.deadline or "",
+                "subtask_done": sum(1 for s in subs if s.get("status") == "done"),
+                "subtask_total": len(subs),
+            }
+        )
+        if focus_id and t.id == focus_id:
+            focus_title = t.title
+    try:
+        suggestions = AIAssistService.suggest(
+            summary, datetime.date.today().isoformat(), focus_title
+        )
+        return 200, {"suggestions": suggestions}
+    except AIAssistError as e:
+        return 502, {"error": str(e), "feature": e.feature}
 
 
 def _settings_dict() -> dict:
