@@ -159,46 +159,6 @@ body,
   gap: 16px;
 }
 
-/* 任务列表页：固定高度双卡、卡内滚动（chips 留顶部） */
-.page-body--cols {
-  display: flex;
-  overflow: hidden;
-}
-.page-body--cols .two-col {
-  flex: 1;
-  min-height: 0;
-  grid-template-rows: minmax(0, 1fr);
-}
-.page-body--cols .arco-card {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-.page-body--cols .arco-card .arco-card-body {
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-.page-body--cols .col-scroll {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-}
-/* 周期实例小徽标 */
-.zt-tag-periodic {
-  font-size: 10px;
-  padding: 1px 6px;
-  border-radius: var(--zt-radius-pill);
-  border: 1px solid var(--color-border);
-  color: var(--color-text-muted);
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-}
-
 @media (max-width: 720px) {
   .two-col {
     grid-template-columns: 1fr;

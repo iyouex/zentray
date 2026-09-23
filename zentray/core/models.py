@@ -18,6 +18,8 @@ class Task:
     task_type: str = "one-time"  # one-time, periodic_instance
     template_id: Optional[str] = None
     overdue_penalty_date: Optional[str] = None
+    progress: int = 0  # 0 to 100
+    progress_logs: List[dict] = field(default_factory=list)
     created_at: str = field(
         default_factory=lambda: datetime.datetime.now().isoformat()
     )
@@ -28,8 +30,6 @@ class Task:
     reminder: Optional[TaskReminder] = None
     # v3.9 逾期自动废弃（常从周期模板继承）
     auto_abandon_on_overdue: bool = False
-    # 子任务清单（取代进度条）：[{id, title, status: active|done|abandoned}]
-    subtasks: List[dict] = field(default_factory=list)
 
     def __post_init__(self):
         if self.attachments is None:
@@ -42,8 +42,10 @@ class Task:
             self.title = "Untitled"
         if not self.category:
             self.category = "工作"
-        if self.subtasks is None:
-            self.subtasks = []
+        if getattr(self, "progress", None) is None:
+            self.progress = 0
+        if getattr(self, "progress_logs", None) is None:
+            self.progress_logs = []
         if isinstance(self.reminder, dict):
             self.reminder = TaskReminder.from_dict(self.reminder)
 
@@ -92,8 +94,6 @@ class PeriodicTemplate:
     schedule_end_date: Optional[str] = None  # YYYY-MM-DD 停止派发日
     # v3.10 暂停派发（恢复后为当前周期生成一次，不回填历史）
     paused: bool = False
-    # 预设子任务：每次派发实例时复制（新 id、status=active）
-    subtasks: List[dict] = field(default_factory=list)
 
     def __post_init__(self):
         if self.details is None:
@@ -104,8 +104,6 @@ class PeriodicTemplate:
             self.base_title = "Untitled"
         if not self.category:
             self.category = "工作"
-        if self.subtasks is None:
-            self.subtasks = []
         if isinstance(self.reminder, dict):
             self.reminder = TaskReminder.from_dict(self.reminder)
         try:

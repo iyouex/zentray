@@ -187,14 +187,7 @@ class TrayController(QObject):
         else:
             task = self.task_service.get_current_task()
             if task:
-                # 扇形填充 = 子任务完成比例（10% 步进；无子任务空饼）
-                subs = getattr(task, "subtasks", None) or []
-                pct = (
-                    int(round(sum(1 for s in subs if s.get("status") == "done") * 10.0 / len(subs))) * 10
-                    if subs
-                    else 0
-                )
-                icon = tray_pie_icon_name(task.priority, pct)
+                icon = tray_pie_icon_name(task.priority, getattr(task, "progress", 0))
                 text = self.task_service.get_task_display_title(task)
                 if not text:
                     text = task.title or "ZenTray"
