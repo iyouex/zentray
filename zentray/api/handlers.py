@@ -202,9 +202,6 @@ def handle_request(
             t = _ctx.task_service.get_current_task()
             return 200, {"item": _task_dict(t) if t else None}
 
-        if method == "GET" and path == "/api/theme":
-            return 200, _theme_payload()
-
         if method == "POST" and path == "/api/setup/complete":
             _complete_setup(body or {})
             return 200, {"ok": True}
@@ -439,17 +436,6 @@ def _add_secondary_category(body: dict) -> tuple[int, dict]:
     return 200, {
         "secondary": sec.to_dict(),
         "categories": sm.categories.to_dict(),
-    }
-
-
-def _theme_payload() -> dict:
-    from zentray.services.settings_manager import SettingsManager
-    from zentray.ui.theme import resolve_effective_theme
-
-    mode = SettingsManager().appearance.theme
-    return {
-        "mode": mode,
-        "effective": resolve_effective_theme(mode),
     }
 
 

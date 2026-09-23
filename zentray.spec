@@ -131,7 +131,6 @@ a = Analysis(
         'zentray.repositories.file_periodic_repository',
         'zentray.services.task_service',
         'zentray.services.pomodoro_service',
-        'zentray.services.script_service',
         'zentray.services.notification',
         'zentray.services.ai_review',
         'zentray.ui.controller',
@@ -143,14 +142,11 @@ a = Analysis(
         'zentray.ui.tray',
         'zentray.ui.dialogs',
         'zentray.ui.overlay',
-        'zentray.ui.extensions.interface',
-        'zentray.ui.extensions.loader',
         'zentray.api.server',
         'zentray.api.handlers',
         'zentray.workers.watcher',
         'zentray.workers.nightly_job',
         # DI 容器
-        'zentray.di',
         'zentray.dependencies',
         # pynput 平台特定后端
         'pynput.keyboard._xorg',

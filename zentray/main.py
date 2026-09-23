@@ -325,7 +325,7 @@ def main():
     runtime.hotkey = HotkeyListener(HOTKEY_QUICK_ADD)
     runtime.hotkey.triggered.connect(runtime.on_quick_add)
     if not runtime.hotkey.start():
-        logger.warning("全局热键不可用（权限/Wayland？），仍可通过托盘菜单新建任务")
+        logger.warning("全局热键不可用（权限/Wayland？），仍可通过任务列表新建任务")
 
     task_repo = injector.get(TaskRepository)
     template_repo = injector.get(PeriodicTemplateRepository)

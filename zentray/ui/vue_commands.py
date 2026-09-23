@@ -15,15 +15,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def try_vue_new_task(controller: "TrayController") -> bool:
-    if not use_vue_ui():
-        return False
-    ok, _ = open_vue_route("/tasks/new", title="新建任务", width=880, height=540)
-    if ok:
-        controller.update_display()
-    return True
-
-
 def try_vue_edit_task(controller: "TrayController", task) -> bool:
     if not use_vue_ui() or not task:
         return False

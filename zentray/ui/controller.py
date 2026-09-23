@@ -16,11 +16,9 @@ from PySide6.QtWidgets import QApplication
 
 from zentray.services.task_service import TaskService
 from zentray.services.pomodoro_service import PomodoroService
-from zentray.services.script_service import ScriptService
 from zentray.services.settings_manager import SettingsManager
 from zentray.ui.renderer import TrayRenderer
 from zentray.ui.menu_builder import MenuBuilder
-from zentray.ui.extensions.loader import ExtensionLoader
 
 logger = logging.getLogger(__name__)
 
@@ -33,22 +31,17 @@ class TrayController(QObject):
         app: QApplication,
         task_service: TaskService,
         pomodoro_service: PomodoroService,
-        script_service: ScriptService,
         renderer: TrayRenderer,
         menu_builder: MenuBuilder,
-        extension_loader: ExtensionLoader,
     ):
         super().__init__()
         self.app = app
         self.task_service = task_service
         self.pomodoro_service = pomodoro_service
-        self.script_service = script_service
         self.renderer = renderer
         self.menu_builder = menu_builder
-        self.extension_loader = extension_loader
 
         self._settings = SettingsManager()
-        self.extensions = self.extension_loader.load_all()
         self._poll_count = 0
         self._last_label = None  # None = 尚未推送过
         self._last_icon = None
@@ -58,8 +51,6 @@ class TrayController(QObject):
         self.renderer.backend.action_received.connect(self.handle_action)
         self.pomodoro_service.time_updated.connect(self._on_pomodoro_tick)
         self.pomodoro_service.pomodoro_finished.connect(self._on_pomodoro_end)
-        self.script_service.log_updated.connect(self._on_script_log)
-        self.script_service.script_finished.connect(self._on_script_finished)
 
         # 可靠轮播：重复定时器（挂到 self，避免被 GC）
         self.poll_timer = QTimer(self)
@@ -222,11 +213,8 @@ class TrayController(QObject):
             self._refresh_menu()
 
     def _refresh_menu(self) -> None:
-        task = self.task_service.get_current_task()
         items = self.menu_builder.build_main_menu(
-            task_exists=task is not None,
             is_pomodoro=self.pomodoro_service.is_active,
-            extensions=self.extensions,
         )
         if self.menu_builder.should_update(items):
             self.renderer.update_menu(items)
@@ -253,14 +241,6 @@ class TrayController(QObject):
         self._carousel_started = True
         self.update_display(update_menu=True)
         self.start_rotation()
-
-    def _on_script_log(self, log: str) -> None:
-        if self._carousel_started:
-            self.renderer.set_text(log[:50])
-
-    def _on_script_finished(self, name: str, success: bool) -> None:
-        status = "执行成功" if success else "执行失败"
-        self.renderer.show_notification(f"脚本: {name}", status)
 
     def _on_about_to_quit(self) -> None:
         try:

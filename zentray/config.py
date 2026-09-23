@@ -69,10 +69,8 @@ AI_API_BASE_URL = os.getenv("AI_API_BASE_URL", "https://api.openai.com/v1")
 AI_API_KEY = os.getenv("AI_API_KEY")
 AI_MODEL_NAME = os.getenv("AI_MODEL_NAME", "gpt-4o")
 
-STORAGE_BACKEND = os.getenv("STORAGE_BACKEND", "file")
-
 POMODORO_MINUTES = 25
-HOTKEY_QUICK_ADD = "<cmd>+<alt>+t" if sys.platform == "darwin" else "<ctrl>+<alt>+t"
+HOTKEY_QUICK_ADD = "<ctrl>+<alt>+t"
 
 os.makedirs(ARCHIVE_DIR, exist_ok=True)
 
@@ -100,7 +98,6 @@ def get_enabled_features() -> dict:
         "core": True,
         "notification": is_notification_enabled(),
         "ai_coach": is_ai_coach_enabled(),
-        "mysql": STORAGE_BACKEND == "mysql",
     }
 
 

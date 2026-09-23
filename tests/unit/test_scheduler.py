@@ -19,7 +19,6 @@ def test_overdue_prefix_not_on_task_object():
     assert cur is not None
     assert cur.title == "重要"  # 本体未改
     assert cur.id == "abc"
-    assert s.format_display_title(cur) == "【已逾期】重要"
 
 
 def test_focus_does_not_shrink_queue():

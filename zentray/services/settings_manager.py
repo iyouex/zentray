@@ -651,12 +651,6 @@ class SettingsManager:
             return False
         return bool(self.ai.plan.enabled or self.ai.review.enabled)
 
-    def reload_from_disk(self) -> None:
-        self._settings = AppSettings()
-        self._load_from_env()
-        self._load_from_file()
-        self._loaded = True
-
     @classmethod
     def reload(cls) -> "SettingsManager":
         cls._instance = None

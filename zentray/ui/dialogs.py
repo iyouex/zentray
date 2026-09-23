@@ -21,52 +21,9 @@ from zentray.ui.dialog_utils import (
 TITLE_MAX_LENGTH = 100
 
 
-def _compute_default_deadline(
-    is_periodic: bool,
-    periodicity: str = "daily",
-    *,
-    weekday: int | None = None,
-    day_of_month: int | None = None,
-) -> datetime.date:
-    """
-    根据任务类型计算默认截止日期（返回 date，避免字符串显示问题）。
-
-    - 一次性：明天
-    - 每日：今天
-    - 每周：本周指定 weekday（0=周一…），若已过则下周同一天
-    - 每月：本月指定日，若已过则下月
-    """
-    today = datetime.date.today()
-    if not is_periodic:
-        return today + datetime.timedelta(days=1)
-
-    periodicity = (periodicity or "daily").lower()
-    if periodicity == "daily":
-        return today
-
-    if periodicity == "weekly":
-        target_wd = 4 if weekday is None else int(weekday) % 7  # 默认周五
-        delta = (target_wd - today.weekday()) % 7
-        # 若希望「本周该日已过则下周」：delta=0 表示今天即目标日
-        return today + datetime.timedelta(days=delta)
-
-    if periodicity == "monthly":
-        import calendar
-
-        dom = 25 if day_of_month is None else max(1, min(31, int(day_of_month)))
-        last = calendar.monthrange(today.year, today.month)[1]
-        day = min(dom, last)
-        candidate = datetime.date(today.year, today.month, day)
-        if candidate < today:
-            if today.month == 12:
-                y, m = today.year + 1, 1
-            else:
-                y, m = today.year, today.month + 1
-            last2 = calendar.monthrange(y, m)[1]
-            candidate = datetime.date(y, m, min(dom, last2))
-        return candidate
-
-    return today + datetime.timedelta(days=1)
+def _compute_default_deadline() -> datetime.date:
+    """一次性任务默认截止日期：明天。"""
+    return datetime.date.today() + datetime.timedelta(days=1)
 
 
 def _date_to_qdate(d: datetime.date) -> QDate:
@@ -487,7 +444,7 @@ class TaskDialog(QDialog):
         if not self.cb_deadline.isChecked() and not force:
             return
 
-        default = _compute_default_deadline(False, "daily")
+        default = _compute_default_deadline()
         self.deadline_edit.setDate(_date_to_qdate(default))
         self.deadline_edit.setToolTip(f"默认截止日期: {default.isoformat()}")
         self.deadline_edit.setEnabled(self.cb_deadline.isChecked())

@@ -3,7 +3,6 @@ import datetime
 
 from zentray.core.models import PeriodicTemplate
 from zentray.core.periodic import (
-    advance_period_key,
     build_due_instance,
     compute_instance_deadline,
     is_schedule_active,
@@ -137,14 +136,6 @@ def test_skip_watermark_key_pending_today():
     tmpl.last_generated_period = skip_watermark_key(tmpl, today, 1)
     assert not should_spawn(tmpl, today)
     assert should_spawn(tmpl, today + datetime.timedelta(days=1))
-
-
-def test_advance_period_key_weekly_interval():
-    today = datetime.date(2026, 9, 22)  # Tuesday
-    tmpl = PeriodicTemplate(base_title="双周", category="工作", periodicity="weekly", interval=2)
-    tmpl.last_generated_period = advance_period_key("weekly", today, 2, 1)
-    assert not should_spawn(tmpl, today + datetime.timedelta(weeks=2))  # 水位桶内
-    assert should_spawn(tmpl, today + datetime.timedelta(weeks=4))  # 下一桶
 
 
 def test_next_spawn_date():

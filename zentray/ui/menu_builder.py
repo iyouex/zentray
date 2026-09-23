@@ -9,25 +9,9 @@ class MenuBuilder:
     def __init__(self):
         self._last_items = None
 
-    def build_extension_buttons(self, extensions: list) -> List[dict]:
-        if not extensions:
-            return []
-        items = []
-        for ext in extensions:
-            config = ext.get_button_config()
-            items.append({
-                "id": f"extension_{ext.__class__.__name__}",
-                "label": f"🔧 {config.get('tooltip', '脚本')}",
-            })
-        return items
-
     def build_main_menu(
         self,
-        task_exists: bool,
         is_pomodoro: bool,
-        tasks: list = None,
-        current_task=None,
-        extensions: list = None,
         pomodoro_minutes: Optional[int] = None,
         extend_minutes: Optional[int] = None,
     ) -> List[dict]:
@@ -35,7 +19,6 @@ class MenuBuilder:
         构建主菜单。
 
         注意：菜单结构不依赖轮播当前标题/当前任务星标，避免轮播时整菜单重建闪动。
-        tasks/current_task 参数保留兼容，不再用于生成子菜单。
         """
         if pomodoro_minutes is None or extend_minutes is None:
             try:
@@ -49,9 +32,6 @@ class MenuBuilder:
             except Exception:
                 pomodoro_minutes = pomodoro_minutes or 25
                 extend_minutes = extend_minutes or 10
-
-        extensions = extensions or []
-        ext_buttons = self.build_extension_buttons(extensions)
 
         items = [
             {
@@ -80,10 +60,6 @@ class MenuBuilder:
                 "label": f"🍅 专注 {pomodoro_minutes} 分钟",
                 "enabled": True,
             })
-
-        if ext_buttons:
-            items.append("separator")
-            items.extend(ext_buttons)
 
         items.append("separator")
         items.append({
