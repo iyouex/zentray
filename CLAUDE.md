@@ -22,10 +22,9 @@ Python 后端 + Vue 前端（`web/`）。详见 [README.md](README.md)。
 
 - 新功能：`git switch -c feature/<name> staging`
 - 功能完成：合入 staging，在 staging 上测试验证；**不要直接向 master 提交**
-- 发版：staging → master，随后按 [docs/VERSIONING.md](docs/VERSIONING.md) 同步三处版本号（`zentray/config.py` / `pyproject.toml` / `installer/install_wizard.py`）并打 tag：`git tag vX.Y.Z && git push origin vX.Y.Z`
+- 发版：staging → master，随后按 [docs/VERSIONING.md](docs/VERSIONING.md) 同步版本号（`zentray/config.py` / `pyproject.toml`）并打 tag：`git tag vX.Y.Z && git push origin vX.Y.Z`
 - 热修复：从 master 切出 `hotfix/<name>`，修完**同时合回 master 和 staging**。这是唯一不经 staging 直达 master 的例外；若构成一次发布，同样需同步版本号并打 tag
 - **发版操作（staging → master 合并、打 tag、推送）须经用户明确确认后执行**
-- 提交信息沿用现有风格：`feat:` / `fix:` 等前缀 + 中文描述
 - 提交信息沿用现有风格：`feat:` / `fix:` 等前缀 + 中文描述
 
 ### 存量搁置分支
