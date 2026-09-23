@@ -181,38 +181,37 @@ build_linux_deb() {
         exit 1
     fi
 
-    local stage arch deb_name branch safe_branch pack_order
+    local stage arch deb_name deb_version branch dot_branch pack_order
     arch="$(dpkg --print-architecture 2>/dev/null || echo amd64)"
     stage="${PROJECT_DIR}/build/deb_stage"
 
     # 命名规范：
-    #   main/master → zentray_<VERSION>_<arch>.deb
-    #   功能分支   → zentray_<VERSION>_feature-<branch>-<N>_<arch>.deb
+    #   main/master → zentray_<VERSION>_<arch>.deb（Version: <VERSION>）
+    #   功能分支   → zentray_<VERSION>+<branch>.<N>_<arch>.deb（Version: 同名）
+    # 分支后缀必须进 Debian Version 字段：所有分支包若都叫 0.5.1，apt 视
+    # 同版本为「已是最新」而拒绝覆盖安装，装完仍是旧程序（历史踩坑）。
+    # 「+」排序高于裸版本号，同分支 N 递增即可正常升级。
     branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)"
     if [[ "$branch" != "main" && "$branch" != "master" ]]; then
-        # feature/optimization → optimization；其它非 feature 前缀保留清洗后全名
-        safe_branch="${branch//\//-}"
-        safe_branch="${safe_branch//[^a-zA-Z0-9-]/-}"
-        safe_branch="$(echo "$safe_branch" | sed -E 's/-+/-/g; s/^-|-$//g')"
-        if [[ "$safe_branch" == feature-* ]]; then
-            safe_branch="${safe_branch#feature-}"
-        fi
+        # feature/ai-everywhere → feature.ai.everywhere（Debian 版本串仅允许字母数字与 . + ~）
+        dot_branch="$(echo "$branch" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/./g; s/^\.+//; s/\.+$//')"
         pack_order="$(cat "${RELEASES_DIR}/.latest_branch_packings" 2>/dev/null || echo 0)"
         # 仅统计当前分支的次序：用独立文件避免跨分支串号
-        local order_file="${RELEASES_DIR}/.pack_order_${safe_branch}"
+        local order_file="${RELEASES_DIR}/.pack_order_${dot_branch}"
         if [[ -f "$order_file" ]]; then
             pack_order="$(cat "$order_file" 2>/dev/null || echo 0)"
         else
             pack_order=0
         fi
         pack_order=$((pack_order + 1))
-        deb_name="${PKG_NAME}_${VERSION}_feature-${safe_branch}-${pack_order}_${arch}.deb"
+        deb_version="${VERSION}+${dot_branch}.${pack_order}"
         echo "$pack_order" > "$order_file"
         # 兼容旧计数器
         echo "$pack_order" > "${RELEASES_DIR}/.latest_branch_packings"
     else
-        deb_name="${PKG_NAME}_${VERSION}_${arch}.deb"
+        deb_version="${VERSION}"
     fi
+    deb_name="${PKG_NAME}_${deb_version}_${arch}.deb"
     info "包名: ${deb_name}"
     rm -rf "$stage"
     mkdir -p \
@@ -283,12 +282,12 @@ exec /opt/zentray/ZenTray/ZenTray "$@"
 WRAP
     chmod 755 "${stage}/usr/bin/${PKG_NAME}"
 
-    # desktop
+    # desktop（展示用裸版本号即可）
     sed "s|__VERSION__|${VERSION}|g" \
         "${PROJECT_DIR}/packaging/debian/zentray.desktop.in" \
         > "${stage}/usr/share/applications/${PKG_NAME}.desktop"
-    # control
-    sed "s|__VERSION__|${VERSION}|g" \
+    # control（必须用 deb_version，含分支后缀，否则 apt 同版本拒绝覆盖安装）
+    sed "s|__VERSION__|${deb_version}|g" \
         "${PROJECT_DIR}/packaging/debian/control.in" \
         > "${stage}/DEBIAN/control"
     # 若 architecture 非 amd64 则替换
@@ -373,7 +372,8 @@ section "构建汇总"
 ls -lh "${RELEASES_DIR}" 2>/dev/null | sed 's/^/  /' || true
 echo ""
 echo -e "  ${BOLD}Linux 安装测试:${NC}"
-echo -e "    ${CYAN}sudo apt install -y ./dist/releases/${PKG_NAME}_${VERSION}_*.deb${NC}"
+echo -e "    ${CYAN}sudo apt install -y $(cat "${RELEASES_DIR}/.latest_linux_deb" 2>/dev/null || echo "./dist/releases/${PKG_NAME}_*.deb")${NC}"
+echo -e "    安装前先退出正在运行的 ZenTray（托盘右键退出）：单实例包装会把启动重定向到旧进程"
 echo -e "    ${CYAN}zentray${NC}   # 启动"
 echo -e "    ${CYAN}./scripts/uninstall.sh --yes${NC}"
 echo ""
