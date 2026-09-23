@@ -119,6 +119,20 @@
                   placeholder="选填"
                 />
               </a-form-item>
+              <a-form-item :label="isTemplate || form.mode === 'periodic' ? '预设子任务（派发时复制到实例）' : '子任务'">
+                <div class="slots-box">
+                  <div v-for="(sub, idx) in form.subtasks" :key="idx" class="slot-row">
+                    <a-input
+                      v-model="sub.title"
+                      :max-length="100"
+                      placeholder="子任务标题"
+                      style="flex: 1"
+                    />
+                    <a-button size="mini" status="danger" @click="removeSub(idx)">删</a-button>
+                  </div>
+                  <a-button size="small" type="outline" @click="addSub">➕ 添加子任务</a-button>
+                </div>
+              </a-form-item>
               <a-form-item>
                 <a-checkbox v-model="form.reminder_enabled">弹窗提醒</a-checkbox>
               </a-form-item>
@@ -265,6 +279,7 @@ const form = reactive({
   reminder_enabled: false,
   reminder_time: '17:00',
   reminder_slots: [],
+  subtasks: [],
   task_type: 'one-time',
   template_id: null,
 })
@@ -324,6 +339,14 @@ function addSlot() {
 
 function removeSlot(idx) {
   form.reminder_slots.splice(idx, 1)
+}
+
+function addSub() {
+  form.subtasks.push({ id: null, title: '', status: 'active' })
+}
+
+function removeSub(idx) {
+  form.subtasks.splice(idx, 1)
 }
 
 function loadReminder(rem) {
@@ -388,6 +411,9 @@ function buildPayload() {
     reminder,
     auto_abandon_on_overdue: form.auto_abandon_on_overdue,
     attachments: [],
+    subtasks: (form.subtasks || [])
+      .filter((s) => (s.title || '').trim())
+      .map((s) => ({ id: s.id, title: s.title.trim(), status: s.status || 'active' })),
   }
 
   if (form.mode === 'periodic' || isTemplate.value) {
@@ -573,6 +599,7 @@ onMounted(async () => {
         form.long_term = t.long_term !== false
         form.schedule_end_date = t.schedule_end_date || ''
         form.auto_abandon_on_overdue = !!t.auto_abandon_on_overdue
+        form.subtasks = (t.subtasks || []).map((s) => ({ ...s }))
         loadReminder(t.reminder)
       } else {
         const t = await getTask(taskId.value)
@@ -587,6 +614,7 @@ onMounted(async () => {
         form.task_type = t.task_type || 'one-time'
         form.template_id = t.template_id
         form.mode = 'one-time'
+        form.subtasks = (t.subtasks || []).map((s) => ({ ...s }))
         loadReminder(t.reminder)
       }
     }
