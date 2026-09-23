@@ -29,7 +29,7 @@ def resolve_launch_target() -> Tuple[str, str]:
 
     for candidate in (
         Path("/usr/bin/zentray"),
-        Path("/opt/zentray/ZenTray"),
+        Path("/opt/zentray/ZenTray/ZenTray"),   # deb onedir 布局
         Path.home() / ".local" / "bin" / "ZenTray" / "ZenTray",
     ):
         if candidate.is_file() and os.access(candidate, os.X_OK):

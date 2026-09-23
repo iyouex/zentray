@@ -59,7 +59,9 @@ VERSION="$(get_version)"
 RELEASES_DIR="${PROJECT_DIR}/dist/releases"
 mkdir -p "$RELEASES_DIR"
 VENV_PYTHON="${PROJECT_DIR}/venv/bin/python"
-DIST_BIN="${PROJECT_DIR}/dist/ZenTray"
+# onedir 产物：dist/ZenTray/ 目录，可执行文件在其内
+DIST_DIR="${PROJECT_DIR}/dist/ZenTray"
+DIST_BIN="${DIST_DIR}/ZenTray"
 
 section "构建参数"
 echo "  版本:     ${VERSION}"
@@ -106,13 +108,17 @@ build_frontend() {
 
 # ========================================================================
 # 判断现有 dist/ZenTray 是否内嵌了过期前端。
-# ZenTray 为 PyInstaller onefile 自包含产物，web/dist 在打包瞬间被固化进二进制；
-# 只要 web/dist 中任一文件比二进制新，就说明二进制仍是旧 UI，必须重建。
-# 返回 0 = 需重建；1 = 二进制已包含最新前端。
+# web/dist 在打包瞬间被固化进 dist/ZenTray/（PyInstaller datas）；
+# 以构建完成时写入的 .build_stamp 为基准（onedir 可执行文件是 bootloader
+# 的拷贝，保留旧 mtime，不能作比较基准）。
+# 返回 0 = 需重建；1 = 包内已包含最新前端。
 frontend_is_newer_than_binary() {
     [[ -f "$DIST_BIN" ]] || return 0
     [[ -d "${PROJECT_DIR}/web/dist" ]] || return 0
-    find "${PROJECT_DIR}/web/dist" -type f -newer "$DIST_BIN" -print -quit | grep -q .
+    local stamp="${DIST_DIR}/.build_stamp"
+    local base="$DIST_BIN"
+    [[ -f "$stamp" ]] && base="$stamp"
+    find "${PROJECT_DIR}/web/dist" -type f -newer "$base" -print -quit | grep -q .
 }
 
 # ========================================================================
@@ -123,7 +129,7 @@ build_pyinstaller() {
 
     section "PyInstaller 构建主程序"
     if $CLEAN; then
-        rm -rf "${PROJECT_DIR}/build" "${PROJECT_DIR}/dist/ZenTray"
+        rm -rf "${PROJECT_DIR}/build" "$DIST_DIR"
         warn "已清理 build/ 与 dist/ZenTray"
     fi
     # --skip-binary 但现有二进制已过期（前端刚重新构建）→ 强制重建，杜绝旧 UI 进包
@@ -153,13 +159,14 @@ build_pyinstaller() {
     info "语法检查通过"
     (
         cd "$PROJECT_DIR"
-        "$VENV_PYTHON" -m PyInstaller zentray.spec
+        "$VENV_PYTHON" -m PyInstaller --noconfirm zentray.spec
     )
     if [[ ! -f "$DIST_BIN" ]]; then
-        err "未生成 $DIST_BIN"
+        err "未生成 $DIST_BIN（onedir 产物应为 ${DIST_DIR}/ 目录树）"
         exit 1
     fi
-    info "主程序: $DIST_BIN ($(du -h "$DIST_BIN" | cut -f1))"
+    touch "${DIST_DIR}/.build_stamp"
+    info "主程序: $DIST_DIR ($(du -sh "$DIST_DIR" | cut -f1))"
 }
 
 # ========================================================================
@@ -216,17 +223,18 @@ build_linux_deb() {
         "${stage}/usr/share/icons/hicolor/256x256/apps" \
         "${stage}/usr/share/doc/${PKG_NAME}"
 
-    # 主二进制
-    cp -a "$DIST_BIN" "${stage}/opt/${PKG_NAME}/ZenTray"
-    chmod 755 "${stage}/opt/${PKG_NAME}/ZenTray"
+    # 主程序（onedir 目录树 → /opt/zentray/ZenTray/，内含可执行文件 ZenTray）
+    cp -a "$DIST_DIR" "${stage}/opt/${PKG_NAME}/ZenTray"
+    rm -f "${stage}/opt/${PKG_NAME}/ZenTray/.build_stamp"
+    chmod 755 "${stage}/opt/${PKG_NAME}/ZenTray/ZenTray"
 
-    # 防线：二进制必须已包含最新前端，否则静默产出「旧 UI 的 deb」
+    # 防线：包内必须已包含最新前端，否则静默产出「旧 UI 的 deb」
     if frontend_is_newer_than_binary; then
-        err "中止打包：$DIST_BIN 内嵌的 web/dist 已过期（前端构建晚于二进制）"
+        err "中止打包：$DIST_DIR 内嵌的 web/dist 已过期（前端构建晚于可执行文件）"
         err "请重新构建主程序后再打 deb：./scripts/build_package.sh"
         exit 1
     fi
-    info "校验: $DIST_BIN 已包含最新前端（web/dist 无更新文件）"
+    info "校验: $DIST_DIR 已包含最新前端（web/dist 无更新文件）"
 
     # 图标
     local icon_src="${PROJECT_DIR}/resources/icons/app_icon.png"
@@ -239,7 +247,7 @@ build_linux_deb() {
         fi
     fi
 
-    # 启动包装：已在运行则直连单实例 socket 激活（免 182MB onefile 解压+导入，
+    # 启动包装：已在运行则直连单实例 socket 激活（免重复起进程，
     # 实测任务栏再点击 3.2s → ~0.2s）；未运行/激活失败则冷启动完整应用。
     cat > "${stage}/usr/bin/${PKG_NAME}" <<'WRAP'
 #!/bin/sh
@@ -265,13 +273,13 @@ def _activate():
 
 
 if not _activate():
-    os.execv("/opt/zentray/ZenTray", ["/opt/zentray/ZenTray"] + sys.argv[1:])
+    os.execv("/opt/zentray/ZenTray/ZenTray", ["/opt/zentray/ZenTray/ZenTray"] + sys.argv[1:])
 PY
     then
         exit 0
     fi
 fi
-exec /opt/zentray/ZenTray "$@"
+exec /opt/zentray/ZenTray/ZenTray "$@"
 WRAP
     chmod 755 "${stage}/usr/bin/${PKG_NAME}"
 
@@ -322,7 +330,8 @@ POSTRM
     chmod 755 "${stage}/DEBIAN/postrm"
 
     local out_deb="${RELEASES_DIR}/${deb_name}"
-    dpkg-deb --root-owner-group --build "$stage" "$out_deb"
+    # onedir 目录树无预压缩，deb 层用 xz-9 统一压（onefile 时代 zlib 会挡住 xz）
+    dpkg-deb --root-owner-group -Zxz -z9 --build "$stage" "$out_deb"
     info "deb: $out_deb ($(du -h "$out_deb" | cut -f1))"
 
     # 校验
