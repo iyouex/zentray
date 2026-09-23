@@ -42,4 +42,4 @@ def test_build_main_menu_enabled_matrix():
     dict_items3 = {item["id"]: item for item in items3 if isinstance(item, dict)}
     assert dict_items3["task_list"]["enabled"] is False
     assert dict_items3["stop_pomodoro"]["enabled"] is True
-    assert dict_items3["extend_pomodoro"]["enabled"] is True)
+    assert dict_items3["extend_pomodoro"]["enabled"] is True
