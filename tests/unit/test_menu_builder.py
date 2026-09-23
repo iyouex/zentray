@@ -18,7 +18,6 @@ def test_build_main_menu_idle_structure():
         "separator",
         "pomodoro",
         "separator",
-        "history",
         "settings",
         "quit",
     ]
@@ -32,7 +31,6 @@ def test_build_main_menu_enabled_matrix():
     items1 = mb.build_main_menu(is_pomodoro=False)
     dict_items1 = {item["id"]: item for item in items1 if isinstance(item, dict)}
     assert dict_items1["task_list"]["enabled"] is True
-    assert dict_items1["history"]["enabled"] is True
 
     # 2. 无任务，非番茄
     items2 = mb.build_main_menu(is_pomodoro=False)
@@ -43,6 +41,5 @@ def test_build_main_menu_enabled_matrix():
     items3 = mb.build_main_menu(is_pomodoro=True)
     dict_items3 = {item["id"]: item for item in items3 if isinstance(item, dict)}
     assert dict_items3["task_list"]["enabled"] is False
-    assert dict_items3["history"]["enabled"] is False
     assert dict_items3["stop_pomodoro"]["enabled"] is True
     assert dict_items3["extend_pomodoro"]["enabled"] is True

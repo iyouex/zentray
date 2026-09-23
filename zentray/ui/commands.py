@@ -99,23 +99,6 @@ class SettingsCommand(ActionCommand):
             controller.update_display()
 
 
-class HistoryCommand(ActionCommand):
-    """历史记录：任务操作日志 + AI 报告"""
-
-    def execute(self, controller: "TrayController") -> None:
-        from zentray.ui.vue_commands import try_vue_history
-
-        if try_vue_history(controller):
-            return
-        from zentray.ui.web_host import use_vue_ui
-
-        if not use_vue_ui():
-            controller.renderer.show_notification(
-                "历史记录",
-                "请构建 Vue 前端（web/dist）后使用历史记录功能。",
-            )
-
-
 # ==========================================
 # 命令注册与路由
 # ==========================================
@@ -126,7 +109,6 @@ COMMAND_MAP = {
     "pomodoro": PomodoroStartCommand(),
     "stop_pomodoro": PomodoroStopCommand(),
     "extend_pomodoro": PomodoroExtendCommand(),
-    "history": HistoryCommand(),
     "quit": QuitCommand(),
     "settings": SettingsCommand(),
 }
