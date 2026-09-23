@@ -113,6 +113,14 @@
                         </a-tag>
                       </template>
                     </div>
+                    <div v-if="item.kind === 'task' && subCount(item).total" class="zt-card-prog">
+                      <i
+                        :style="{
+                          width: (subCount(item).done / subCount(item).total) * 100 + '%',
+                          background: categoryColor(item.category),
+                        }"
+                      />
+                    </div>
                   </div>
                 </div>
               </TransitionGroup>
@@ -127,7 +135,20 @@
             <template v-if="currentTask">
               <p class="title">{{ currentTask.title }}</p>
               <p class="meta">
-                分类: {{ currentTask.category }}　优先级: {{ PRI_LABEL[currentTask.priority] || '低' }}
+                <a-tag
+                  v-if="currentTask.category"
+                  size="small"
+                  :style="{
+                    color: categoryColor(currentTask.category),
+                    background: categoryColor(currentTask.category) + '24',
+                    borderRadius: '999px',
+                  }"
+                >
+                  {{ currentTask.category }}
+                </a-tag>
+                <span v-if="currentTask.priority" class="zt-pri" :class="PRI_CLASS[currentTask.priority] || 'zt-pri-l'">
+                  {{ PRI_LABEL[currentTask.priority] || '低' }}
+                </span>
                 <br v-if="currentTask.deadline || currentTask.task_type === 'periodic_instance'" />
                 <span v-if="currentTask.deadline">截止: {{ currentTask.deadline }}</span>
                 <span v-if="currentTask.task_type === 'periodic_instance' && !currentTask.orphan" class="zt-origin">
@@ -144,7 +165,15 @@
               <!-- 子任务 -->
               <div v-if="currentTask.subtasks?.length" class="subtasks">
                 <div class="sub-head">
-                  子任务 {{ subCount(currentTask).done }}/{{ subCount(currentTask).total }}
+                  <span>子任务 {{ subCount(currentTask).done }}/{{ subCount(currentTask).total }}</span>
+                  <div class="zt-card-prog sub-prog">
+                    <i
+                      :style="{
+                        width: (subCount(currentTask).done / subCount(currentTask).total) * 100 + '%',
+                        background: categoryColor(currentTask.category),
+                      }"
+                    />
+                  </div>
                 </div>
                 <div
                   v-for="s in currentTask.subtasks"
@@ -190,8 +219,21 @@
             <template v-else-if="currentTmpl">
               <p class="title">{{ currentTmpl.base_title }}</p>
               <p class="meta">
-                {{ periodLabel(currentTmpl) }}　分类: {{ currentTmpl.category }}
-                优先级: {{ PRI_LABEL[currentTmpl.priority] || '低' }}
+                {{ periodLabel(currentTmpl) }}
+                <a-tag
+                  v-if="currentTmpl.category"
+                  size="small"
+                  :style="{
+                    color: categoryColor(currentTmpl.category),
+                    background: categoryColor(currentTmpl.category) + '24',
+                    borderRadius: '999px',
+                  }"
+                >
+                  {{ currentTmpl.category }}
+                </a-tag>
+                <span v-if="currentTmpl.priority" class="zt-pri" :class="PRI_CLASS[currentTmpl.priority] || 'zt-pri-l'">
+                  {{ PRI_LABEL[currentTmpl.priority] || '低' }}
+                </span>
                 <br />
                 <span :class="{ 'zt-paused': currentTmpl.paused }">
                   {{ currentTmpl.paused ? '已暂停（恢复后将为当前周期生成一次）' : '下次派发: ' + (currentTmpl.next_spawn_date || '—') }}
@@ -234,8 +276,20 @@
               <p class="title">{{ currentHist.title }}</p>
               <p class="meta">
                 {{ STATUS_LABEL[currentHist.status] || currentHist.status }} · {{ formatTime(currentHist.archived_at) }}
-                　分类: {{ currentHist.category || '未分类' }}
-                优先级: {{ PRI_LABEL[currentHist.priority] || '低' }}
+                <a-tag
+                  v-if="currentHist.category"
+                  size="small"
+                  :style="{
+                    color: categoryColor(currentHist.category),
+                    background: categoryColor(currentHist.category) + '24',
+                    borderRadius: '999px',
+                  }"
+                >
+                  {{ currentHist.category }}
+                </a-tag>
+                <span v-if="currentHist.priority" class="zt-pri" :class="PRI_CLASS[currentHist.priority] || 'zt-pri-l'">
+                  {{ PRI_LABEL[currentHist.priority] || '低' }}
+                </span>
                 <br />
                 <span v-if="currentHist.attachment_count">附件数: {{ currentHist.attachment_count }}</span>
               </p>
@@ -795,18 +849,38 @@ onMounted(reload)
 .flip-gone {
   display: none;
 }
-.zt-periodic-ico {
-  color: var(--color-text-muted, #94a3b8);
-  flex: none;
-}
 /* 子任务块 */
 .subtasks {
   margin-bottom: 10px;
+}
+.meta .arco-tag,
+.meta .zt-pri {
+  margin-left: 6px;
 }
 .sub-head {
   font-size: 12px;
   color: var(--color-text-3);
   margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sub-prog {
+  flex: 1;
+  margin-top: 0;
+}
+.zt-card-prog {
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.18);
+  margin-top: 6px;
+  overflow: hidden;
+}
+.zt-card-prog i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.4s var(--zt-ease, ease-out);
 }
 .sub-row {
   display: flex;
