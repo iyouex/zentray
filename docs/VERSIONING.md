@@ -17,7 +17,7 @@
 
 ## 当前版本
 
-见 `zentray/config.py` → `VERSION`（现为 **0.5.0**）。
+见 `zentray/config.py` → `VERSION`（现为 **0.5.1**）。
 
 ## 安装包命名规范
 
@@ -25,7 +25,7 @@
 
 | 分支 | deb 命名 | 示例 |
 |------|----------|------|
-| `master` | `zentray_<VERSION>_<arch>.deb` | `zentray_0.5.0_amd64.deb` |
+| `master` | `zentray_<VERSION>_<arch>.deb` | `zentray_0.5.1_amd64.deb` |
 | 功能分支 | `zentray_<VERSION>_feature-<branch>-<N>_<arch>.deb` | `zentray_0.4.2_feature-optimization-1_amd64.deb` |
 
 说明：
