@@ -168,7 +168,6 @@ class TestTaskService:
         task_service.select_task(t2.id)
         assert task_service.get_current_task().id == t2.id
         # 队列仍包含全部任务
-        assert task_service.scheduler.has_tasks()
         assert len(task_service.scheduler._active_queue) + len(
             task_service.scheduler._overdue_queue
         ) >= 2

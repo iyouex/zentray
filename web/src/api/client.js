@@ -28,11 +28,6 @@ http.interceptors.request.use((config) => {
   return config
 })
 
-export async function getHealth() {
-  const { data } = await http.get('/api/health')
-  return data
-}
-
 export async function getMeta() {
   const { data } = await http.get('/api/meta')
   return data
@@ -173,11 +168,6 @@ export async function importBackup(path, { include, safety_backup = true } = {})
 export async function packArchive() {
   const { data } = await http.post('/api/system/archive/pack')
   return data
-}
-
-export async function getCurrentTask() {
-  const { data } = await http.get('/api/current-task')
-  return data.item
 }
 
 /** 首次配置向导完成 */

@@ -1,25 +1,15 @@
 # zentray/dependencies.py
-"""
-依赖注入模块配置。
-
-优先级：标准 injector 库 > 自定义 di.py 回退。
-"""
-try:
-    from injector import Module, provider, singleton, Injector
-except ImportError:
-    from zentray.di import Module, provider, singleton, Injector
+"""依赖注入模块配置。"""
+from injector import Module, provider, singleton, Injector
 
 from zentray.core.repository import TaskRepository, PeriodicTemplateRepository
 from zentray.repositories.file_repository import FileTaskRepository
 from zentray.repositories.file_periodic_repository import FilePeriodicTemplateRepository
-from zentray.config import STORAGE_BACKEND
 from zentray.core.scheduler import Scheduler
 from zentray.services.task_service import TaskService
 from zentray.services.pomodoro_service import PomodoroService
-from zentray.services.script_service import ScriptService
 from zentray.ui.renderer import TrayRenderer
 from zentray.ui.menu_builder import MenuBuilder
-from zentray.ui.extensions.loader import ExtensionLoader
 
 
 class AppModule(Module):
@@ -33,8 +23,6 @@ class AppModule(Module):
     @provider
     @singleton
     def provide_task_repository(self) -> TaskRepository:
-        if STORAGE_BACKEND == "mysql":
-            raise NotImplementedError("MySQL 存储后端尚未实现")
         return FileTaskRepository()
 
     @provider
@@ -66,18 +54,8 @@ class AppModule(Module):
 
     @provider
     @singleton
-    def provide_script_service(self) -> ScriptService:
-        return ScriptService()
-
-    @provider
-    @singleton
     def provide_menu_builder(self) -> MenuBuilder:
         return MenuBuilder()
-
-    @provider
-    @singleton
-    def provide_extension_loader(self) -> ExtensionLoader:
-        return ExtensionLoader()
 
 
 # 全局 injector 实例
@@ -110,18 +88,14 @@ def init_tray_controller(app) -> "TrayController":
 
     task_service = injector.get(TaskService)
     pomodoro_service = injector.get(PomodoroService)
-    script_service = injector.get(ScriptService)
     menu_builder = injector.get(MenuBuilder)
-    extension_loader = injector.get(ExtensionLoader)
     renderer = init_tray_renderer(app)
 
     controller = TrayController(
         app=app,
         task_service=task_service,
         pomodoro_service=pomodoro_service,
-        script_service=script_service,
         renderer=renderer,
         menu_builder=menu_builder,
-        extension_loader=extension_loader,
     )
     return controller

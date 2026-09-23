@@ -257,15 +257,6 @@ class TaskService:
                 return updated
         return None
 
-    def delete_task(self, task_id: str) -> bool:
-        """删除任务"""
-        task = self.task_repo.find_by_id(task_id)
-        if task:
-            self.task_repo.delete(task_id)
-            self._refresh_scheduler()
-            return True
-        return False
-
     # ==========================================
     # 任务状态操作
     # ==========================================
@@ -398,14 +389,6 @@ class TaskService:
         else:
             self._refresh_scheduler()
         return res["t"], bool(res.get("auto"))
-
-    # ==========================================
-    # 模板操作
-    # ==========================================
-
-    def save_templates(self, templates: List[PeriodicTemplate]) -> None:
-        """保存周期任务模板"""
-        self.template_repo.save_all(templates)
 
     # ==========================================
     # 内部方法

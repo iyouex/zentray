@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "zentray"
 version = "0.5.0"
-description = "跨平台个人任务管理与专注效率工具 —— 系统托盘番茄钟 + GTD 看板"
+description = "Ubuntu/Linux 个人任务管理与专注效率工具 —— 系统托盘番茄钟 + GTD 看板"
 readme = "README.md"
 license = {text = "MIT"}
 authors = [
@@ -17,8 +17,6 @@ classifiers = [
     "Environment :: X11 Applications :: Qt",
     "Intended Audience :: End Users/Desktop",
     "License :: OSI Approved :: MIT License",
-    "Operating System :: MacOS",
-    "Operating System :: Microsoft :: Windows",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
@@ -37,8 +35,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-ai = ["openai>=1.12.0"]
-mysql = ["sqlalchemy>=2.0", "pymysql>=1.1.0"]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",

@@ -112,19 +112,6 @@ def should_spawn(tmpl: "PeriodicTemplate", today: datetime.date) -> bool:
     return wb[1] < cur
 
 
-def advance_period_key(
-    periodicity: str,
-    today: datetime.date,
-    interval: int,
-    n_buckets: int,
-) -> str:
-    """今天所在桶再前进 n_buckets 桶后的水位键。"""
-    n = max(1, int(interval or 1))
-    return _key_from_bucket(
-        periodicity, _bucket_index(periodicity, today, n) + n_buckets, n
-    )
-
-
 def skip_watermark_key(
     tmpl: "PeriodicTemplate", today: datetime.date, count: int
 ) -> str:

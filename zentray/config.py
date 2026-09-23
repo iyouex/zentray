@@ -7,15 +7,10 @@ logger = logging.getLogger(__name__)
 
 
 def _user_data_dir(app_name: str) -> Path:
-    """获取应用用户数据目录（跨平台统一使用应用显示名）。"""
+    """获取应用用户数据目录（其他平台恢复时在此按 sys.platform 加回分支）。"""
     if sys.platform == "linux":
         xdg = os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")
         return Path(xdg) / app_name
-    elif sys.platform == "darwin":
-        return Path.home() / "Library" / "Application Support" / app_name
-    elif sys.platform == "win32":
-        appdata = os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming")
-        return Path(appdata) / app_name
     return Path.home() / f".{app_name}"
 
 
@@ -69,10 +64,8 @@ AI_API_BASE_URL = os.getenv("AI_API_BASE_URL", "https://api.openai.com/v1")
 AI_API_KEY = os.getenv("AI_API_KEY")
 AI_MODEL_NAME = os.getenv("AI_MODEL_NAME", "gpt-4o")
 
-STORAGE_BACKEND = os.getenv("STORAGE_BACKEND", "file")
-
 POMODORO_MINUTES = 25
-HOTKEY_QUICK_ADD = "<cmd>+<alt>+t" if sys.platform == "darwin" else "<ctrl>+<alt>+t"
+HOTKEY_QUICK_ADD = "<ctrl>+<alt>+t"
 
 os.makedirs(ARCHIVE_DIR, exist_ok=True)
 
@@ -100,7 +93,6 @@ def get_enabled_features() -> dict:
         "core": True,
         "notification": is_notification_enabled(),
         "ai_coach": is_ai_coach_enabled(),
-        "mysql": STORAGE_BACKEND == "mysql",
     }
 
 

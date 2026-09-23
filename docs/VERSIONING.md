@@ -12,9 +12,8 @@
 
 - 运行时版本：`zentray/config.py` 中的 `VERSION`
 - 打包/元数据：`pyproject.toml` 的 `version`（应与 `VERSION` 同步）
-- 安装器展示：`installer/install_wizard.py` 的 `APP_VERSION`（应与 `VERSION` 同步）
 
-发版前检查三者一致。
+发版前检查两者一致。
 
 ## 当前版本
 
@@ -33,7 +32,3 @@
 - `<branch>`：当前 git 分支名，`/` 与非法字符清洗为 `-`，并去掉前缀 `feature-`
 - `<N>`：该分支本机打包次序（`dist/releases/.pack_order_<branch>` 自增）
 - 由 `scripts/build_package.sh` 自动生成，勿手改文件名后当正式包
-
-Windows / macOS：
-- `ZenTrayInstaller-<VERSION>-x64.exe`
-- `ZenTray-<VERSION>.dmg`

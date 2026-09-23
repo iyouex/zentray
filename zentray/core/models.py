@@ -18,8 +18,6 @@ class Task:
     task_type: str = "one-time"  # one-time, periodic_instance
     template_id: Optional[str] = None
     overdue_penalty_date: Optional[str] = None
-    progress: int = 0  # 0 to 100
-    progress_logs: List[dict] = field(default_factory=list)
     created_at: str = field(
         default_factory=lambda: datetime.datetime.now().isoformat()
     )
@@ -44,10 +42,6 @@ class Task:
             self.title = "Untitled"
         if not self.category:
             self.category = "工作"
-        if getattr(self, "progress", None) is None:
-            self.progress = 0
-        if getattr(self, "progress_logs", None) is None:
-            self.progress_logs = []
         if self.subtasks is None:
             self.subtasks = []
         if isinstance(self.reminder, dict):

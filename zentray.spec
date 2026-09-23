@@ -7,17 +7,17 @@ PyInstaller 打包配置文件。
 
 输出:
     dist/ZenTray  (Linux)
-    dist/ZenTray.app  (macOS)
-    dist/ZenTray.exe  (Windows)
 
 体积说明:
   自包含打包必带 Chromium 内核 (QtWebEngine ~100MB+)，这是内嵌 Vue 对话框的代价。
   本 spec 会剔除图表/3D/多媒体/多余翻译等业务用不到的 Qt 组件以瘦身。
+
+打包形态: onedir（dist/ZenTray/ 目录树）。
+  onefile 内部 zlib 会挡住 deb 的 xz（双重压缩零收益），且每次启动要解压
+  ~460MB 到 /tmp；onedir 后由 dpkg-deb -Zxz -z9 统一压缩。
 """
 
 import re
-import sys
-from pathlib import Path
 
 # ---------- 基础分析 ----------
 block_cipher = None
@@ -54,16 +54,25 @@ _EXCLUDE_NAME_RES = [
         # PDF 模块（业务未用；WebEngine 本身可渲染简单 PDF 若需要）
         r"Qt6?Pdf",
         r"PdfWidgets",
-        # 多余 QML 控件样式（Fluent / Material / Imagine 等）
+        # QML 组件库（业务仅 WebEngine 内嵌 HTML，无自研 QML；
+        # 已用 ldd/readelf 核实 Quick 系无 NEEDED 引用，Quick/Qml/OpenGL 核心保留）
+        r"QuickControls2",
+        r"QuickDialogs2",
+        r"QuickTemplates2",
+        r"VectorImage",
+        r"StyleKit",
+        r"qml/Qt5Compat",
+        r"qml/QtTest",
+        r"/labs/",
         r"FluentWinUI3",
-        r"QuickControls2Imagine",
-        r"QuickControls2Material",
-        r"QuickControls2Universal",
-        r"QuickControls2Fusion",
-        r"QuickControls2Windows",
-        r"QuickControls2macOS",
-        r"QuickControls2IOS",
-        r"QuickControls2Android",
+        # 用不到的插件（qml 调试 / 打印 / 输入 evdev / eglfs 集成 / 定位）
+        r"qmltooling",
+        r"printsupport",
+        r"evdev",
+        r"egldeviceintegrations",
+        r"/position/",
+        r"libqtposition",
+        r"WaylandCompositor",
         # 开发者工具资源（生产不需要）
         r"devtools",
         r"qtwebengine_devtools",
@@ -131,7 +140,6 @@ a = Analysis(
         'zentray.repositories.file_periodic_repository',
         'zentray.services.task_service',
         'zentray.services.pomodoro_service',
-        'zentray.services.script_service',
         'zentray.services.notification',
         'zentray.services.ai_review',
         'zentray.ui.controller',
@@ -143,19 +151,14 @@ a = Analysis(
         'zentray.ui.tray',
         'zentray.ui.dialogs',
         'zentray.ui.overlay',
-        'zentray.ui.extensions.interface',
-        'zentray.ui.extensions.loader',
         'zentray.api.server',
         'zentray.api.handlers',
         'zentray.workers.watcher',
         'zentray.workers.nightly_job',
         # DI 容器
-        'zentray.di',
         'zentray.dependencies',
         # pynput 平台特定后端
         'pynput.keyboard._xorg',
-        'pynput.keyboard._win32',
-        'pynput.keyboard._darwin',
         # WebEngine
         'PySide6.QtWebEngineWidgets',
         'PySide6.QtWebEngineCore',
@@ -209,27 +212,31 @@ a.datas = _filter_toc(a.datas)
 
 pyz = PYZ(a.pure, a.zipped_data)
 
-# ---------- 可执行文件 ----------
+# ---------- 可执行文件（onedir：EXE 壳 + COLLECT 目录树） ----------
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
     [],
+    exclude_binaries=True,
     name='ZenTray',
     debug=False,
     bootloader_ignore_signals=False,
     strip=True,                 # strip 符号表，略减体积
-    upx=True,
-    upx_exclude=[],
-    runtime_tmpdir=None,
     console=False,              # 无控制台窗口（GUI 应用）
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    # 图标（根据平台选择）
-    icon='resources/icons/app_icon.ico' if sys.platform == 'win32' else 'resources/icons/app_icon.png',
+    icon='resources/icons/app_icon.png',
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=True,
+    upx=False,                  # 本机无 upx 二进制，始终是 no-op
+    name='ZenTray',             # 产物: dist/ZenTray/（可执行文件在其内）
 )

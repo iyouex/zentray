@@ -91,17 +91,6 @@ class PomodoroService(QObject):
         elapsed = max(0, total - rem)
         return max(0, min(100, int(round(elapsed * 100 / total))))
 
-    def get_status(self) -> dict:
-        """获取当前状态摘要"""
-        return {
-            "is_active": self.is_active,
-            "remaining_seconds": self.remaining_seconds,
-            "remaining_minutes": self.remaining_seconds // 60,
-            "duration_seconds": self.duration,
-            "session_total_seconds": self.session_total,
-            "progress_percent": self.get_elapsed_progress_percent(),
-        }
-
     def _tick(self) -> None:
         """每秒回调"""
         if self.remaining_seconds > 0:

@@ -230,14 +230,3 @@ def format_display_title_with_category(
     if not cat:
         return title
     return f"{cat} {title}"
-
-
-def categories_to_legacy_name(
-    settings: CategorySettings,
-    primary_id: Optional[str],
-    category_fallback: str = "工作",
-) -> str:
-    p = settings.find_primary(primary_id)
-    if p:
-        return p.name
-    return category_fallback or "工作"

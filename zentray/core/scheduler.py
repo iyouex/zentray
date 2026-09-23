@@ -142,31 +142,6 @@ class Scheduler:
         """将焦点钉到指定任务，不缩减轮播队列。"""
         self._current = task
 
-    def format_display_title(self, task: Task) -> str:
-        """返回用于状态栏展示的标题（逾期时加前缀，不修改 task）。"""
-        if (
-            self.overdue_enabled
-            and task.deadline
-            and self._is_overdue(task.deadline, datetime.date.today())
-        ):
-            return f"{self.overdue_prefix}{task.title}"
-        return task.title
-
-    def has_tasks(self) -> bool:
-        return bool(self._overdue_queue) or bool(self._active_queue)
-
-    def reset(self) -> None:
-        self._overdue_cursor = 0
-        self._active_cursor = 0
-        self._overdue_phase_done = False
-        self._current = None
-
-    def pause(self) -> None:
-        self.is_paused = True
-
-    def resume(self) -> None:
-        self.is_paused = False
-
     @staticmethod
     def _is_overdue(deadline_str: str, today: datetime.date) -> bool:
         try:
