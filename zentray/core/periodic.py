@@ -206,6 +206,12 @@ def build_due_instance(tmpl: "PeriodicTemplate", today: datetime.date) -> Option
         auto_abandon_on_overdue=bool(
             getattr(tmpl, "auto_abandon_on_overdue", False)
         ),
+        # 预设子任务逐项新 dict 新 id（watcher 常驻持有模板对象，禁共享引用）
+        subtasks=[
+            {"id": str(uuid.uuid4()), "title": s["title"], "status": "active"}
+            for s in (getattr(tmpl, "subtasks", None) or [])
+            if isinstance(s, dict) and s.get("title")
+        ],
     )
     tmpl.last_generated_period = spawn_key_after_create(tmpl, today)
     return new_task

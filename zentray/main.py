@@ -46,6 +46,9 @@ class AppRuntime(QObject):
         self.watcher = None
         self.overlay = None
         self.hotkey = None
+        # 聚合提醒窗状态：模态打开期间新到期排队，关窗后统一处理
+        self.reminder_modal_open = False
+        self.reminder_queue: list = []
 
     def on_quick_add(self) -> None:
         from zentray.ui.vue_commands import try_vue_quick_add
@@ -61,8 +64,8 @@ class AppRuntime(QObject):
                 f"「{task.title}」已逾期，优先级已自动提升为 {task.priority.upper()}",
             )
 
-    def on_reminder_due(self, task, fire_key: str) -> None:
-        _on_reminder_due(self, task, fire_key)
+    def on_reminder_due(self, batch: list) -> None:
+        _on_reminder_due(self, batch)
 
     def shutdown(self) -> None:
         """退出前停掉所有 worker，避免 QThread 在运行中被析构导致 abort。"""
@@ -106,74 +109,73 @@ def _start_nightly_if_needed(runtime: AppRuntime, task_repo: TaskRepository) -> 
             logger.info("AI 计划/复盘 worker 已停止")
 
 
-def _on_reminder_due(runtime: AppRuntime, task, fire_key: str) -> None:
+def _on_reminder_due(runtime: AppRuntime, batch: list) -> None:
+    """聚合提醒：一轮到期 batch=[(task, fire_key), ...] 弹一窗。
+
+    Vue 路径逐卡动作由前端直调 POST /reminder-action 即时落库；
+    窗口关闭后对未处理卡（last_fired_key 未写的）统一 dismiss。
+    模态打开期间新到期排队（不顶窗——旧行为是后到 reject 前窗、先到被静默 dismiss）。
+    """
+    if runtime.reminder_modal_open:
+        runtime.reminder_queue.extend(batch)
+        return
+    runtime.reminder_modal_open = True
     try:
-        from zentray.ui.vue_commands import try_vue_reminder
-        from zentray.ui.vue_commands import try_vue_task_list
-        from zentray.ui.web_host import use_vue_ui
+        from zentray.ui.vue_commands import try_vue_reminders
         from zentray.ui.dialog_utils import run_modal_loop
 
-        action = "dismiss"
-        snooze_minutes = 10
-        handled, payload = try_vue_reminder(task, fire_key)
-        if handled and isinstance(payload, dict):
-            action = payload.get("action") or "dismiss"
-            try:
-                snooze_minutes = int(payload.get("snooze_minutes") or 10)
-            except (TypeError, ValueError):
-                snooze_minutes = 10
-        else:
-            dlg = ReminderDialog(task)
-            run_modal_loop(dlg)
-            action = dlg.result_action
-            snooze_minutes = getattr(dlg, "snooze_minutes", 10) or 10
-
-        rem = apply_reminder_action(
-            task,
-            action,
-            fire_key,
-            snooze_minutes=snooze_minutes,
-        )
         task_service = injector.get(TaskService)
-        task_service.update_task_reminder(task.id, rem)
-
-        if action == "snooze":
-            try:
-                from zentray.services.activity_log import log_event
-
-                log_event(
-                    "task",
-                    "delay",
-                    getattr(task, "title", "") or "",
-                    f"提醒延时 {snooze_minutes} 分钟",
-                    meta={"id": getattr(task, "id", None), "snooze_minutes": snooze_minutes},
+        handled, _payload = try_vue_reminders(batch)
+        if not handled:
+            # Qt 回退：逐个顺序弹，本地应用动作
+            for task, fire_key in batch:
+                dlg = ReminderDialog(task)
+                run_modal_loop(dlg)
+                action = dlg.result_action
+                snooze = getattr(dlg, "snooze_minutes", 10) or 10
+                rem = apply_reminder_action(
+                    task, action, fire_key, snooze_minutes=snooze
                 )
-            except Exception:
-                pass
+                task_service.update_task_reminder(task.id, rem)
+                if action == "snooze":
+                    try:
+                        from zentray.services.activity_log import log_event
 
-        if action == "done":
-            task_service.mark_done(task.id)
-            if runtime.controller:
-                runtime.controller.update_display()
-        elif action == "update":
-            fresh = task_service.find_task(task.id) or task
-            if use_vue_ui() and runtime.controller:
-                # 更新进度并入任务列表右栏：直达选中该任务
-                try_vue_task_list(runtime.controller, select_id=fresh.id)
-            else:
-                from zentray.ui.dialogs import ProgressDialog
-
-                progress = ProgressDialog(task=fresh)
-                if run_modal_loop(progress):
-                    percent, note = progress.get_data()
-                    task_service.update_progress(task.id, percent, note)
-            if runtime.controller:
-                runtime.controller.update_display()
-        elif runtime.controller:
+                        log_event(
+                            "task",
+                            "delay",
+                            task.title,
+                            f"提醒延时 {snooze} 分钟",
+                            meta={"id": task.id, "snooze_minutes": snooze},
+                        )
+                    except Exception:
+                        pass
+                if action == "done":
+                    task_service.mark_done(task.id)
+        else:
+            # 未处理卡（本轮 fire_key 未写 last_fired_key）统一 dismiss；
+            # 已完成/已忽略/已稍后的卡状态不被覆盖（幂等）
+            for task, fire_key in batch:
+                fresh = task_service.find_task(task.id)
+                if not fresh or not fresh.reminder:
+                    continue
+                if fresh.reminder.last_fired_key == fire_key:
+                    continue
+                rem = apply_reminder_action(task, "dismiss", fire_key)
+                task_service.update_task_reminder(task.id, rem)
+        if runtime.controller:
             runtime.controller.update_display()
     finally:
+        runtime.reminder_modal_open = False
         if runtime.reminder_worker:
-            runtime.reminder_worker.clear_pending(task.id)
+            runtime.reminder_worker.clear_pending_batch(
+                [t.id for t, _ in batch]
+            )
+        # 关窗后处理打开期间排队的新到期
+        if runtime.reminder_queue:
+            queued = runtime.reminder_queue
+            runtime.reminder_queue = []
+            _on_reminder_due(runtime, queued)
 
 
 def main():

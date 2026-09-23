@@ -12,7 +12,7 @@ const routes = [
   { path: '/tasks/new', name: 'task-new', component: TaskForm },
   { path: '/tasks/:id/edit', name: 'task-edit', component: TaskForm, props: true },
   { path: '/settings', name: 'settings', component: Settings },
-  { path: '/reminder/:id', name: 'reminder', component: Reminder, props: true },
+  { path: '/reminder', name: 'reminder', component: Reminder },
   { path: '/quick-add', name: 'quick-add', component: QuickAdd },
   { path: '/setup', name: 'setup', component: SetupWizard },
 ]
