@@ -185,3 +185,24 @@ def test_build_due_instance():
     tmpl.paused = True
     tmpl.last_generated_period = None
     assert build_due_instance(tmpl, today) is None
+
+
+def test_build_due_instance_copies_preset_subtasks():
+    today = datetime.date(2026, 9, 22)
+    tmpl = PeriodicTemplate(
+        base_title="吃药",
+        category="生活",
+        periodicity="daily",
+        subtasks=[
+            {"id": "preset-1", "title": "早饭后", "status": "active"},
+            {"id": "preset-2", "title": "已完成过的", "status": "done"},  # 模板侧异常态也应重置
+        ],
+    )
+    task = build_due_instance(tmpl, today)
+    assert task is not None
+    assert [s["title"] for s in task.subtasks] == ["早饭后", "已完成过的"]
+    assert all(s["id"] != "preset-1" and s["id"] != "preset-2" for s in task.subtasks)
+    assert all(s["status"] == "active" for s in task.subtasks)
+    # 禁共享引用：改实例子任务不影响模板预设
+    task.subtasks[0]["status"] = "done"
+    assert tmpl.subtasks[0]["status"] == "active"
