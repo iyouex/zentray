@@ -22,10 +22,9 @@ class SetupWizard(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("欢迎使用 ZenTray — 初始配置")
-        from zentray.ui.dialog_utils import fit_dialog, center_dialog, style_action_button
+        from zentray.ui.dialog_utils import apply_dialog_chrome, style_action_button
 
-        fit_dialog(self, preferred_w=640, preferred_h=420, min_w=520, min_h=320)
-        self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+        apply_dialog_chrome(self, width=640, height=420)
         self._style_btn = style_action_button
 
         from zentray.config import DATA_DIR, _PROJECT_ROOT
@@ -38,7 +37,6 @@ class SetupWizard(QDialog):
         self._config_data = {}
 
         self.init_ui()
-        center_dialog(self)
 
     def init_ui(self):
         layout = QVBoxLayout(self)
@@ -370,6 +368,8 @@ def should_show_wizard() -> bool:
 
 def show_setup_wizard(parent=None) -> bool:
     """显示配置向导，返回 True 表示用户完成配置"""
+    from zentray.ui.dialog_utils import run_modal_loop
+
     wizard = SetupWizard(parent)
-    return wizard.exec() == QDialog.Accepted
+    return run_modal_loop(wizard)
 

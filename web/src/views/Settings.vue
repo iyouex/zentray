@@ -392,6 +392,22 @@
                       <a-radio value="dark">深色</a-radio>
                     </a-radio-group>
                   </a-form-item>
+                  <a-form-item label="界面动效">
+                    <a-switch
+                      v-model="form.appearance.motion"
+                      checked-value="full"
+                      unchecked-value="off"
+                      checked-text="开"
+                      unchecked-text="关"
+                      @change="onAppearancePreview"
+                    />
+                  </a-form-item>
+                  <a-form-item label="形状风格">
+                    <a-radio-group v-model="form.appearance.shape" @change="onAppearancePreview">
+                      <a-radio value="round">圆润</a-radio>
+                      <a-radio value="crisp">利落</a-radio>
+                    </a-radio-group>
+                  </a-form-item>
                   <a-alert type="info">主题预览立即生效；点底部「保存设置」写入配置。</a-alert>
                 </a-form>
               </a-card>
@@ -495,7 +511,7 @@ import {
   saveSettings,
   setAutostart,
 } from '@/api/client'
-import { applyTheme } from '@/theme'
+import { applyAppearance, applyTheme } from '@/theme'
 import JobEditor from '@/components/JobEditor.vue'
 import NumberSpinner from '@/components/NumberSpinner.vue'
 
@@ -570,7 +586,7 @@ function emptyForm() {
       primary_list: [],
     },
     quick_add: { default_category: '工作', default_priority: 'medium' },
-    appearance: { theme: 'system', autostart: false },
+    appearance: { theme: 'system', autostart: false, motion: 'full', shape: 'round' },
   }
 }
 
@@ -705,6 +721,10 @@ function onThemePreview() {
   else applyTheme(mode)
 }
 
+function onAppearancePreview() {
+  applyAppearance(form.appearance)
+}
+
 async function loadSystemStatus() {
   try {
     const data = await getSystemStatus()
@@ -750,6 +770,7 @@ async function onExportBackup() {
   if (exportInclude.value.includes('env')) {
     const ok = await new Promise((resolve) => {
       Modal.confirm({
+        draggable: true,
         title: '包含密钥',
         content: '导出内容包含 .env（API Key 等）。请妥善保管备份文件，确认继续？',
         okText: '继续导出',
@@ -800,6 +821,7 @@ async function onImportBackup() {
   }
   const ok = await new Promise((resolve) => {
     Modal.confirm({
+      draggable: true,
       title: '确认导入（替换）',
       content:
         '将用备份覆盖本地对应数据，并先自动生成安全备份。导入后建议刷新任务或重启应用。是否继续？',
@@ -883,6 +905,8 @@ function normalizeLoaded(s) {
   ensureFixedChannels(form.notification)
   if (!form.appearance) form.appearance = { theme: 'system', autostart: false }
   if (form.appearance.autostart == null) form.appearance.autostart = false
+  if (form.appearance.motion == null) form.appearance.motion = 'full'
+  if (form.appearance.shape == null) form.appearance.shape = 'round'
   if (!form.categories) form.categories = emptyForm().categories
   if (!Array.isArray(form.categories.primary_list)) form.categories.primary_list = []
   // 括号强制成对
@@ -989,7 +1013,7 @@ onMounted(async () => {
   align-items: stretch;
 }
 .nav-main {
-  border-radius: 8px;
+  border-radius: var(--zt-radius-card);
   border: 1px solid var(--color-border-2);
   height: fit-content;
   max-height: 100%;

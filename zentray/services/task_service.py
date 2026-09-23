@@ -39,6 +39,12 @@ class TaskService:
         """获取所有任务"""
         return self.task_repo.find_all()
 
+    def list_archived(
+        self, status: Optional[str] = None, category: Optional[str] = None, days: int = 90
+    ) -> List[dict]:
+        """归档任务列表（历史视图）：完成/废弃记录，时间倒序。"""
+        return self.task_repo.list_archived(status=status, category=category, days=days)
+
     def get_current_task(self) -> Optional[Task]:
         """获取当前轮播焦点任务（始终为仓库中的原始任务，不含展示前缀）"""
         return self.scheduler.get_current()
@@ -103,6 +109,7 @@ class TaskService:
         clean.pop("periodicity", None)
         clean = self._normalize_category_fields(clean)
         clean = self._normalize_reminder_field(clean)
+        clean["subtasks"] = self._normalize_subtasks(clean.get("subtasks"))
         task = Task.from_dict(clean)
         tasks = self.task_repo.find_all()
         tasks.append(task)
@@ -175,6 +182,28 @@ class TaskService:
         self.template_repo.save_all(templates)
         return len(templates) < before
 
+    def skip_template(
+        self, template_id: str, count: int
+    ) -> Optional[PeriodicTemplate]:
+        """跳过接下来 count 个未派发周期（推进水位，不产生实例）。"""
+        tmpl = self.find_template(template_id)
+        if not tmpl:
+            return None
+        from zentray.core.periodic import skip_watermark_key
+
+        # 原地改水位（不走 _template_from_data，避免白名单重建丢字段），不触发派发
+        tmpl.last_generated_period = skip_watermark_key(
+            tmpl, datetime.date.today(), max(1, int(count))
+        )
+        templates = self.template_repo.find_all()
+        for i, t in enumerate(templates):
+            if t.template_id == template_id:
+                templates[i] = tmpl
+                break
+        self.template_repo.save_all(templates)
+        self._refresh_scheduler()
+        return tmpl
+
     def find_template(self, template_id: str) -> Optional[PeriodicTemplate]:
         for t in self.template_repo.find_all():
             if t.template_id == template_id:
@@ -201,6 +230,9 @@ class TaskService:
             task_data = {**task_data, "task_type": "one-time"}
         task_data = self._normalize_category_fields(task_data)
         task_data = self._normalize_reminder_field(task_data)
+        # 仅当显式传入 subtasks 才归一——Qt TaskDialog 等不带此键的调用靠 merge 保住存量
+        if "subtasks" in task_data:
+            task_data["subtasks"] = self._normalize_subtasks(task_data.get("subtasks"))
 
         tasks = self.task_repo.find_all()
         for i, t in enumerate(tasks):
@@ -296,43 +328,76 @@ class TaskService:
             except Exception:
                 pass
 
-    def update_progress(self, task_id: str, percent: int, note: str = "") -> Optional[Task]:
-        """更新任务进度百分比和日志（进度对齐到 10% 步进）。"""
-        # 仅允许 0/10/…/100，与托盘饼图资源、UI 拖拽一致
-        try:
-            pct = int(percent)
-        except (TypeError, ValueError):
-            pct = 0
-        pct = max(0, min(100, pct))
-        pct = int(round(pct / 10.0) * 10)
-        pct = max(0, min(100, pct))
+    def add_subtask(self, task_id: str, title: str) -> Optional[Task]:
+        """为任务追加一个子任务（status=active）。"""
+        title = (title or "").strip()
+        if not title:
+            return self.find_task(task_id)
+        sub = {"id": str(uuid.uuid4()), "title": title, "status": "active"}
+        found: dict = {}
 
-        tasks = self.task_repo.find_all()
-        for i, t in enumerate(tasks):
-            if t.id == task_id:
-                t.progress = pct
-                t.progress_logs.append({
-                    "time": datetime.datetime.now().isoformat(timespec="seconds"),
-                    "percent": t.progress,
-                    "note": note,
-                })
-                tasks[i] = t
-                self.task_repo.save_all(tasks)
-                self._refresh_scheduler()
-                try:
-                    from zentray.services.activity_log import log_event
+        def mutator(tasks: List[Task]) -> bool:
+            for t in tasks:
+                if t.id == task_id:
+                    t.subtasks = list(t.subtasks or []) + [sub]
+                    found["t"] = t
+                    return True
+            return False
 
-                    log_event(
-                        "task",
-                        "progress",
-                        t.title,
-                        f"进度→{pct}%" + (f" · {note}" if note else ""),
-                        meta={"id": task_id, "percent": pct},
-                    )
-                except Exception:
-                    pass
-                return t
-        return None
+        if not self.task_repo.mutate_all(mutator):
+            return None
+        self._refresh_scheduler()
+        return found["t"]
+
+    def set_subtask_status(
+        self, task_id: str, sub_id: str, status: str
+    ) -> Optional[tuple]:
+        """置子任务 done/abandoned。返回 (task, auto_completed)。
+
+        无活跃子任务时（subtasks 非空且全非 active）在同一把锁内完成判定+移除，
+        锁外归档 DONE——即 mark_done 的「归档+删除+刷新调度器」三效果。
+        """
+        if status not in ("done", "abandoned"):
+            return None
+        res: dict = {}
+
+        def mutator(tasks: List[Task]) -> bool:
+            for i, t in enumerate(tasks):
+                if t.id != task_id:
+                    continue
+                for s in t.subtasks or []:
+                    if s.get("id") == sub_id and s.get("status") == "active":
+                        s["status"] = status
+                        res["t"] = t
+                        if t.subtasks and all(
+                            x.get("status") != "active" for x in t.subtasks
+                        ):
+                            tasks.pop(i)  # 判定+移除原子（同锁内无插入窗口）
+                            res["auto"] = True
+                        return True
+                return False
+            return False
+
+        if not self.task_repo.mutate_all(mutator):
+            return None
+        if res.get("auto"):
+            self.task_repo.archive(res["t"], "DONE")
+            self._refresh_scheduler()
+            try:
+                from zentray.services.activity_log import log_event
+
+                log_event(
+                    "task",
+                    "done",
+                    res["t"].title,
+                    "子任务全部结束，自动完成",
+                    meta={"id": task_id},
+                )
+            except Exception:
+                pass
+        else:
+            self._refresh_scheduler()
+        return res["t"], bool(res.get("auto"))
 
     # ==========================================
     # 模板操作
@@ -365,41 +430,14 @@ class TaskService:
 
     def _spawn_template_instance_if_needed(self, tmpl: PeriodicTemplate) -> None:
         """若当前周期尚未派发，则创建实例任务。"""
-        from zentray.core.periodic import (
-            compute_instance_deadline,
-            period_display_prefix,
-            should_spawn,
-            spawn_key_after_create,
-        )
+        from zentray.core.periodic import build_due_instance
 
-        today = datetime.date.today()
-        if not should_spawn(tmpl, today):
+        new_task = build_due_instance(tmpl, datetime.date.today())
+        if new_task is None:
             return
-
-        prefix = period_display_prefix(
-            tmpl.periodicity, today, getattr(tmpl, "interval", 1) or 1
-        )
-        deadline = compute_instance_deadline(tmpl, today)
-        new_task = Task(
-            id=str(uuid.uuid4()),
-            title=f"【{prefix}】{tmpl.base_title}",
-            category=tmpl.category,
-            details=tmpl.details,
-            priority=tmpl.priority,
-            deadline=deadline or "",
-            task_type="periodic_instance",
-            template_id=tmpl.template_id,
-            category_primary_id=getattr(tmpl, "category_primary_id", None),
-            category_secondary_id=getattr(tmpl, "category_secondary_id", None),
-            reminder=getattr(tmpl, "reminder", None),
-            auto_abandon_on_overdue=bool(
-                getattr(tmpl, "auto_abandon_on_overdue", False)
-            ),
-        )
         tasks = self.task_repo.find_all()
         tasks.append(new_task)
         self.task_repo.save_all(tasks)
-        tmpl.last_generated_period = spawn_key_after_create(tmpl, today)
 
     def _template_from_data(self, data: dict) -> PeriodicTemplate:
         from zentray.core.reminder import TaskReminder
@@ -432,8 +470,10 @@ class TaskService:
             auto_abandon_on_overdue=bool(data.get("auto_abandon_on_overdue", False)),
             long_term=long_term,
             schedule_end_date=(data.get("schedule_end_date") or None) or None,
+            paused=bool(data.get("paused", False)),
             template_id=data.get("template_id") or str(uuid.uuid4()),
             last_generated_period=data.get("last_generated_period"),
+            subtasks=self._normalize_subtasks(data.get("subtasks")),
         )
 
     def _normalize_category_fields(self, data: dict) -> dict:
@@ -454,6 +494,27 @@ class TaskService:
         return data
 
     @staticmethod
+    def _normalize_subtasks(raw) -> List[dict]:
+        """[{id?, title, status?}] → [{id, title, status}]；无 id 补 uuid，非法 status 归 active，空 title 丢弃。"""
+        out: List[dict] = []
+        for s in raw or []:
+            if not isinstance(s, dict):
+                continue
+            title = str(s.get("title") or "").strip()
+            if not title:
+                continue
+            out.append(
+                {
+                    "id": s.get("id") or str(uuid.uuid4()),
+                    "title": title,
+                    "status": s.get("status")
+                    if s.get("status") in ("active", "done", "abandoned")
+                    else "active",
+                }
+            )
+        return out
+
+    @staticmethod
     def _normalize_reminder_field(data: dict) -> dict:
         from zentray.core.reminder import TaskReminder
 
@@ -464,6 +525,41 @@ class TaskService:
         if isinstance(rem, dict):
             data["reminder"] = TaskReminder.from_dict(rem)
         return data
+
+    def handle_reminder_action(
+        self, task_id: str, action: str, fire_key: str, snooze_minutes: int = 10
+    ) -> Optional[Task]:
+        """应用提醒弹窗的单卡操作：更新提醒状态；done 再完成任务。返回任务快照。"""
+        from zentray.core.reminder import apply_reminder_action
+
+        task = self.find_task(task_id)
+        if not task:
+            return None
+        try:
+            snooze_minutes = max(1, int(snooze_minutes))
+        except (TypeError, ValueError):
+            snooze_minutes = 10
+        rem = apply_reminder_action(
+            task, action, fire_key, snooze_minutes=snooze_minutes
+        )
+        self.update_task_reminder(task_id, rem)
+        if action == "snooze":
+            try:
+                from zentray.services.activity_log import log_event
+
+                log_event(
+                    "task",
+                    "delay",
+                    task.title,
+                    f"提醒延时 {snooze_minutes} 分钟",
+                    meta={"id": task_id, "snooze_minutes": snooze_minutes},
+                )
+            except Exception:
+                pass
+        if action == "done":
+            self.mark_done(task_id)
+            return task  # 已归档删除，返回快照
+        return self.find_task(task_id) or task
 
     def update_task_reminder(self, task_id: str, reminder) -> Optional[Task]:
         """更新任务提醒状态（如 last_fired / snooze）。"""

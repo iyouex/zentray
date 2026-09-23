@@ -55,16 +55,6 @@ class MenuBuilder:
 
         items = [
             {
-                "id": "progress",
-                "label": "📊 更新进度",
-                "enabled": task_exists and not is_pomodoro,
-            },
-            {
-                "id": "edit",
-                "label": "📝 编辑查看",
-                "enabled": task_exists and not is_pomodoro,
-            },
-            {
                 "id": "task_list",
                 "label": "📋 任务列表",
                 "enabled": not is_pomodoro,
@@ -72,16 +62,6 @@ class MenuBuilder:
         ]
 
         items.append("separator")
-        items.append({
-            "id": "new",
-            "label": "➕ 新建任务",
-            "enabled": not is_pomodoro,
-        })
-        items.append({
-            "id": "periodic_manage",
-            "label": "🔁 周期任务管理",
-            "enabled": not is_pomodoro,
-        })
 
         if is_pomodoro:
             items.append({

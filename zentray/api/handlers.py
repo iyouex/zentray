@@ -22,7 +22,14 @@ def _task_dict(task) -> dict:
 def _template_dict(tmpl) -> dict:
     if tmpl is None:
         return {}
-    return tmpl.to_dict() if hasattr(tmpl, "to_dict") else asdict(tmpl)
+    d = tmpl.to_dict() if hasattr(tmpl, "to_dict") else asdict(tmpl)
+    import datetime as _dt
+
+    from zentray.core.periodic import next_spawn_date
+
+    ns = next_spawn_date(tmpl, _dt.date.today())
+    d["next_spawn_date"] = ns.isoformat() if ns else None
+    return d
 
 
 class ApiContext:
@@ -78,6 +85,9 @@ def handle_request(
         if method == "GET" and path == "/api/tasks":
             return 200, {"items": [_task_dict(t) for t in _ctx.task_service.get_all_tasks()]}
 
+        if method == "GET" and path == "/api/tasks/archived":
+            return _archived_list(query)
+
         if method == "GET" and path.startswith("/api/tasks/"):
             tid = path[len("/api/tasks/") :]
             if "/" in tid:
@@ -108,13 +118,13 @@ def handle_request(
             _ctx.on_changed()
             return 200, {"item": _task_dict(task)}
 
-        if method == "POST" and path.startswith("/api/tasks/") and path.endswith("/progress"):
-            tid = path[len("/api/tasks/") : -len("/progress")]
-            percent = body.get("percent", 0)
-            note = body.get("note", "")
-            task = _ctx.task_service.update_progress(tid, percent, note)
-            _ctx.on_changed()
-            return 200, {"item": _task_dict(task)}
+        # 子任务/提醒等复合子路径：须在 /done /abandon /select 后缀分支之前
+        # （"/subtasks/{sid}/done" 同样 endswith "/done"），以 parts[1] 白名单门控放行普通后缀
+        if method == "POST" and path.startswith("/api/tasks/"):
+            rest = path[len("/api/tasks/") :]
+            parts = rest.split("/")
+            if len(parts) >= 2 and parts[1] in ("subtasks", "reminder-action"):
+                return _task_sub(method, rest, body)
 
         if method == "POST" and path.startswith("/api/tasks/") and path.endswith("/done"):
             tid = path[len("/api/tasks/") : -len("/done")]
@@ -163,6 +173,18 @@ def handle_request(
             ok = _ctx.task_service.delete_template(tid)
             _ctx.on_changed()
             return 200, {"ok": bool(ok)}
+
+        if method == "POST" and path.startswith("/api/templates/") and path.endswith("/skip"):
+            tid = path[len("/api/templates/") : -len("/skip")]
+            try:
+                count = int(body.get("count", 1))
+            except (TypeError, ValueError):
+                count = 1
+            tmpl = _ctx.task_service.skip_template(tid, max(1, min(52, count)))
+            if not tmpl:
+                return 404, {"error": "template not found"}
+            _ctx.on_changed()
+            return 200, {"item": _template_dict(tmpl)}
 
         if method == "GET" and path == "/api/settings":
             return 200, {"settings": _settings_dict()}
@@ -219,7 +241,46 @@ def handle_request(
 
 
 def _task_sub(method: str, rest: str, body: dict) -> tuple[int, dict]:
-    # rest like "id/progress"
+    """任务复合子路径：子任务操作。rest like "id/subtasks" 或 "id/subtasks/sid/done"。"""
+    ts = _ctx.task_service
+    parts = rest.split("/")
+    if method == "POST" and len(parts) == 2 and parts[1] == "reminder-action":
+        action = str(body.get("action") or "")
+        if action not in ("done", "snooze", "dismiss"):
+            return 400, {"error": "action 必须是 done|snooze|dismiss"}
+        try:
+            snooze = int(body.get("snooze_minutes") or 10)
+        except (TypeError, ValueError):
+            snooze = 10
+        task = ts.handle_reminder_action(
+            parts[0], action, str(body.get("fire_key") or ""), snooze
+        )
+        if task is None:
+            return 404, {"error": "task not found"}
+        _ctx.on_changed()
+        return 200, {"item": _task_dict(task)}
+    if method == "POST" and len(parts) == 2 and parts[1] == "subtasks":
+        title = str(body.get("title") or "").strip()
+        if not title:
+            return 400, {"error": "title 必填"}
+        task = ts.add_subtask(parts[0], title)
+        if not task:
+            return 404, {"error": "task not found"}
+        _ctx.on_changed()
+        return 200, {"item": _task_dict(task)}
+    if (
+        method == "POST"
+        and len(parts) == 4
+        and parts[1] == "subtasks"
+        and parts[3] in ("done", "abandon")
+    ):
+        status = "done" if parts[3] == "done" else "abandoned"
+        r = ts.set_subtask_status(parts[0], parts[2], status)
+        if r is None:
+            return 404, {"error": "task or subtask not found"}
+        task, auto = r
+        _ctx.on_changed()
+        return 200, {"item": _task_dict(task), "auto_completed": auto}
     return 404, {"error": f"bad path {rest}"}
 
 
@@ -308,6 +369,22 @@ def _save_settings(data: dict) -> None:
         apply_app_theme()
     except Exception:
         pass
+
+
+def _archived_list(query: dict) -> tuple[int, dict]:
+    """归档任务列表（历史视图）：解析 archive/*.log，支持状态/分类/天数筛选。"""
+    try:
+        days = int(query.get("days") or 90)
+    except (TypeError, ValueError):
+        days = 90
+    status = (query.get("status") or "all").strip() or "all"
+    category = (query.get("category") or "").strip()
+    items = _ctx.task_service.list_archived(
+        status=None if status == "all" else status,
+        category=category or None,
+        days=days,
+    )
+    return 200, {"items": items}
 
 
 def _history_list(query: dict) -> tuple[int, dict]:

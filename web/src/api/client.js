@@ -58,8 +58,21 @@ export async function updateTask(id, payload) {
   return data.item
 }
 
-export async function updateProgress(id, percent, note = '') {
-  const { data } = await http.post(`/api/tasks/${id}/progress`, { percent, note })
+/** 追加子任务 */
+export async function addSubtask(id, title) {
+  const { data } = await http.post(`/api/tasks/${id}/subtasks`, { title })
+  return data.item
+}
+
+/** 子任务置 done/abandoned；返回 { item, auto_completed } */
+export async function setSubtaskStatus(id, sid, action) {
+  const { data } = await http.post(`/api/tasks/${id}/subtasks/${sid}/${action}`)
+  return data
+}
+
+/** 提醒卡片动作：done / snooze / dismiss */
+export async function reminderAction(id, body) {
+  const { data } = await http.post(`/api/tasks/${id}/reminder-action`, body)
   return data.item
 }
 
@@ -80,6 +93,12 @@ export async function listTemplates() {
   return data.items || []
 }
 
+/** 历史任务：归档的已完成/废弃任务（时间倒序） */
+export async function listArchivedTasks({ status = 'all', category = '', days = 90 } = {}) {
+  const { data } = await http.get('/api/tasks/archived', { params: { status, category, days } })
+  return data.items || []
+}
+
 export async function getTemplate(id) {
   const { data } = await http.get(`/api/templates/${id}`)
   return data.item
@@ -97,6 +116,12 @@ export async function updateTemplate(id, payload) {
 
 export async function deleteTemplate(id) {
   await http.delete(`/api/templates/${id}`)
+}
+
+/** 周期模板：跳过接下来 count 次派发 */
+export async function skipTemplate(id, count = 1) {
+  const { data } = await http.post(`/api/templates/${id}/skip`, { count })
+  return data.item
 }
 
 export async function getSettings() {

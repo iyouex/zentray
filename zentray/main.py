@@ -11,6 +11,7 @@ if sys.platform.startswith("linux"):
     os.environ["QT_IM_MODULE"] = "ibus"
     os.environ.setdefault("XMODIFIERS", "@im=fcitx")
 
+from PySide6.QtCore import QObject
 from PySide6.QtWidgets import QApplication
 from zentray.dependencies import injector, init_tray_controller
 from zentray.core.repository import TaskRepository, PeriodicTemplateRepository
@@ -29,16 +30,52 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class AppRuntime:
-    """运行时持有可热启停的 worker。"""
+class AppRuntime(QObject):
+    """运行时持有可热启停的 worker。
+
+    worker 线程的信号必须连接到本类的 bound method：AutoConnection 会排队回主线程。
+    连接 lambda / 普通函数时 PySide6 走 direct，弹窗会在 worker 线程上创建，
+    导致输入事件错乱（下拉点击失效）甚至 QtWebEngine 线程断言崩溃。
+    """
 
     def __init__(self):
+        super().__init__()
         self.controller = None
         self.nightly = None
         self.reminder_worker = None
         self.watcher = None
         self.overlay = None
         self.hotkey = None
+        # 聚合提醒窗状态：模态打开期间新到期排队，关窗后统一处理
+        self.reminder_modal_open = False
+        self.reminder_queue: list = []
+
+    def on_quick_add(self) -> None:
+        from zentray.ui.vue_commands import try_vue_quick_add
+
+        if try_vue_quick_add(self.controller):
+            return
+        self.overlay.show_center()
+
+    def on_task_overdue(self, task) -> None:
+        if self.controller:
+            self.controller.renderer.show_notification(
+                "⏰ 任务逾期",
+                f"「{task.title}」已逾期，优先级已自动提升为 {task.priority.upper()}",
+            )
+
+    def on_reminder_due(self, batch: list) -> None:
+        _on_reminder_due(self, batch)
+
+    def shutdown(self) -> None:
+        """退出前停掉所有 worker，避免 QThread 在运行中被析构导致 abort。"""
+        for worker in (self.reminder_worker, self.watcher, self.nightly):
+            if worker is None:
+                continue
+            try:
+                worker.stop()
+            except Exception:
+                logger.exception("停止 worker 失败")
 
 
 def _start_nightly_if_needed(runtime: AppRuntime, task_repo: TaskRepository) -> None:
@@ -72,72 +109,73 @@ def _start_nightly_if_needed(runtime: AppRuntime, task_repo: TaskRepository) -> 
             logger.info("AI 计划/复盘 worker 已停止")
 
 
-def _on_reminder_due(runtime: AppRuntime, task, fire_key: str) -> None:
+def _on_reminder_due(runtime: AppRuntime, batch: list) -> None:
+    """聚合提醒：一轮到期 batch=[(task, fire_key), ...] 弹一窗。
+
+    Vue 路径逐卡动作由前端直调 POST /reminder-action 即时落库；
+    窗口关闭后对未处理卡（last_fired_key 未写的）统一 dismiss。
+    模态打开期间新到期排队（不顶窗——旧行为是后到 reject 前窗、先到被静默 dismiss）。
+    """
+    if runtime.reminder_modal_open:
+        runtime.reminder_queue.extend(batch)
+        return
+    runtime.reminder_modal_open = True
     try:
-        from zentray.ui.vue_commands import try_vue_reminder
-        from zentray.ui.vue_commands import try_vue_progress
-        from zentray.ui.web_host import use_vue_ui
+        from zentray.ui.vue_commands import try_vue_reminders
+        from zentray.ui.dialog_utils import run_modal_loop
 
-        action = "dismiss"
-        snooze_minutes = 10
-        handled, payload = try_vue_reminder(task, fire_key)
-        if handled and isinstance(payload, dict):
-            action = payload.get("action") or "dismiss"
-            try:
-                snooze_minutes = int(payload.get("snooze_minutes") or 10)
-            except (TypeError, ValueError):
-                snooze_minutes = 10
-        else:
-            dlg = ReminderDialog(task)
-            dlg.exec()
-            action = dlg.result_action
-            snooze_minutes = getattr(dlg, "snooze_minutes", 10) or 10
-
-        rem = apply_reminder_action(
-            task,
-            action,
-            fire_key,
-            snooze_minutes=snooze_minutes,
-        )
         task_service = injector.get(TaskService)
-        task_service.update_task_reminder(task.id, rem)
-
-        if action == "snooze":
-            try:
-                from zentray.services.activity_log import log_event
-
-                log_event(
-                    "task",
-                    "delay",
-                    getattr(task, "title", "") or "",
-                    f"提醒延时 {snooze_minutes} 分钟",
-                    meta={"id": getattr(task, "id", None), "snooze_minutes": snooze_minutes},
+        handled, _payload = try_vue_reminders(batch)
+        if not handled:
+            # Qt 回退：逐个顺序弹，本地应用动作
+            for task, fire_key in batch:
+                dlg = ReminderDialog(task)
+                run_modal_loop(dlg)
+                action = dlg.result_action
+                snooze = getattr(dlg, "snooze_minutes", 10) or 10
+                rem = apply_reminder_action(
+                    task, action, fire_key, snooze_minutes=snooze
                 )
-            except Exception:
-                pass
+                task_service.update_task_reminder(task.id, rem)
+                if action == "snooze":
+                    try:
+                        from zentray.services.activity_log import log_event
 
-        if action == "done":
-            task_service.mark_done(task.id)
-            if runtime.controller:
-                runtime.controller.update_display()
-        elif action == "update":
-            fresh = task_service.find_task(task.id) or task
-            if use_vue_ui() and runtime.controller:
-                try_vue_progress(runtime.controller, fresh)
-            else:
-                from zentray.ui.dialogs import ProgressDialog
-
-                progress = ProgressDialog(task=fresh)
-                if progress.exec():
-                    percent, note = progress.get_data()
-                    task_service.update_progress(task.id, percent, note)
-            if runtime.controller:
-                runtime.controller.update_display()
-        elif runtime.controller:
+                        log_event(
+                            "task",
+                            "delay",
+                            task.title,
+                            f"提醒延时 {snooze} 分钟",
+                            meta={"id": task.id, "snooze_minutes": snooze},
+                        )
+                    except Exception:
+                        pass
+                if action == "done":
+                    task_service.mark_done(task.id)
+        else:
+            # 未处理卡（本轮 fire_key 未写 last_fired_key）统一 dismiss；
+            # 已完成/已忽略/已稍后的卡状态不被覆盖（幂等）
+            for task, fire_key in batch:
+                fresh = task_service.find_task(task.id)
+                if not fresh or not fresh.reminder:
+                    continue
+                if fresh.reminder.last_fired_key == fire_key:
+                    continue
+                rem = apply_reminder_action(task, "dismiss", fire_key)
+                task_service.update_task_reminder(task.id, rem)
+        if runtime.controller:
             runtime.controller.update_display()
     finally:
+        runtime.reminder_modal_open = False
         if runtime.reminder_worker:
-            runtime.reminder_worker.clear_pending(task.id)
+            runtime.reminder_worker.clear_pending_batch(
+                [t.id for t, _ in batch]
+            )
+        # 关窗后处理打开期间排队的新到期
+        if runtime.reminder_queue:
+            queued = runtime.reminder_queue
+            runtime.reminder_queue = []
+            _on_reminder_due(runtime, queued)
 
 
 def main():
@@ -252,13 +290,15 @@ def main():
         logger.exception("Vue API 初始化失败，将使用原生对话框")
 
     def _on_activate_existing():
-        """再次点击桌面图标：不弹窗，仅刷新顶栏轮播。"""
+        """再次点击桌面图标：唤醒顶栏显示并打开任务列表界面。"""
         try:
             if runtime.controller:
-                # 确保轮播定时器在跑，并立刻刷新顶栏标题
                 runtime.controller.start_rotation()
                 runtime.controller.update_display(update_menu=True)
-                logger.info("二次点击：已刷新顶栏显示（无弹窗）")
+                from zentray.ui.commands import TaskListCommand
+
+                TaskListCommand().execute(runtime.controller)
+                logger.info("二次点击：已唤醒前台并打开任务列表界面")
         except Exception:
             logger.exception("激活已有实例时出错")
 
@@ -282,15 +322,8 @@ def main():
     runtime.overlay = QuickAddOverlay(task_service=task_service)
     runtime.overlay.task_added.connect(runtime.controller.reload_data)
 
-    def _on_quick_add():
-        from zentray.ui.vue_commands import try_vue_quick_add
-
-        if try_vue_quick_add(runtime.controller):
-            return
-        runtime.overlay.show_center()
-
     runtime.hotkey = HotkeyListener(HOTKEY_QUICK_ADD)
-    runtime.hotkey.triggered.connect(_on_quick_add)
+    runtime.hotkey.triggered.connect(runtime.on_quick_add)
     if not runtime.hotkey.start():
         logger.warning("全局热键不可用（权限/Wayland？），仍可通过托盘菜单新建任务")
 
@@ -298,26 +331,20 @@ def main():
     template_repo = injector.get(PeriodicTemplateRepository)
     runtime.watcher = WatcherWorker(task_repo, template_repo)
     runtime.watcher.tasks_updated.connect(runtime.controller.reload_data)
-    runtime.watcher.task_overdue.connect(
-        lambda task: runtime.controller.renderer.show_notification(
-            "⏰ 任务逾期",
-            f"「{task.title}」已逾期，优先级已自动提升为 {task.priority.upper()}",
-        )
-    )
+    runtime.watcher.task_overdue.connect(runtime.on_task_overdue)
     runtime.watcher.start()
 
     _start_nightly_if_needed(runtime, task_repo)
 
     runtime.reminder_worker = ReminderWorker(task_repo)
-    runtime.reminder_worker.reminder_due.connect(
-        lambda task, key: _on_reminder_due(runtime, task, key)
-    )
+    runtime.reminder_worker.reminder_due.connect(runtime.on_reminder_due)
     runtime.reminder_worker.start()
 
     if warnings:
         for w in warnings:
             logger.warning("配置提示: %s", w)
 
+    app.aboutToQuit.connect(runtime.shutdown)
     sys.exit(app.exec())
 
 

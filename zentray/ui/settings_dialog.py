@@ -57,11 +57,10 @@ class SettingsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("ZenTray 设置")
-        from zentray.ui.dialog_utils import fit_dialog, center_dialog, style_action_button
+        from zentray.ui.dialog_utils import apply_dialog_chrome, style_action_button
 
         self._style_action_button = style_action_button
-        fit_dialog(self, preferred_w=900, preferred_h=560, min_w=DIALOG_MIN_W, min_h=DIALOG_MIN_H)
-        self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+        apply_dialog_chrome(self, width=900, height=560)
 
         self._manager = SettingsManager()
         self._settings = self._manager.get_all()
@@ -72,7 +71,6 @@ class SettingsDialog(QDialog):
 
         self.init_ui()
         self._load_values()
-        center_dialog(self)
 
     # ==========================================
     # UI 构建

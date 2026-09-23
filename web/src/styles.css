@@ -1,24 +1,102 @@
+/* ZenTray Global Design System Styles & Theme Tokens */
+
+/* ================= 令牌可补间注册（GSAP 主题/形状流动，spec §3.4） =================
+   只注册跨主题会变值的令牌（success/warning/danger 四主题同值，不注册）。 */
+@property --color-bg-base { syntax: '<color>'; inherits: true; initial-value: #0f172a; }
+@property --color-surface { syntax: '<color>'; inherits: true; initial-value: #1e293b; }
+@property --color-surface-hover { syntax: '<color>'; inherits: true; initial-value: rgba(255, 255, 255, 0.04); }
+@property --color-border { syntax: '<color>'; inherits: true; initial-value: #334155; }
+@property --color-primary { syntax: '<color>'; inherits: true; initial-value: #0d9488; }
+@property --color-primary-hover { syntax: '<color>'; inherits: true; initial-value: #14b8a6; }
+@property --color-primary-glow { syntax: '<color>'; inherits: true; initial-value: rgba(20, 184, 166, 0.25); }
+@property --color-text-primary { syntax: '<color>'; inherits: true; initial-value: #f8fafc; }
+@property --color-text-muted { syntax: '<color>'; inherits: true; initial-value: #94a3b8; }
+@property --color-text-subdued { syntax: '<color>'; inherits: true; initial-value: #64748b; }
+@property --zt-radius-card { syntax: '<length>'; inherits: true; initial-value: 16px; }
+@property --zt-radius-md { syntax: '<length>'; inherits: true; initial-value: 12px; }
+
+:root {
+  /* Default ZenSlate Dark */
+  --color-bg-base: #0f172a;
+  --color-surface: #1e293b;
+  --color-surface-hover: rgba(255, 255, 255, 0.04);
+  --color-border: #334155;
+  --color-primary: #0d9488;
+  --color-primary-hover: #14b8a6;
+  --color-primary-glow: rgba(20, 184, 166, 0.25);
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+  --color-text-primary: #f8fafc;
+  --color-text-muted: #94a3b8;
+  --color-text-subdued: #64748b;
+  --task-card-height: 48px;
+}
+
+body.theme-slate-dark,
+body.theme-dark {
+  --color-bg-base: #0f172a;
+  --color-surface: #1e293b;
+  --color-surface-hover: rgba(255, 255, 255, 0.05);
+  --color-border: #334155;
+  --color-primary: #0d9488;
+  --color-primary-hover: #14b8a6;
+  --color-primary-glow: rgba(20, 184, 166, 0.25);
+  --color-text-primary: #f8fafc;
+  --color-text-muted: #94a3b8;
+  --color-text-subdued: #64748b;
+  background: var(--color-bg-base);
+  color: var(--color-text-primary);
+}
+
+body.theme-oled-dark {
+  --color-bg-base: #000000;
+  --color-surface: #121212;
+  --color-surface-hover: rgba(255, 255, 255, 0.07);
+  --color-border: #262626;
+  --color-primary: #10b981;
+  --color-primary-hover: #34d399;
+  --color-primary-glow: rgba(16, 185, 129, 0.3);
+  --color-text-primary: #ffffff;
+  --color-text-muted: #a3a3a3;
+  --color-text-subdued: #737373;
+  background: var(--color-bg-base);
+  color: var(--color-text-primary);
+}
+
+body.theme-light {
+  --color-bg-base: #f8fafc;
+  --color-surface: #ffffff;
+  --color-surface-hover: rgba(0, 0, 0, 0.025);
+  --color-border: #e2e8f0;
+  --color-primary: #0d9488;
+  --color-primary-hover: #0f766e;
+  --color-primary-glow: rgba(13, 148, 136, 0.15);
+  --color-text-primary: #0f172a;
+  --color-text-muted: #475569;
+  --color-text-subdued: #94a3b8;
+  background: var(--color-bg-base);
+  color: var(--color-text-primary);
+}
+
 html,
 body,
 #app {
   margin: 0;
   padding: 0;
   height: 100%;
-  font-family: 'Inter', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* 与原 light.qss / dark.qss 语义对齐的页面底色 */
-body.theme-light,
-body:not(.theme-dark) {
-  background: #f7f8fa;
-  color: #1d2129;
+/* 键盘焦点可视为规范 */
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
-body.theme-dark {
-  background: #17171a;
-  color: #f2f3f5;
-}
-
+/* 通用页面容器 */
 .page {
   box-sizing: border-box;
   min-height: 100%;
@@ -28,6 +106,7 @@ body.theme-dark {
   flex-direction: column;
 }
 
+/* 顶部拖拽栏与标题 */
 .page-header {
   display: flex;
   align-items: center;
@@ -35,12 +114,23 @@ body.theme-dark {
   gap: 12px;
   margin-bottom: 12px;
   flex-shrink: 0;
+  cursor: grab;
+}
+
+.page-header:active {
+  cursor: grabbing;
+}
+
+.page-header :is(button, a, .arco-btn, input, .arco-input-wrapper) {
+  cursor: pointer;
 }
 
 .page-header h2 {
   margin: 0;
   font-size: 18px;
   font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--color-text-primary);
 }
 
 .page-body {
@@ -48,6 +138,7 @@ body.theme-dark {
   min-height: 0;
   overflow: auto;
   padding-bottom: 8px;
+  content-visibility: auto;
 }
 
 .page-footer {
@@ -58,12 +149,8 @@ body.theme-dark {
   flex-shrink: 0;
   margin: 0;
   padding: 12px 0 16px;
-  border-top: 1px solid var(--color-border-2, #e5e6eb);
+  border-top: 1px solid var(--color-border);
   background: inherit;
-}
-
-body.theme-dark .page-footer {
-  border-top-color: #333;
 }
 
 .two-col {
@@ -72,13 +159,115 @@ body.theme-dark .page-footer {
   gap: 16px;
 }
 
+/* 任务列表页：固定高度双卡、卡内滚动（chips 留顶部） */
+.page-body--cols {
+  display: flex;
+  overflow: hidden;
+}
+.page-body--cols .two-col {
+  flex: 1;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr);
+}
+.page-body--cols .arco-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.page-body--cols .arco-card .arco-card-body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.page-body--cols .col-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+/* 周期实例小徽标 */
+.zt-tag-periodic {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: var(--zt-radius-pill);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
 @media (max-width: 720px) {
   .two-col {
     grid-template-columns: 1fr;
   }
 }
 
-/* 闪电添加：透明宿主上的浮层 */
+/* 48px 舒缓型 Task Card 架构（spec §3：圆角16 + 分类色呼吸条） */
+.task-card-item {
+  position: relative;
+  min-height: var(--task-card-height);
+  box-sizing: border-box;
+  padding: 8px 14px 8px 18px;
+  margin-bottom: 8px;
+  border-radius: var(--zt-radius-card, 16px);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  box-shadow: var(--zt-shadow-card);
+  transition: transform var(--zt-dur-fast) var(--zt-ease-out),
+    box-shadow var(--zt-dur-fast) ease, background 0.2s ease;
+}
+
+.task-card-item:hover {
+  background: var(--color-surface-hover);
+  transform: translateY(-3px);
+  box-shadow: var(--zt-shadow-card-hover);
+}
+
+/* 分类色呼吸条：默认内缩 12px，hover 各伸展 4px（逾期红优先由 --cat-color 控制） */
+.task-card-item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 12px;
+  bottom: 12px;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--cat-color, var(--color-border));
+  transition: top var(--zt-dur-fast) var(--zt-ease-out),
+    bottom var(--zt-dur-fast) var(--zt-ease-out);
+}
+
+.task-card-item:hover::before {
+  top: 8px;
+  bottom: 8px;
+}
+
+/* SVG 完成图标波形弹跳动画 */
+@keyframes check-bounce {
+  0% {
+    transform: scale(0.8);
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.icon-check-animated {
+  animation: check-bounce 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  color: var(--color-success);
+}
+
+/* 闪电快捷添加框 */
 .quick-add-page {
   min-height: 100%;
   display: flex;
@@ -86,23 +275,29 @@ body.theme-dark .page-footer {
   justify-content: center;
   padding: 12px;
   background: transparent;
+  cursor: grab;
 }
 
 .quick-add-box {
   width: min(640px, 100%);
-  border-radius: 14px;
+  border-radius: var(--zt-radius-pill);
   padding: 4px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  transition: border-color var(--zt-dur-fast) ease,
+    box-shadow var(--zt-dur-fast) ease;
 }
 
-body.theme-dark .quick-add-box {
-  background: rgba(40, 40, 44, 0.96);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+/* 聚焦 teal 描边点亮（spec §3 快速添加） */
+.quick-add-box:focus-within {
+  border-color: var(--color-primary);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45),
+    0 0 0 1.5px var(--color-primary-glow);
 }
 
-body.theme-light .quick-add-box {
-  background: rgba(255, 255, 255, 0.98);
-  border: 1px solid rgba(0, 0, 0, 0.08);
+body.zt-shape-crisp .quick-add-box {
+  border-radius: var(--zt-radius-md);
 }
 
 .quick-add-box .arco-input-wrapper {
@@ -111,4 +306,313 @@ body.theme-light .quick-add-box {
   font-size: 18px;
   font-weight: 600;
   padding: 12px 16px;
+}
+
+/* ================= 设计令牌（spec §2） ================= */
+:root {
+  --zt-radius-win: 22px;
+  --zt-radius-card: 16px;
+  --zt-radius-md: 12px;
+  --zt-radius-pill: 999px;
+  --zt-shadow-card: 0 4px 14px rgba(0, 0, 0, 0.25);
+  --zt-shadow-card-hover: 0 10px 26px rgba(0, 0, 0, 0.4);
+  --zt-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --zt-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --zt-dur-fast: 180ms;
+  --zt-dur-dialog: 280ms;
+  --zt-dur-off: 140ms;
+  /* 优先级/紧迫度 */
+  --zt-pri-high: #f87171;
+  --zt-pri-mid: #fb923c;
+  --zt-pri-low: #94a3b8;
+  --zt-due-soon: #fbbf24;
+  --zt-due-late: #f87171;
+}
+
+/* 形状两档：利落（spec §5 shape=crisp） */
+body.zt-shape-crisp {
+  --zt-radius-win: 12px;
+  --zt-radius-card: 8px;
+  --zt-radius-md: 6px;
+}
+
+/* 浅色主题投影减半（spec §2） */
+body.theme-light {
+  --zt-shadow-card: 0 4px 14px rgba(15, 23, 42, 0.12);
+  --zt-shadow-card-hover: 0 10px 26px rgba(15, 23, 42, 0.2);
+}
+
+/* ================= Arco 接线层（spec §6 2026-09-11 修订） ================= */
+body {
+  --border-radius-small: 8px;
+  --border-radius-medium: 12px;
+  --border-radius-large: 16px;
+}
+
+body.zt-shape-crisp {
+  --border-radius-small: 4px;
+  --border-radius-medium: 6px;
+  --border-radius-large: 8px;
+}
+
+/* 大表面接线：Arco 不消费 radius 变量的部分直接接 zt 令牌 */
+.arco-card {
+  border-radius: var(--zt-radius-card);
+}
+
+.arco-tag {
+  border-radius: var(--zt-radius-pill);
+}
+
+/* 按钮：圆润=胶囊、利落=小圆角（spec §6 修订，形状档在按钮上可见） */
+.arco-btn {
+  border-radius: var(--zt-radius-pill);
+}
+
+body.zt-shape-crisp .arco-btn {
+  border-radius: var(--zt-radius-md);
+}
+
+.arco-message {
+  border-radius: var(--zt-radius-pill);
+}
+
+/* 空状态图标区圆角化（spec §3） */
+.arco-empty .arco-empty-image {
+  border-radius: var(--zt-radius-md);
+}
+
+/* 主按钮 hover 弹性放大（spec §3 / §1 支柱 3）。transition 在 Arco 默认
+   `all 0.1s cubic-bezier(0,0,1,1)` 基础上扩展追加 transform 弹性档，
+   不整体替换以免丢失 Arco 的颜色过渡；同特异度后置导入胜出 */
+.arco-btn-primary {
+  transition: all 0.1s cubic-bezier(0, 0, 1, 1),
+    transform var(--zt-dur-fast) var(--zt-ease-spring);
+}
+
+.arco-btn-primary:hover {
+  transform: scale(1.05);
+}
+
+/* 表格行 hover（spec §3） */
+.arco-table-tr .arco-table-td {
+  transition: background-color var(--zt-dur-fast) ease;
+}
+
+.arco-table-tr:not(.arco-table-tr-empty):hover .arco-table-td {
+  background-color: var(--color-surface-hover);
+}
+
+/* 表单控件 teal 聚焦亮环（spec §3；error 红描边沿用 Arco 内置） */
+.arco-input-wrapper:focus-within,
+.arco-textarea-wrapper:focus-within {
+  border-color: var(--color-primary-hover);
+  box-shadow: 0 0 0 1.5px var(--color-primary-glow);
+}
+
+/* 滚动条：8px 圆角细条（spec §3） */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-subdued);
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 主题切换：仅背景过渡，防意外动画（spec §4） */
+body {
+  transition: background-color 200ms ease;
+}
+
+/* ================= 优先级 chip / 紧迫度（spec §2） ================= */
+.zt-pri {
+  font-size: 10px;
+  line-height: 1.5;
+  padding: 1px 7px;
+  border-radius: var(--zt-radius-pill);
+  flex: none;
+}
+
+.zt-pri-h { background: color-mix(in srgb, var(--zt-pri-high) 16%, transparent); color: var(--zt-pri-high); }
+.zt-pri-m { background: color-mix(in srgb, var(--zt-pri-mid) 16%, transparent); color: var(--zt-pri-mid); }
+.zt-pri-l { background: color-mix(in srgb, var(--zt-pri-low) 16%, transparent); color: var(--zt-pri-low); }
+
+.zt-dl-late { color: var(--zt-due-late); font-weight: 600; }
+.zt-dl-soon { color: var(--zt-due-soon); }
+
+/* ================= 列表增删（spec §4） ================= */
+.zt-list-enter-active {
+  transition: opacity var(--zt-dur-fast) var(--zt-ease-out),
+    transform var(--zt-dur-fast) var(--zt-ease-out);
+}
+
+.zt-list-leave-active {
+  transition: opacity var(--zt-dur-off) ease, transform var(--zt-dur-off) ease;
+  position: absolute;
+  width: 100%;
+}
+
+.zt-list-move {
+  transition: transform var(--zt-dur-fast) var(--zt-ease-out);
+}
+
+.zt-list-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.zt-list-leave-to {
+  opacity: 0;
+  transform: translateY(4px);
+}
+
+/* ================= 动效降级（spec §6 修订：off = 彻底关闭） ================= */
+body.zt-motion-off *,
+body.zt-motion-off *::before,
+body.zt-motion-off *::after {
+  transition-duration: 0s !important;
+  animation: none !important;
+}
+
+/* 载入指示器是功能反馈而非装饰动效，豁免（spec §3 a-spin 取主题主色） */
+body.zt-motion-off .arco-icon-loading,
+body.zt-motion-off .arco-icon-spin {
+  animation: arco-loading-circle 1s infinite cubic-bezier(0, 0, 1, 1) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 140ms !important;
+    animation-duration: 140ms !important;
+  }
+
+  /* 载入圈是功能指示器，与 motion-off 豁免对称：压过 * 的 140ms 限速，防 7 转/秒闪烁 */
+  .arco-icon-loading,
+  .arco-icon-spin {
+    animation-duration: 1s !important;
+  }
+
+  .zt-list-enter-from,
+  .zt-list-leave-to,
+  .task-card-item:hover,
+  .arco-btn-primary:hover {
+    transform: none;
+  }
+
+  .icon-check-animated {
+    animation: none;
+  }
+}
+
+/* ================= 弹层 dg-a 源点生长（spec §4） ================= */
+@keyframes zt-dlg-in {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+}
+
+@keyframes zt-mask-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.arco-modal,
+.arco-drawer {
+  transform-origin: 50% 100%;
+  animation: zt-dlg-in var(--zt-dur-dialog) var(--zt-ease-spring);
+}
+
+.arco-modal-mask,
+.arco-drawer-mask {
+  background-color: rgba(2, 6, 23, 0.45);
+  backdrop-filter: blur(2px);
+  animation: zt-mask-in var(--zt-dur-dialog) ease;
+}
+
+/* 退出：140ms 反向无回弹。Arco 实际结构：zoom-modal-* 挂面板、fade-modal-* 挂遮罩 */
+.fade-modal-leave-active,
+.fade-drawer-leave-active {
+  transition-duration: var(--zt-dur-off) !important;
+  transition-timing-function: ease !important;
+}
+
+.zoom-modal-enter-active {
+  transition: none !important; /* 入场交给 zt-dlg-in keyframe，避免与 Arco 400ms zoom 竞速回落 */
+}
+
+.zoom-modal-leave-active {
+  transition: transform var(--zt-dur-off) ease, opacity var(--zt-dur-off) ease !important;
+}
+
+.zoom-modal-leave-to {
+  transform: scale(0.88);
+  opacity: 0;
+}
+
+.slide-left-drawer-leave-active,
+.slide-right-drawer-leave-active,
+.slide-top-drawer-leave-active,
+.slide-bottom-drawer-leave-active {
+  transition-duration: var(--zt-dur-off) !important;
+  transition-timing-function: ease !important;
+}
+
+/* 遮罩入场交给 zt-mask-in keyframe，关掉 Arco 400ms 淡入竞速 */
+.fade-modal-enter-active,
+.fade-drawer-enter-active {
+  transition: none !important;
+}
+
+/* 下拉/气泡小面板：自触发侧生长（动画只挂在内容层，不碰 Arco 定位用的 transform） */
+.arco-dropdown,
+.arco-popover {
+  animation: zt-dlg-in var(--zt-dur-fast) var(--zt-ease-spring);
+}
+
+/* Message 顶部滑入淡入（spec §3） */
+.fade-message-enter-active {
+  transition: opacity var(--zt-dur-fast) var(--zt-ease-out),
+    transform var(--zt-dur-fast) var(--zt-ease-out);
+}
+
+.fade-message-enter-from {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+
+.fade-message-leave-active {
+  transition: opacity var(--zt-dur-off) ease;
+}
+
+.fade-message-leave-to {
+  opacity: 0;
+}
+
+/* ================= reduced-motion：入场动画降级为纯淡入（spec §4） ================= */
+@media (prefers-reduced-motion: reduce) {
+  @keyframes zt-dlg-in {
+    from {
+      opacity: 0;
+    }
+  }
+
+  /* Message 入场 reduce 下只淡入不滑 8px。base 规则 .fade-message-enter-from
+     定义在上方 :534、晚于前一个 media 块，须后置同特异度才能覆盖 */
+  .fade-message-enter-from {
+    transform: none;
+  }
 }

@@ -13,7 +13,6 @@
         <a-space wrap>
           <a-button type="primary" @click="$router.push('/tasks')">任务列表</a-button>
           <a-button @click="$router.push('/tasks/new')">新建任务</a-button>
-          <a-button @click="$router.push('/periodic')">周期任务</a-button>
           <a-button @click="$router.push('/settings')">设置</a-button>
         </a-space>
       </template>

@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import datetime
 
-from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QDialog,
     QHBoxLayout,
@@ -14,19 +13,8 @@ from PySide6.QtWidgets import (
 
 from zentray.core.models import Task
 from zentray.core.reminder import TaskReminder
-from zentray.ui.dialog_utils import center_dialog, fit_dialog, style_action_button
-
-
 class ReminderDialog(QDialog):
-    """
-    提醒弹窗（横版按钮区，避免竖向挤占与文字截断）。
-
-    result_action:
-      - "update"  打开状态更新
-      - "done"    完成任务
-      - "snooze"  贪睡（默认 10 分钟）
-      - "dismiss" 关闭本次
-    """
+    """提醒弹窗"""
 
     def __init__(self, task: Task, parent=None):
         super().__init__(parent)
@@ -34,13 +22,10 @@ class ReminderDialog(QDialog):
         self.result_action = "dismiss"
         self.snooze_minutes = 10
 
+        from zentray.ui.dialog_utils import apply_dialog_chrome, style_action_button
+
         self.setWindowTitle("⏰ 任务提醒")
-        fit_dialog(self, preferred_w=560, preferred_h=220, min_w=480, min_h=180)
-        self.setWindowFlags(
-            self.windowFlags()
-            | Qt.WindowStaysOnTopHint
-            | Qt.Dialog
-        )
+        apply_dialog_chrome(self, width=560, height=220, stay_on_top=True)
         self.setModal(True)
 
         layout = QVBoxLayout(self)
@@ -53,8 +38,7 @@ class ReminderDialog(QDialog):
         layout.addWidget(title)
 
         meta = QLabel(
-            f"分类: {task.category}　优先级: {task.priority}　"
-            f"进度: {getattr(task, 'progress', 0)}%"
+            f"分类: {task.category}　优先级: {task.priority}"
         )
         meta.setStyleSheet("color: #666;")
         meta.setWordWrap(True)
@@ -69,43 +53,24 @@ class ReminderDialog(QDialog):
         hint.setStyleSheet("margin-top: 4px;")
         layout.addWidget(hint)
 
-        # 单行横排四个操作，保证文字完整
+        # 单行横排操作，保证文字完整
         row = QHBoxLayout()
         row.setSpacing(10)
-        btn_update = style_action_button(QPushButton("📊 更新状态"), min_w=110)
-        btn_update.clicked.connect(lambda: self._finish("update"))
         btn_done = style_action_button(QPushButton("✅ 完成"), min_w=88)
         btn_done.clicked.connect(lambda: self._finish("done"))
         btn_snooze = style_action_button(QPushButton("😴 忽略 10 分钟"), min_w=130)
         btn_snooze.clicked.connect(lambda: self._finish("snooze"))
         btn_dismiss = style_action_button(QPushButton("关闭本次"), min_w=96)
         btn_dismiss.clicked.connect(lambda: self._finish("dismiss"))
-        row.addWidget(btn_update)
         row.addWidget(btn_done)
         row.addWidget(btn_snooze)
         row.addWidget(btn_dismiss)
         layout.addLayout(row)
-
-        center_dialog(self)
 
     def _finish(self, action: str) -> None:
         self.result_action = action
         self.accept()
 
 
-def apply_reminder_action(
-    task: Task,
-    action: str,
-    fire_key: str,
-    *,
-    snooze_minutes: int = 10,
-) -> TaskReminder:
-    """根据弹窗操作返回更新后的 TaskReminder。"""
-    rem = task.reminder or TaskReminder(enabled=True)
-    rem.last_fired_key = fire_key
-    if action == "snooze":
-        until = datetime.datetime.now() + datetime.timedelta(minutes=snooze_minutes)
-        rem.snooze_until = until.isoformat(timespec="seconds")
-    else:
-        rem.snooze_until = None
-    return rem
+# 领域逻辑已移至 core/reminder.py，保留转发以兼容既有 import
+from zentray.core.reminder import apply_reminder_action  # noqa: E402,F401

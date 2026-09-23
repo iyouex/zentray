@@ -62,3 +62,6 @@ web/node_modules/
 # Windows guest build venv
 venv_win/
 dist/releases/win_build.*
+
+# superpowers 本地会话产物
+.superpowers/

@@ -3,10 +3,15 @@ import datetime
 
 from zentray.core.models import PeriodicTemplate
 from zentray.core.periodic import (
+    advance_period_key,
+    build_due_instance,
     compute_instance_deadline,
     is_schedule_active,
+    next_spawn_date,
+    parse_period_key,
     period_key,
     should_spawn,
+    skip_watermark_key,
 )
 
 
@@ -74,3 +79,139 @@ def test_monthly_deadline():
         deadline_day_of_month=25,
     )
     assert compute_instance_deadline(tmpl, today) == "2026-07-25"
+
+
+# ---- v3.10 暂停 / 跳过 / 有序水位 ----
+
+
+def test_parse_period_key():
+    assert parse_period_key("D739012") == ("daily", 739012)
+    assert parse_period_key("W107381") == ("weekly", 107381)
+    assert parse_period_key("M202603x2") == ("monthly", (2026 * 12 + 2) // 2)
+    assert parse_period_key("") is None
+    assert parse_period_key(None) is None
+    assert parse_period_key("X1") is None
+    assert parse_period_key("M202603") is None  # monthly 缺 x{n} 后缀
+
+
+def test_should_spawn_paused():
+    today = datetime.date(2026, 9, 22)
+    tmpl = PeriodicTemplate(base_title="暂停中", category="工作", periodicity="daily")
+    tmpl.paused = True
+    assert not should_spawn(tmpl, today)
+    tmpl.last_generated_period = None
+    assert not should_spawn(tmpl, today)  # 从未派发也压不住 paused
+
+
+def test_should_spawn_ordered_watermark():
+    today = datetime.date(2026, 9, 22)
+    tmpl = PeriodicTemplate(base_title="跳过", category="工作", periodicity="daily")
+    # 水位领先（跳过中）→ 不派发
+    tmpl.last_generated_period = period_key("daily", today + datetime.timedelta(days=3), 1)
+    assert not should_spawn(tmpl, today)
+    # 水位落后多桶 → 派发（当前桶补一次）
+    tmpl.last_generated_period = period_key("daily", today - datetime.timedelta(days=5), 1)
+    assert should_spawn(tmpl, today)
+    # 前缀不一致（改过 periodicity）→ 与历史 != 行为一致，派发
+    tmpl.last_generated_period = period_key("daily", today, 1)
+    tmpl.periodicity = "weekly"
+    assert should_spawn(tmpl, today)
+
+
+def test_skip_watermark_key_spawned_today():
+    """当前桶已派发：跳 N 次 = 压制接下来 N 个桶。"""
+    today = datetime.date(2026, 9, 22)
+    tmpl = PeriodicTemplate(base_title="日报", category="工作", periodicity="daily")
+    tmpl.last_generated_period = period_key("daily", today, 1)
+    tmpl.last_generated_period = skip_watermark_key(tmpl, today, 2)
+    assert not should_spawn(tmpl, today + datetime.timedelta(days=1))
+    assert not should_spawn(tmpl, today + datetime.timedelta(days=2))
+    assert should_spawn(tmpl, today + datetime.timedelta(days=3))
+
+
+def test_skip_watermark_key_pending_today():
+    """当前桶未派发：跳 N 次 = 含今天共 N 个桶。"""
+    today = datetime.date(2026, 9, 22)
+    tmpl = PeriodicTemplate(base_title="待派", category="工作", periodicity="daily")
+    tmpl.last_generated_period = period_key("daily", today - datetime.timedelta(days=1), 1)
+    tmpl.last_generated_period = skip_watermark_key(tmpl, today, 1)
+    assert not should_spawn(tmpl, today)
+    assert should_spawn(tmpl, today + datetime.timedelta(days=1))
+
+
+def test_advance_period_key_weekly_interval():
+    today = datetime.date(2026, 9, 22)  # Tuesday
+    tmpl = PeriodicTemplate(base_title="双周", category="工作", periodicity="weekly", interval=2)
+    tmpl.last_generated_period = advance_period_key("weekly", today, 2, 1)
+    assert not should_spawn(tmpl, today + datetime.timedelta(weeks=2))  # 水位桶内
+    assert should_spawn(tmpl, today + datetime.timedelta(weeks=4))  # 下一桶
+
+
+def test_next_spawn_date():
+    today = datetime.date(2026, 9, 22)  # Tuesday
+    # 已派发今天的 daily → 明天
+    tmpl = PeriodicTemplate(base_title="日", category="工作", periodicity="daily")
+    tmpl.last_generated_period = period_key("daily", today, 1)
+    assert next_spawn_date(tmpl, today) == today + datetime.timedelta(days=1)
+    # 暂停 → None
+    tmpl.paused = True
+    assert next_spawn_date(tmpl, today) is None
+    tmpl.paused = False
+    # 过期 → None
+    tmpl.long_term = False
+    tmpl.schedule_end_date = "2026-09-20"
+    assert next_spawn_date(tmpl, today) is None
+    # 今天待派 → 今天
+    fresh = PeriodicTemplate(base_title="待", category="工作", periodicity="daily")
+    assert next_spawn_date(fresh, today) == today
+    # 已派发本周的 weekly → 下周一
+    wk = PeriodicTemplate(base_title="周", category="工作", periodicity="weekly")
+    wk.last_generated_period = period_key("weekly", today, 1)
+    assert next_spawn_date(wk, today) == datetime.date(2026, 9, 28)
+
+
+def test_build_due_instance():
+    today = datetime.date(2026, 9, 22)
+    tmpl = PeriodicTemplate(
+        base_title="站会",
+        category="工作",
+        periodicity="daily",
+        reminder={"enabled": True, "time_of_day": "09:30"},
+        auto_abandon_on_overdue=True,
+    )
+    task = build_due_instance(tmpl, today)
+    assert task is not None
+    assert task.task_type == "periodic_instance"
+    assert task.template_id == tmpl.template_id
+    assert task.title.startswith("【") and "站会" in task.title
+    assert task.deadline == today.isoformat()
+    assert task.reminder is not None and task.reminder.enabled
+    assert task.auto_abandon_on_overdue
+    assert tmpl.last_generated_period == period_key("daily", today, 1)
+    # 水位已推进：再调返回 None
+    assert build_due_instance(tmpl, today) is None
+    # 暂停模板永不构造
+    tmpl.paused = True
+    tmpl.last_generated_period = None
+    assert build_due_instance(tmpl, today) is None
+
+
+def test_build_due_instance_copies_preset_subtasks():
+    today = datetime.date(2026, 9, 22)
+    tmpl = PeriodicTemplate(
+        base_title="吃药",
+        category="生活",
+        periodicity="daily",
+        subtasks=[
+            {"id": "preset-1", "title": "早饭后", "status": "active"},
+            {"id": "preset-2", "title": "已完成过的", "status": "done"},  # 模板侧异常态也应重置
+        ],
+    )
+    task = build_due_instance(tmpl, today)
+    assert task is not None
+    assert [s["title"] for s in task.subtasks] == ["早饭后", "已完成过的"]
+    assert all(s["id"] != "preset-1" and s["id"] != "preset-2" for s in task.subtasks)
+    assert all(s["status"] == "active" for s in task.subtasks)
+    # 禁共享引用：改实例子任务不影响模板预设
+    task.subtasks[0]["status"] = "done"
+    assert tmpl.subtasks[0]["status"] == "active"

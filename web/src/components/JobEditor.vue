@@ -274,7 +274,7 @@ watch(timeText, (v) => {
   align-items: center;
   padding: 4px;
   border: 1px solid var(--color-border-2, #e5e6eb);
-  border-radius: 8px;
+  border-radius: var(--zt-radius-md);
   background: var(--color-fill-1, #f7f8fa);
 }
 .time-fused.disabled {

@@ -10,7 +10,10 @@ def test_wxpusher_missing_credentials():
     assert result["code"] == -1
 
 
-def test_notification_client_unconfigured():
+def test_notification_client_unconfigured(monkeypatch):
+    from zentray.services.settings_manager import NotificationSettings
+
+    monkeypatch.setattr(NotificationSettings, "app_popup_enabled", lambda self: False)
     client = NotificationClient(app_token="", uid="")
     result = client.send("t", "c")
     assert result["status"] == "error"

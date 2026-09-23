@@ -8,6 +8,8 @@
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
+from zentray.ui.dialog_utils import run_modal_loop
+
 if TYPE_CHECKING:
     from .controller import TrayController
 
@@ -36,7 +38,7 @@ class NewTaskCommand(ActionCommand):
         from zentray.ui.dialogs import TaskDialog
 
         dialog = TaskDialog()
-        if dialog.exec():
+        if run_modal_loop(dialog):
             data = dialog.get_data()
             controller.task_service.create_task(data)
             controller.update_display()
@@ -62,15 +64,6 @@ class AbandonCommand(ActionCommand):
             controller.update_display()
 
 
-class ProgressCommand(ActionCommand):
-    """更新进度（当前轮播任务）"""
-
-    def execute(self, controller: "TrayController") -> None:
-        task = controller.task_service.get_current_task()
-        if task:
-            _run_progress_dialog(controller, task)
-
-
 class TaskListCommand(ActionCommand):
     """打开任务列表面板（左列表 + 右操作）"""
 
@@ -82,7 +75,7 @@ class TaskListCommand(ActionCommand):
         from zentray.ui.task_list_dialog import TaskListDialog
 
         dialog = TaskListDialog(controller.task_service)
-        if not dialog.exec():
+        if not run_modal_loop(dialog):
             return
         result = dialog.get_selected_action()
         if not result:
@@ -93,27 +86,6 @@ class TaskListCommand(ActionCommand):
             controller.update_display()
             return
         _dispatch_task_action(action, task, controller)
-
-
-def _run_progress_dialog(controller: "TrayController", task) -> None:
-    from zentray.ui.vue_commands import try_vue_progress
-
-    if try_vue_progress(controller, task):
-        return
-    from zentray.ui.dialogs import ProgressDialog
-
-    dialog = ProgressDialog(task=task)
-    if not dialog.exec():
-        return
-    action = getattr(dialog, "result_action", "save")
-    if action == "done":
-        controller.task_service.mark_done(task.id)
-    elif action == "abandon":
-        controller.task_service.abandon(task.id)
-    else:
-        percent, note = dialog.get_data()
-        controller.task_service.update_progress(task.id, percent, note)
-    controller.update_display()
 
 
 class EditCommand(ActionCommand):
@@ -131,7 +103,7 @@ class EditCommand(ActionCommand):
         from zentray.ui.dialogs import TaskDialog
 
         dialog = TaskDialog(task=fresh)
-        if dialog.exec():
+        if run_modal_loop(dialog):
             data = dialog.get_data()
             # 保留实例类型，勿被表单误改成 one-time 丢 template_id
             if getattr(fresh, "task_type", None) == "periodic_instance":
@@ -183,7 +155,7 @@ class SettingsCommand(ActionCommand):
         from zentray.ui.settings_dialog import SettingsDialog
 
         dialog = SettingsDialog()
-        if dialog.exec():
+        if run_modal_loop(dialog):
             # 设置已保存，刷新控制器以应用新设置
             controller.apply_settings()
             controller.update_display()
@@ -204,21 +176,6 @@ class HistoryCommand(ActionCommand):
                 "历史记录",
                 "请构建 Vue 前端（web/dist）后使用历史记录功能。",
             )
-
-
-class PeriodicManageCommand(ActionCommand):
-    """周期任务管理"""
-
-    def execute(self, controller: "TrayController") -> None:
-        from zentray.ui.vue_commands import try_vue_periodic
-
-        if try_vue_periodic(controller):
-            return
-        from zentray.ui.periodic_manager import PeriodicManagerDialog
-
-        dialog = PeriodicManagerDialog(controller.task_service)
-        dialog.exec()
-        controller.reload_data()
 
 
 class AiReviewNowCommand(ActionCommand):
@@ -263,29 +220,6 @@ class AiReviewNowCommand(ActionCommand):
 # 任务列表命令
 # ==========================================
 
-class TaskActionCommand(ActionCommand):
-    """任务列表中的操作（弹出操作对话框）"""
-
-    def __init__(self, task_id: str):
-        self.task_id = task_id
-
-    def execute(self, controller: "TrayController") -> None:
-        task = controller.task_service.find_task(self.task_id)
-        if not task:
-            return
-        from zentray.ui.vue_commands import try_vue_task_action
-
-        if try_vue_task_action(controller, task):
-            return
-        from zentray.ui.dialogs import TaskActionDialog
-
-        dialog = TaskActionDialog(task=task)
-        if dialog.exec():
-            action = dialog.get_selected_action()
-            if action:
-                _dispatch_task_action(action, task, controller)
-
-
 class SelectTaskCommand(ActionCommand):
     """切换到指定任务"""
 
@@ -320,16 +254,12 @@ class ExtensionCommand(ActionCommand):
 
 # 静态命令映射
 COMMAND_MAP = {
-    "new": NewTaskCommand(),
     "done": DoneCommand(),
     "abandon": AbandonCommand(),
-    "progress": ProgressCommand(),
-    "edit": EditCommand(),
     "task_list": TaskListCommand(),
     "pomodoro": PomodoroStartCommand(),
     "stop_pomodoro": PomodoroStopCommand(),
     "extend_pomodoro": PomodoroExtendCommand(),
-    "periodic_manage": PeriodicManageCommand(),
     "ai_review_now": AiReviewNowCommand(),
     "history": HistoryCommand(),
     "quit": QuitCommand(),
@@ -350,11 +280,6 @@ def dispatch(action_id: str, controller: "TrayController") -> bool:
         return True
 
     # 2. 解析带参数的动态命令
-    if action_id.startswith("task_action_"):
-        task_id = action_id[len("task_action_"):]
-        TaskActionCommand(task_id).execute(controller)
-        return True
-
     if action_id.startswith("select_task_"):
         task_id = action_id[len("select_task_"):]
         SelectTaskCommand(task_id).execute(controller)
@@ -387,15 +312,12 @@ def _dispatch_task_action(action: str, task, controller: "TrayController") -> No
         from zentray.ui.dialogs import TaskDialog
 
         dialog = TaskDialog(task=task)
-        if dialog.exec():
+        if run_modal_loop(dialog):
             data = dialog.get_data()
             if getattr(task, "task_type", None) == "periodic_instance":
                 data["task_type"] = "periodic_instance"
                 data["template_id"] = task.template_id
             controller.task_service.update_task(task.id, data)
-    elif action == "progress":
-        _run_progress_dialog(controller, task)
-        return  # _run_progress_dialog 已 update_display
     elif action == "select":
         controller.task_service.select_task(task.id)
 

@@ -52,7 +52,7 @@ APP_NAME = "ZenTray"
 APP_AUTHOR = "Zen-Geek"
 # 语义化版本：见 docs/VERSIONING.md
 # PATCH +0.0.1 修 bug/优化；MINOR +0.1.0 功能迭代；MAJOR +1.0.0 重构改版
-VERSION = "0.4.2"
+VERSION = "0.5.0"
 
 DATA_DIR = _user_data_dir(APP_NAME)
 _load_dotenv(DATA_DIR / ".env", override=True)
