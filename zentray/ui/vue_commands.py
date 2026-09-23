@@ -43,17 +43,10 @@ def try_vue_task_list(controller: "TrayController", select_id: str = None) -> bo
 def try_vue_settings(controller: "TrayController") -> bool:
     if not use_vue_ui():
         return False
-    ok, payload = open_vue_route("/settings", title="设置", width=920, height=600)
+    ok, payload = open_vue_route("/settings", title="设置", width=1080, height=680)
     if ok and isinstance(payload, dict) and not payload.get("cancelled"):
         controller.apply_settings()
         controller.update_display()
-    return True
-
-
-def try_vue_history(controller: "TrayController") -> bool:
-    if not use_vue_ui():
-        return False
-    open_vue_route("/history", title="历史记录", width=980, height=660)
     return True
 
 

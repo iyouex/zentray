@@ -62,11 +62,6 @@ class MenuBuilder:
             })
 
         items.append("separator")
-        items.append({
-            "id": "history",
-            "label": "📜 历史记录",
-            "enabled": not is_pomodoro,
-        })
         items.append({"id": "settings", "label": "⚙️ 设置"})
         items.append({"id": "quit", "label": "❌ 退出程序"})
 

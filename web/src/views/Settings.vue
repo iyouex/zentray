@@ -17,9 +17,10 @@
           <a-menu-item key="pomodoro">番茄钟</a-menu-item>
           <a-menu-item key="categories">分类</a-menu-item>
           <a-menu-item key="system">系统</a-menu-item>
+          <a-menu-item key="history">📜 历史</a-menu-item>
         </a-menu>
 
-        <div class="settings-body" :class="{ 'is-ai': mainKey === 'ai_hub' }">
+        <div class="settings-body" :class="{ 'is-ai': mainKey === 'ai_hub', 'is-history': mainKey === 'history' }">
           <template v-if="mainKey === 'ai_hub'">
             <a-tabs class="ai-tabs" type="rounded" v-model:active-key="aiTab">
               <!-- 模型接入：折叠行 + 当前配置可编辑 -->
@@ -485,6 +486,11 @@
               </a-card>
             </div>
           </template>
+
+          <!-- 历史：只读单页（日期侧栏 + 合并时间轴 + 详情），无保存动作 -->
+          <template v-else-if="mainKey === 'history'">
+            <HistoryPanel />
+          </template>
         </div>
       </div>
     </a-spin>
@@ -492,7 +498,7 @@
 
     <div class="page-footer">
       <a-button @click="cancelHost">取消</a-button>
-      <a-button type="primary" :loading="saving" @click="onSave">💾 保存设置</a-button>
+      <a-button v-if="mainKey !== 'history'" type="primary" :loading="saving" @click="onSave">💾 保存设置</a-button>
     </div>
   </div>
 </template>
@@ -513,6 +519,7 @@ import {
 } from '@/api/client'
 import { applyAppearance, applyTheme } from '@/theme'
 import JobEditor from '@/components/JobEditor.vue'
+import HistoryPanel from '@/components/HistoryPanel.vue'
 import NumberSpinner from '@/components/NumberSpinner.vue'
 
 const setThemeMode = inject('setThemeMode', null)
@@ -1027,6 +1034,10 @@ onMounted(async () => {
   min-height: 0;
   height: 100%;
   overflow: auto;
+}
+/* 历史页：面板内部自滚动 */
+.settings-body.is-history {
+  overflow: hidden;
 }
 /* AI 页：标签栏固定，仅 pane 内容滚动 */
 .settings-body.is-ai {
