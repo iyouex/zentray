@@ -67,7 +67,10 @@ _EXCLUDE_NAME_RES = [
         r"FluentWinUI3",
         # 用不到的插件（qml 调试 / 打印 / 输入 evdev / eglfs 集成 / 定位）
         r"qmltooling",
-        r"printsupport",
+        # 只裁打印插件目录；不能裸匹配 "printsupport"——libQt6PrintSupport.so.6 是
+        # QtWebEngineWidgets 的 NEEDED 依赖，误删会让 frozen 包 WebEngine 导入静默
+        # 失败、全部菜单回退原生对话框（2026-09-23 事故）
+        r"plugins/printsupport",
         r"evdev",
         r"egldeviceintegrations",
         r"/position/",
@@ -82,9 +85,9 @@ _EXCLUDE_NAME_RES = [
     ]
 ]
 
-# 仅保留中英文翻译（若存在）
+# 仅保留中英文翻译（若存在）；qtwebengine_locales 是 Chromium 运行时必需的 .pak
 _KEEP_TRANSLATION = re.compile(
-    r"qt_?.*_(zh_CN|zh_TW|en|en_US)\.", re.I
+    r"qt_?.*_(zh_CN|zh_TW|en|en_US)\.|qtwebengine_locales[/\\](en-US|zh-CN|zh)\.pak", re.I
 )
 _IS_TRANSLATION = re.compile(
     r"translations[/\\].*\.(qm|pak)$|[/\\]qt_..(_..)?\.qm$", re.I
