@@ -152,24 +152,3 @@ def due_reminder_keys(
             if key != reminder.last_fired_key:
                 keys.append(key)
     return keys
-
-
-def apply_reminder_action(
-    task,
-    action: str,
-    fire_key: str,
-    *,
-    snooze_minutes: int = 10,
-) -> TaskReminder:
-    """根据弹窗操作返回更新后的 TaskReminder（自 ui/reminder_dialog.py 移入，纯领域操作）。
-
-    无条件写 last_fired_key（防 60s 窗口内重触发）；仅 snooze 设 snooze_until。
-    """
-    rem = task.reminder or TaskReminder(enabled=True)
-    rem.last_fired_key = fire_key
-    if action == "snooze":
-        until = datetime.datetime.now() + datetime.timedelta(minutes=snooze_minutes)
-        rem.snooze_until = until.isoformat(timespec="seconds")
-    else:
-        rem.snooze_until = None
-    return rem

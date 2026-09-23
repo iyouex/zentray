@@ -38,12 +38,3 @@ class TestPomodoroService:
         service.extend(10)
         after = service.get_remaining()
         assert after == before + 10 * 60
-
-    def test_get_status_returns_dict(self):
-        """验证 get_status() 返回正确的状态字典"""
-        service = PomodoroService()
-        status = service.get_status()
-        assert "is_active" in status
-        assert "remaining_seconds" in status
-        assert "remaining_minutes" in status
-        assert status["is_active"] is False

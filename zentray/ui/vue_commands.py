@@ -15,15 +15,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def try_vue_new_task(controller: "TrayController") -> bool:
-    if not use_vue_ui():
-        return False
-    ok, _ = open_vue_route("/tasks/new", title="新建任务", width=880, height=540)
-    if ok:
-        controller.update_display()
-    return True
-
-
 def try_vue_edit_task(controller: "TrayController", task) -> bool:
     if not use_vue_ui() or not task:
         return False
@@ -43,7 +34,7 @@ def try_vue_task_list(controller: "TrayController", select_id: str = None) -> bo
     if not use_vue_ui():
         return False
     query = {"select": select_id} if select_id else None
-    ok, _ = open_vue_route("/tasks", title="任务列表", width=1000, height=640, query=query)
+    ok, _ = open_vue_route("/tasks", title="任务列表", width=960, height=600, query=query)
     if ok:
         controller.update_display()
     return True
@@ -52,45 +43,35 @@ def try_vue_task_list(controller: "TrayController", select_id: str = None) -> bo
 def try_vue_settings(controller: "TrayController") -> bool:
     if not use_vue_ui():
         return False
-    ok, payload = open_vue_route("/settings", title="设置", width=920, height=600)
+    ok, payload = open_vue_route("/settings", title="设置", width=1080, height=680)
     if ok and isinstance(payload, dict) and not payload.get("cancelled"):
         controller.apply_settings()
         controller.update_display()
     return True
 
 
-def try_vue_history(controller: "TrayController") -> bool:
-    if not use_vue_ui():
-        return False
-    open_vue_route("/history", title="历史记录", width=980, height=660)
-    return True
-
-
-def try_vue_reminders(batch) -> tuple[bool, Optional[dict]]:
+def try_vue_reminder(task, fire_key: str) -> tuple[bool, Optional[dict]]:
     """
-    打开聚合提醒窗（一窗多卡，卡片式）。
-    batch: [(task, fire_key), ...]；逐卡动作由前端直调 POST /reminder-action，
-    窗口关闭（payload=None，含 X 关闭）由 main 侧对未处理卡统一 dismiss。
-
-    返回 (handled_by_vue, payload)。高度按卡数自适应：120 + n*170，上限 640。
+    打开提醒页。
+    返回 (handled_by_vue, payload)。
+    payload.action: update|done|snooze|dismiss
     """
-    if not use_vue_ui() or not batch:
+    if not use_vue_ui() or not task:
         return False, None
-    n = len(batch)
-    height = max(240, min(120 + n * 170, 640))
     ok, payload = open_vue_route(
-        "/reminder",
-        query={
-            "ids": ",".join(t.id for t, _ in batch),
-            "keys": ",".join(k or "" for _, k in batch),
-        },
+        f"/reminder/{task.id}",
+        query={"fire_key": fire_key or ""},
         title="任务提醒",
-        width=440,
-        height=height,
+        width=580,
+        height=280,
         stay_on_top=True,
     )
-    if not ok or not isinstance(payload, dict):
-        return True, None
+    if not ok:
+        return True, {"action": "dismiss", "task_id": task.id, "fire_key": fire_key}
+    if not isinstance(payload, dict):
+        return True, {"action": "dismiss", "task_id": task.id, "fire_key": fire_key}
+    payload.setdefault("task_id", task.id)
+    payload.setdefault("fire_key", fire_key)
     return True, payload
 
 

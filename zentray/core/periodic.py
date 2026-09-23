@@ -112,19 +112,6 @@ def should_spawn(tmpl: "PeriodicTemplate", today: datetime.date) -> bool:
     return wb[1] < cur
 
 
-def advance_period_key(
-    periodicity: str,
-    today: datetime.date,
-    interval: int,
-    n_buckets: int,
-) -> str:
-    """今天所在桶再前进 n_buckets 桶后的水位键。"""
-    n = max(1, int(interval or 1))
-    return _key_from_bucket(
-        periodicity, _bucket_index(periodicity, today, n) + n_buckets, n
-    )
-
-
 def skip_watermark_key(
     tmpl: "PeriodicTemplate", today: datetime.date, count: int
 ) -> str:
@@ -219,12 +206,6 @@ def build_due_instance(tmpl: "PeriodicTemplate", today: datetime.date) -> Option
         auto_abandon_on_overdue=bool(
             getattr(tmpl, "auto_abandon_on_overdue", False)
         ),
-        # 预设子任务逐项新 dict 新 id（watcher 常驻持有模板对象，禁共享引用）
-        subtasks=[
-            {"id": str(uuid.uuid4()), "title": s["title"], "status": "active"}
-            for s in (getattr(tmpl, "subtasks", None) or [])
-            if isinstance(s, dict) and s.get("title")
-        ],
     )
     tmpl.last_generated_period = spawn_key_after_create(tmpl, today)
     return new_task

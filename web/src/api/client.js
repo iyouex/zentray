@@ -28,11 +28,6 @@ http.interceptors.request.use((config) => {
   return config
 })
 
-export async function getHealth() {
-  const { data } = await http.get('/api/health')
-  return data
-}
-
 export async function getMeta() {
   const { data } = await http.get('/api/meta')
   return data
@@ -58,21 +53,8 @@ export async function updateTask(id, payload) {
   return data.item
 }
 
-/** 追加子任务 */
-export async function addSubtask(id, title) {
-  const { data } = await http.post(`/api/tasks/${id}/subtasks`, { title })
-  return data.item
-}
-
-/** 子任务置 done/abandoned；返回 { item, auto_completed } */
-export async function setSubtaskStatus(id, sid, action) {
-  const { data } = await http.post(`/api/tasks/${id}/subtasks/${sid}/${action}`)
-  return data
-}
-
-/** 提醒卡片动作：done / snooze / dismiss */
-export async function reminderAction(id, body) {
-  const { data } = await http.post(`/api/tasks/${id}/reminder-action`, body)
+export async function updateProgress(id, percent, note = '') {
+  const { data } = await http.post(`/api/tasks/${id}/progress`, { percent, note })
   return data.item
 }
 
@@ -173,11 +155,6 @@ export async function importBackup(path, { include, safety_backup = true } = {})
 export async function packArchive() {
   const { data } = await http.post('/api/system/archive/pack')
   return data
-}
-
-export async function getCurrentTask() {
-  const { data } = await http.get('/api/current-task')
-  return data.item
 }
 
 /** 首次配置向导完成 */

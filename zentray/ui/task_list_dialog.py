@@ -87,6 +87,9 @@ class TaskListDialog(QDialog):
         self.btn_select = style_action_button(QPushButton("🔄 切换到此任务"), min_w=140)
         self.btn_select.clicked.connect(lambda: self._act("select"))
         right.addWidget(self.btn_select)
+        self.btn_progress = style_action_button(QPushButton("📊 更新进度"), min_w=140)
+        self.btn_progress.clicked.connect(lambda: self._act("progress"))
+        right.addWidget(self.btn_progress)
         self.btn_edit = style_action_button(QPushButton("📝 编辑查看"), min_w=140)
         self.btn_edit.clicked.connect(lambda: self._act("edit"))
         right.addWidget(self.btn_edit)
@@ -124,7 +127,8 @@ class TaskListDialog(QDialog):
         cur_id = current.id if current else None
         for t in self._tasks:
             star = "★ " if t.id == cur_id else ""
-            item = QListWidgetItem(f"{star}{t.title}")
+            pct = getattr(t, "progress", 0)
+            item = QListWidgetItem(f"{star}{t.title}  ({pct}%)")
             item.setData(Qt.UserRole, t.id)
             item.setToolTip(t.title)
             self.task_list.addItem(item)
@@ -161,6 +165,7 @@ class TaskListDialog(QDialog):
         self.lbl_task.setText(t.title)
         meta = (
             f"分类: {t.category}　优先级: {t.priority}　"
+            f"进度: {getattr(t, 'progress', 0)}%　"
             f"类型: {getattr(t, 'task_type', 'one-time')}"
         )
         if t.deadline:
@@ -171,6 +176,7 @@ class TaskListDialog(QDialog):
     def _set_actions_enabled(self, on: bool):
         for b in (
             self.btn_select,
+            self.btn_progress,
             self.btn_edit,
             self.btn_done,
             self.btn_abandon,

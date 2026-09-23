@@ -22,8 +22,9 @@ try:
     from PySide6.QtWebEngineCore import QWebEnginePage
 
     _HAS_WEBENGINE = True
-except Exception:
+except Exception as e:  # frozen 包缺库时曾静默回退原生对话框，必须留痕
     _HAS_WEBENGINE = False
+    logger.warning("QtWebEngine 导入失败，菜单将回退原生对话框: %s", e)
     QWebEngineView = None  # type: ignore
     QWebEnginePage = object  # type: ignore
 

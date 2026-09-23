@@ -21,52 +21,9 @@ from zentray.ui.dialog_utils import (
 TITLE_MAX_LENGTH = 100
 
 
-def _compute_default_deadline(
-    is_periodic: bool,
-    periodicity: str = "daily",
-    *,
-    weekday: int | None = None,
-    day_of_month: int | None = None,
-) -> datetime.date:
-    """
-    根据任务类型计算默认截止日期（返回 date，避免字符串显示问题）。
-
-    - 一次性：明天
-    - 每日：今天
-    - 每周：本周指定 weekday（0=周一…），若已过则下周同一天
-    - 每月：本月指定日，若已过则下月
-    """
-    today = datetime.date.today()
-    if not is_periodic:
-        return today + datetime.timedelta(days=1)
-
-    periodicity = (periodicity or "daily").lower()
-    if periodicity == "daily":
-        return today
-
-    if periodicity == "weekly":
-        target_wd = 4 if weekday is None else int(weekday) % 7  # 默认周五
-        delta = (target_wd - today.weekday()) % 7
-        # 若希望「本周该日已过则下周」：delta=0 表示今天即目标日
-        return today + datetime.timedelta(days=delta)
-
-    if periodicity == "monthly":
-        import calendar
-
-        dom = 25 if day_of_month is None else max(1, min(31, int(day_of_month)))
-        last = calendar.monthrange(today.year, today.month)[1]
-        day = min(dom, last)
-        candidate = datetime.date(today.year, today.month, day)
-        if candidate < today:
-            if today.month == 12:
-                y, m = today.year + 1, 1
-            else:
-                y, m = today.year, today.month + 1
-            last2 = calendar.monthrange(y, m)[1]
-            candidate = datetime.date(y, m, min(dom, last2))
-        return candidate
-
-    return today + datetime.timedelta(days=1)
+def _compute_default_deadline() -> datetime.date:
+    """一次性任务默认截止日期：明天。"""
+    return datetime.date.today() + datetime.timedelta(days=1)
 
 
 def _date_to_qdate(d: datetime.date) -> QDate:
@@ -487,7 +444,7 @@ class TaskDialog(QDialog):
         if not self.cb_deadline.isChecked() and not force:
             return
 
-        default = _compute_default_deadline(False, "daily")
+        default = _compute_default_deadline()
         self.deadline_edit.setDate(_date_to_qdate(default))
         self.deadline_edit.setToolTip(f"默认截止日期: {default.isoformat()}")
         self.deadline_edit.setEnabled(self.cb_deadline.isChecked())
@@ -687,3 +644,180 @@ class TaskDialog(QDialog):
             )
         return data
 
+class ProgressDialog(QDialog):
+    """更新进度；可保存 / 完成 / 废弃。result_action: save | done | abandon
+
+    进度仅支持 10% 步进；渐变填充条与拖拽手柄合一。
+    横版：左侧历史，右侧进度与操作。
+    """
+
+    def __init__(self, parent=None, task=None):
+        super().__init__(parent)
+        self.task = task
+        self.result_action = "save"
+        title = (task.title if task else "") or ""
+        short = title if len(title) <= 28 else title[:25] + "…"
+        self.setWindowTitle(f"更新进度 · {short}" if short else "更新进度")
+        apply_dialog_chrome(self, width=720, height=380)
+        self.init_ui()
+        _center_dialog(self)
+
+    def init_ui(self):
+        from zentray.ui.progress_slider import GradientProgressSlider, snap_progress_10
+
+        _, content, footer = dialog_root_with_scroll(self, margins=(16, 14, 16, 12))
+        body = QHBoxLayout(content)
+        body.setContentsMargins(4, 4, 4, 4)
+        body.setSpacing(16)
+
+        # 左：历史
+        left = QVBoxLayout()
+        left.addWidget(QLabel("历史进展记录:"))
+        self.history_display = QTextBrowser()
+        self.history_display.setMinimumHeight(120)
+        logs = getattr(self.task, "progress_logs", [])
+        if not logs:
+            self.history_display.setPlainText("暂无历史进展记录。")
+        else:
+            log_texts = []
+            for log in logs:
+                t = log.get("time", "")
+                p = log.get("percent", 0)
+                n = log.get("note", "")
+                log_texts.append(f"📅 {t} | 进度: {p}% \n   备注: {n if n else '无'}")
+            self.history_display.setPlainText("\n\n".join(log_texts))
+        left.addWidget(self.history_display, 1)
+        body.addLayout(left, 1)
+
+        # 右：进度 + 备注 + 完成/废弃
+        right = QVBoxLayout()
+        right.setSpacing(10)
+
+        pct_row = QHBoxLayout()
+        pct_row.addWidget(QLabel("当前进度（拖动，每格 10%）:"))
+        self.slider_val_label = QLabel("0%")
+        self.slider_val_label.setMinimumWidth(48)
+        self.slider_val_label.setStyleSheet("font-weight: bold; font-size: 15px;")
+        pct_row.addStretch()
+        pct_row.addWidget(self.slider_val_label)
+        right.addLayout(pct_row)
+
+        current_pct = snap_progress_10(getattr(self.task, "progress", 0))
+        self.slider = GradientProgressSlider(self, value=current_pct)
+        self.slider.valueChanged.connect(self.on_slider_changed)
+        right.addWidget(self.slider)
+        self.on_slider_changed(current_pct)
+
+        hint = QLabel("提示：鼠标拖动 / 滚轮 / ←→ 键，进度仅以 10% 为单位。")
+        hint.setStyleSheet("color: #888; font-size: 11px;")
+        hint.setWordWrap(True)
+        right.addWidget(hint)
+
+        right.addWidget(QLabel("本次进展描述 (选填):"))
+        self.note_edit = QLineEdit()
+        self.note_edit.setPlaceholderText("记录一下当前做完的事情吧...")
+        right.addWidget(self.note_edit)
+
+        act_row = QHBoxLayout()
+        btn_done = style_action_button(QPushButton("✅ 完成任务"), min_w=110)
+        btn_done.clicked.connect(self._on_done)
+        btn_abandon = style_action_button(QPushButton("❌ 废弃任务"), min_w=110)
+        btn_abandon.setObjectName("btnWarning")
+        btn_abandon.clicked.connect(self._on_abandon)
+        act_row.addWidget(btn_done)
+        act_row.addWidget(btn_abandon)
+        right.addLayout(act_row)
+        right.addStretch(1)
+        body.addLayout(right, 1)
+
+        footer.addStretch()
+        btn_cancel = style_action_button(QPushButton("取消"), min_w=88)
+        btn_cancel.setObjectName("btnWarning")
+        btn_cancel.clicked.connect(self.reject)
+        btn_save = style_action_button(QPushButton("💾 保存进度"), min_w=120)
+        btn_save.clicked.connect(self._on_save)
+        footer.addWidget(btn_cancel)
+        footer.addWidget(btn_save)
+
+    def on_slider_changed(self, val: int):
+        from zentray.ui.progress_slider import snap_progress_10
+
+        val = snap_progress_10(val)
+        self.slider_val_label.setText(f"{val}%")
+
+    def _on_save(self):
+        self.result_action = "save"
+        self.accept()
+
+    def _on_done(self):
+        self.result_action = "done"
+        self.slider.setValue(100)
+        self.accept()
+
+    def _on_abandon(self):
+        self.result_action = "abandon"
+        self.accept()
+
+    def get_data(self) -> tuple:
+        from zentray.ui.progress_slider import snap_progress_10
+
+        percent = snap_progress_10(self.slider.value())
+        note = self.note_edit.text().strip()
+        return percent, note
+
+class TaskActionDialog(QDialog):
+    def __init__(self, parent=None, task=None):
+        super().__init__(parent)
+        self.task = task
+        self.selected_action = None
+        self.setWindowTitle("选择操作")
+        apply_dialog_chrome(self, width=520, height=240)
+        self.init_ui()
+        _center_dialog(self)
+
+    def init_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(18, 16, 18, 14)
+        layout.setSpacing(12)
+
+        title_label = QLabel(f"<b>当前任务：</b> {self.task.title}")
+        title_label.setWordWrap(True)
+        title_label.setStyleSheet("font-size: 14px;")
+        layout.addWidget(title_label)
+
+        # 横排操作按钮
+        row1 = QHBoxLayout()
+        row1.setSpacing(10)
+        btn_select = style_action_button(QPushButton("🔄 切换到此任务"), min_w=130)
+        btn_select.clicked.connect(lambda: self.trigger_action("select"))
+        btn_progress = style_action_button(QPushButton("📊 更新任务进度"), min_w=130)
+        btn_progress.clicked.connect(lambda: self.trigger_action("progress"))
+        btn_edit = style_action_button(QPushButton("📝 编辑任务详情"), min_w=130)
+        btn_edit.clicked.connect(lambda: self.trigger_action("edit"))
+        row1.addWidget(btn_select)
+        row1.addWidget(btn_progress)
+        row1.addWidget(btn_edit)
+        layout.addLayout(row1)
+
+        row2 = QHBoxLayout()
+        row2.setSpacing(10)
+        btn_done = style_action_button(QPushButton("✅ 完成"), min_w=100)
+        btn_done.clicked.connect(lambda: self.trigger_action("done"))
+        btn_abandon = style_action_button(QPushButton("❌ 废弃"), min_w=100)
+        btn_abandon.setObjectName("btnWarning")
+        btn_abandon.clicked.connect(lambda: self.trigger_action("abandon"))
+        btn_cancel = style_action_button(QPushButton("取消"), min_w=88)
+        btn_cancel.setObjectName("btnWarning")
+        btn_cancel.clicked.connect(self.reject)
+        row2.addWidget(btn_done)
+        row2.addWidget(btn_abandon)
+        row2.addStretch()
+        row2.addWidget(btn_cancel)
+        layout.addLayout(row2)
+
+    def trigger_action(self, action):
+        self.selected_action = action
+        self.accept()
+
+    def get_selected_action(self):
+        return self.selected_action

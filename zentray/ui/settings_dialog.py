@@ -4,7 +4,6 @@
 
 校验规则：高优停留 ≥ 中优停留 ≥ 低优停留（强要求）。
 """
-import sys
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QWidget, QSpinBox, QCheckBox, QComboBox,
@@ -29,10 +28,7 @@ from zentray.services.ai_styles import (
     merge_styles,
 )
 from zentray.services.settings_manager import SettingsManager, AppSettings
-from zentray.services.system_utils import (
-    is_shortcut_created, is_autostart_enabled,
-    toggle_shortcut, toggle_autostart, APP_NAME,
-)
+from zentray.services import autostart as autostart_svc
 
 # 侧栏导航：文案可完整显示；宽度由 Splitter 拖拽，受 min/max 限制
 NAV_ITEMS = [
@@ -64,10 +60,6 @@ class SettingsDialog(QDialog):
 
         self._manager = SettingsManager()
         self._settings = self._manager.get_all()
-
-        # 系统设置变更追踪
-        self._shortcut_changed = False
-        self._autostart_changed = False
 
         self.init_ui()
         self._load_values()
@@ -794,17 +786,6 @@ class SettingsDialog(QDialog):
         header.setFont(f)
         layout.addWidget(header)
 
-        # 桌面快捷方式（仅 Windows 显示）
-        self.shortcut_group = QGroupBox("桌面快捷方式")
-        self.shortcut_group.setVisible(sys.platform == "win32")
-        shortcut_layout = QVBoxLayout(self.shortcut_group)
-        self.cb_shortcut = QCheckBox("在桌面创建 ZenTray 快捷方式")
-        shortcut_layout.addWidget(self.cb_shortcut)
-        self.shortcut_status = QLabel("")
-        self.shortcut_status.setStyleSheet("color: #888; font-size: 11px;")
-        shortcut_layout.addWidget(self.shortcut_status)
-        layout.addWidget(self.shortcut_group)
-
         # 开机自启
         autostart_group = QGroupBox("开机启动")
         autostart_layout = QVBoxLayout(autostart_group)
@@ -898,14 +879,7 @@ class SettingsDialog(QDialog):
         self.pomo_extend.setValue(s.pomodoro.extend_minutes)
 
         # 系统设置
-        shortcut_exists = is_shortcut_created(APP_NAME)
-        self.cb_shortcut.setChecked(shortcut_exists)
-        self.shortcut_status.setText(
-            "✅ 桌面快捷方式已创建" if shortcut_exists
-            else "桌面快捷方式未创建"
-        )
-
-        autostart_enabled = is_autostart_enabled(APP_NAME)
+        autostart_enabled = autostart_svc.is_enabled()
         self.cb_autostart.setChecked(autostart_enabled)
         self.autostart_status.setText(
             "✅ 已设置开机自启" if autostart_enabled
@@ -977,12 +951,8 @@ class SettingsDialog(QDialog):
             pass
 
         # 系统设置：按需操作
-        shortcut_wanted = self.cb_shortcut.isChecked()
-        if shortcut_wanted != is_shortcut_created(APP_NAME):
-            toggle_shortcut(shortcut_wanted, APP_NAME)
-
         autostart_wanted = self.cb_autostart.isChecked()
-        if autostart_wanted != is_autostart_enabled(APP_NAME):
-            toggle_autostart(autostart_wanted, APP_NAME)
+        if autostart_wanted != autostart_svc.is_enabled():
+            autostart_svc.set_enabled(autostart_wanted)
 
         self.accept()
