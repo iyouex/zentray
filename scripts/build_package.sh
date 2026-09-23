@@ -1,23 +1,14 @@
 #!/usr/bin/env bash
 # ============================================================================
-# ZenTray 本地构建「用户安装包」（对齐 GitHub Releases 形态）
+# ZenTray 本地构建「用户安装包」（Linux .deb）
 #
 # 用户安装场景（产品约定）:
-#   Linux   → .deb      → sudo apt install ./zentray_*.deb
-#   Windows → .exe      → 双击安装向导
-#   macOS   → .dmg      → 拖入 Applications
-#
-# 本机为 Ubuntu 时完整支持 linux(.deb)；windows/macos 在本机仅作
-# 交叉说明或在对应 OS/CI 上构建。可用 --target 选择环境。
+#   Ubuntu / Debian → .deb → sudo apt install ./zentray_*.deb
 #
 # 用法:
-#   ./scripts/build_package.sh                       # 默认 linux deb
-#   ./scripts/build_package.sh --target linux
-#   ./scripts/build_package.sh --target windows
-#   ./scripts/build_package.sh --target macos
-#   ./scripts/build_package.sh --target all          # 当前 OS 能构建的都做
-#   ./scripts/build_package.sh --target linux --clean
-#   ./scripts/build_package.sh --target linux --install   # 构建后 apt 安装（需 sudo）
+#   ./scripts/build_package.sh
+#   ./scripts/build_package.sh --clean
+#   ./scripts/build_package.sh --install   # 构建后 apt 安装（需 sudo）
 #   ./scripts/build_package.sh -h
 # ============================================================================
 set -euo pipefail
@@ -26,7 +17,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib_common.sh
 source "${SCRIPT_DIR}/lib_common.sh"
 
-TARGET="linux"
 CLEAN=false
 INSTALL_AFTER=false
 SKIP_PYINSTALLER=false
@@ -35,13 +25,11 @@ usage() {
     cat <<EOF
 用法: $0 [选项]
 
-构建 GitHub Release 形态的安装包。
+构建 Linux .deb 安装包。
 
 选项:
-  --target, -t <env>   目标环境: linux | windows | macos | all
-                       默认: linux
   --clean              清理 build/ 后重新 PyInstaller
-  --install            (仅 linux) 构建后 sudo apt install 本机 deb
+  --install            构建后 sudo apt install 本机 deb
   --skip-binary        跳过 PyInstaller（仅当前端未变化时复用 dist/ZenTray 快速重打包；
                        若 web/dist 已更新会自动强制重建，避免旧 UI 进包）
   -h, --help           显示帮助
@@ -49,19 +37,15 @@ usage() {
 产物目录: dist/releases/
 
 示例（Ubuntu 反复测安装）:
-  ./scripts/build_package.sh --target linux --clean
+  ./scripts/build_package.sh --clean
   sudo apt install -y ./dist/releases/zentray_*_amd64.deb
   # 测完
-  ./scripts/uninstall.sh --purge --yes
+  ./scripts/uninstall.sh --yes
 EOF
 }
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --target|-t)
-            TARGET="${2:-}"
-            shift
-            ;;
         --clean) CLEAN=true ;;
         --install) INSTALL_AFTER=true ;;
         --skip-binary) SKIP_PYINSTALLER=true ;;
@@ -71,25 +55,14 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
-TARGET="$(echo "$TARGET" | tr '[:upper:]' '[:lower:]')"
-case "$TARGET" in
-    linux|windows|macos|all|win|mac) ;;
-    *) err "无效 --target: $TARGET（应为 linux|windows|macos|all）"; exit 1 ;;
-esac
-[[ "$TARGET" == "win" ]] && TARGET="windows"
-[[ "$TARGET" == "mac" ]] && TARGET="macos"
-
 VERSION="$(get_version)"
 RELEASES_DIR="${PROJECT_DIR}/dist/releases"
 mkdir -p "$RELEASES_DIR"
 VENV_PYTHON="${PROJECT_DIR}/venv/bin/python"
 DIST_BIN="${PROJECT_DIR}/dist/ZenTray"
-HOST_OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
 
 section "构建参数"
 echo "  版本:     ${VERSION}"
-echo "  目标:     ${TARGET}"
-echo "  主机:     ${HOST_OS}"
 echo "  清理:     ${CLEAN}"
 echo "  产物目录: ${RELEASES_DIR}"
 
@@ -250,7 +223,7 @@ build_linux_deb() {
     # 防线：二进制必须已包含最新前端，否则静默产出「旧 UI 的 deb」
     if frontend_is_newer_than_binary; then
         err "中止打包：$DIST_BIN 内嵌的 web/dist 已过期（前端构建晚于二进制）"
-        err "请重新构建主程序后再打 deb：./scripts/build_package.sh --target linux"
+        err "请重新构建主程序后再打 deb：./scripts/build_package.sh"
         exit 1
     fi
     info "校验: $DIST_BIN 已包含最新前端（web/dist 无更新文件）"
@@ -379,109 +352,21 @@ install_linux_deb() {
 }
 
 # ========================================================================
-build_windows_exe() {
-    section "Windows .exe 安装包"
-    if [[ "$HOST_OS" != "mingw"* && "$HOST_OS" != "msys"* && "$HOST_OS" != "cygwin"* && "$HOST_OS" != "windows"* ]]; then
-        # 检测 Windows 环境
-        if [[ -z "${WINDIR:-}" && "$(uname -o 2>/dev/null || true)" != "Msys" ]]; then
-            err "当前主机不是 Windows，无法在本机生成正式 .exe 安装包。"
-            echo ""
-            echo "  产品约定: 用户从 GitHub Releases 下载 .exe 双击安装。"
-            echo "  请在 Windows 机器或 CI runner 上执行:"
-            echo "    python -m venv venv && venv\\Scripts\\pip install -e \".[dev]\" pyinstaller"
-            echo "    venv\\Scripts\\pyinstaller zentray.spec"
-            echo "    venv\\Scripts\\pyinstaller installer.spec"
-            echo "    将 dist\\ZenTrayInstaller.exe 上传到 Releases"
-            echo ""
-            echo "  本机已生成的 Linux 二进制可参考: dist/ZenTray"
-            return 1
-        fi
-    fi
-    need_venv
-    build_pyinstaller
-    (
-        cd "$PROJECT_DIR"
-        "$VENV_PYTHON" -m PyInstaller installer.spec
-    )
-    local exe="${PROJECT_DIR}/dist/ZenTrayInstaller.exe"
-    if [[ -f "$exe" ]]; then
-        cp -a "$exe" "${RELEASES_DIR}/ZenTrayInstaller-${VERSION}-x64.exe"
-        info "exe: ${RELEASES_DIR}/ZenTrayInstaller-${VERSION}-x64.exe"
-    else
-        err "未找到 ZenTrayInstaller.exe"
-        return 1
-    fi
-}
-
-build_macos_dmg() {
-    section "macOS .dmg 安装包"
-    if [[ "$HOST_OS" != "darwin" ]]; then
-        err "当前主机不是 macOS，无法在本机生成 .dmg。"
-        echo ""
-        echo "  产品约定: 用户从 GitHub Releases 下载 .dmg，拖入 Applications。"
-        echo "  请在 macOS 上执行 PyInstaller + create-dmg / hdiutil，或由 CI 构建。"
-        echo "  建议产物名: ZenTray-${VERSION}-arm64.dmg / ZenTray-${VERSION}-x86_64.dmg"
-        return 1
-    fi
-    need_venv
-    build_pyinstaller
-    # 简易 dmg：将 app/二进制放入挂载卷
-    local dmg_stage="${PROJECT_DIR}/build/dmg_stage"
-    local dmg_out="${RELEASES_DIR}/ZenTray-${VERSION}.dmg"
-    rm -rf "$dmg_stage"
-    mkdir -p "$dmg_stage"
-    cp -a "$DIST_BIN" "${dmg_stage}/ZenTray"
-    ln -sf /Applications "${dmg_stage}/Applications"
-    hdiutil create -volname "ZenTray" -srcfolder "$dmg_stage" -ov -format UDZO "$dmg_out"
-    info "dmg: $dmg_out"
-}
-
+# 调度（linux 唯一目标；恢复其他平台时在此按 HOST_OS 加回构建函数）
 # ========================================================================
-# 调度
-# ========================================================================
-FAILED=0
-
-run_linux() {
-    build_pyinstaller
-    build_linux_deb
-    if $INSTALL_AFTER; then
-        install_linux_deb
-    fi
-}
-
-case "$TARGET" in
-    linux)
-        run_linux
-        ;;
-    windows)
-        build_windows_exe || FAILED=1
-        ;;
-    macos)
-        build_macos_dmg || FAILED=1
-        ;;
-    all)
-        if [[ "$HOST_OS" == "linux" ]]; then
-            run_linux
-            build_windows_exe || warn "跳过 windows（需 Windows 主机）"
-            build_macos_dmg || warn "跳过 macos（需 macOS 主机）"
-        elif [[ "$HOST_OS" == "darwin" ]]; then
-            build_macos_dmg || FAILED=1
-            build_windows_exe || warn "跳过 windows"
-        else
-            build_windows_exe || FAILED=1
-        fi
-        ;;
-esac
+build_pyinstaller
+build_linux_deb
+if $INSTALL_AFTER; then
+    install_linux_deb
+fi
 
 section "构建汇总"
 ls -lh "${RELEASES_DIR}" 2>/dev/null | sed 's/^/  /' || true
 echo ""
-if [[ "$TARGET" == "linux" || "$TARGET" == "all" ]]; then
-    echo -e "  ${BOLD}Linux 安装测试:${NC}"
-    echo -e "    ${CYAN}sudo apt install -y ./dist/releases/${PKG_NAME}_${VERSION}_*.deb${NC}"
-    echo -e "    ${CYAN}zentray${NC}   # 启动"
-    echo -e "    ${CYAN}./scripts/uninstall.sh --purge --yes${NC}"
-fi
+echo -e "  ${BOLD}Linux 安装测试:${NC}"
+echo -e "    ${CYAN}sudo apt install -y ./dist/releases/${PKG_NAME}_${VERSION}_*.deb${NC}"
+echo -e "    ${CYAN}zentray${NC}   # 启动"
+echo -e "    ${CYAN}./scripts/uninstall.sh --yes${NC}"
 echo ""
 
-exit "$FAILED"
+exit 0

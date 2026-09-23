@@ -36,10 +36,10 @@ usage() {
   -h, --help  显示帮助
 
 典型测试流程:
-  ./scripts/build_package.sh --target linux
+  ./scripts/build_package.sh
   sudo apt install -y ./dist/releases/zentray_*_amd64.deb
   # ... 手动测功能 ...
-  ./scripts/uninstall.sh --purge --yes
+  ./scripts/uninstall.sh --yes
 EOF
 }
 

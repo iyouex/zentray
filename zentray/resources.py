@@ -30,9 +30,7 @@ def get_user_data_dir() -> Path:
     """
     用户数据目录 —— 与 config.DATA_DIR 保持一致。
 
-    - Linux: $XDG_DATA_HOME/ZenTray 或 ~/.local/share/ZenTray
-    - macOS: ~/Library/Application Support/ZenTray
-    - Windows: %APPDATA%/ZenTray
+    Linux: $XDG_DATA_HOME/ZenTray 或 ~/.local/share/ZenTray
     """
     # 延迟导入避免循环：config 可能 import resources
     try:
@@ -40,15 +38,8 @@ def get_user_data_dir() -> Path:
 
         return Path(DATA_DIR)
     except Exception:
-        if sys.platform == "linux":
-            xdg = os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")
-            return Path(xdg) / "ZenTray"
-        if sys.platform == "darwin":
-            return Path.home() / "Library" / "Application Support" / "ZenTray"
-        if sys.platform == "win32":
-            appdata = os.environ.get("APPDATA", "")
-            return Path(appdata) / "ZenTray"
-        return Path.home() / ".ZenTray"
+        xdg = os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")
+        return Path(xdg) / "ZenTray"
 
 
 def ensure_data_dirs() -> Path:

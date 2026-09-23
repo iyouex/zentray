@@ -7,15 +7,10 @@ logger = logging.getLogger(__name__)
 
 
 def _user_data_dir(app_name: str) -> Path:
-    """获取应用用户数据目录（跨平台统一使用应用显示名）。"""
+    """获取应用用户数据目录（其他平台恢复时在此按 sys.platform 加回分支）。"""
     if sys.platform == "linux":
         xdg = os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")
         return Path(xdg) / app_name
-    elif sys.platform == "darwin":
-        return Path.home() / "Library" / "Application Support" / app_name
-    elif sys.platform == "win32":
-        appdata = os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming")
-        return Path(appdata) / app_name
     return Path.home() / f".{app_name}"
 
 

@@ -7,8 +7,6 @@ PyInstaller 打包配置文件。
 
 输出:
     dist/ZenTray  (Linux)
-    dist/ZenTray.app  (macOS)
-    dist/ZenTray.exe  (Windows)
 
 体积说明:
   自包含打包必带 Chromium 内核 (QtWebEngine ~100MB+)，这是内嵌 Vue 对话框的代价。
@@ -150,8 +148,6 @@ a = Analysis(
         'zentray.dependencies',
         # pynput 平台特定后端
         'pynput.keyboard._xorg',
-        'pynput.keyboard._win32',
-        'pynput.keyboard._darwin',
         # WebEngine
         'PySide6.QtWebEngineWidgets',
         'PySide6.QtWebEngineCore',
@@ -226,6 +222,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    # 图标（根据平台选择）
-    icon='resources/icons/app_icon.ico' if sys.platform == 'win32' else 'resources/icons/app_icon.png',
+    icon='resources/icons/app_icon.png',
 )
