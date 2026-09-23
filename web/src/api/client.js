@@ -53,8 +53,21 @@ export async function updateTask(id, payload) {
   return data.item
 }
 
-export async function updateProgress(id, percent, note = '') {
-  const { data } = await http.post(`/api/tasks/${id}/progress`, { percent, note })
+/** 追加子任务 */
+export async function addSubtask(id, title) {
+  const { data } = await http.post(`/api/tasks/${id}/subtasks`, { title })
+  return data.item
+}
+
+/** 子任务置 done/abandoned；返回 { item, auto_completed } */
+export async function setSubtaskStatus(id, sid, action) {
+  const { data } = await http.post(`/api/tasks/${id}/subtasks/${sid}/${action}`)
+  return data
+}
+
+/** 提醒卡片动作：done / snooze / dismiss */
+export async function reminderAction(id, body) {
+  const { data } = await http.post(`/api/tasks/${id}/reminder-action`, body)
   return data.item
 }
 

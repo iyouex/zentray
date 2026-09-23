@@ -38,8 +38,7 @@ class ReminderDialog(QDialog):
         layout.addWidget(title)
 
         meta = QLabel(
-            f"分类: {task.category}　优先级: {task.priority}　"
-            f"进度: {getattr(task, 'progress', 0)}%"
+            f"分类: {task.category}　优先级: {task.priority}"
         )
         meta.setStyleSheet("color: #666;")
         meta.setWordWrap(True)
@@ -54,18 +53,15 @@ class ReminderDialog(QDialog):
         hint.setStyleSheet("margin-top: 4px;")
         layout.addWidget(hint)
 
-        # 单行横排四个操作，保证文字完整
+        # 单行横排操作，保证文字完整
         row = QHBoxLayout()
         row.setSpacing(10)
-        btn_update = style_action_button(QPushButton("📊 更新状态"), min_w=110)
-        btn_update.clicked.connect(lambda: self._finish("update"))
         btn_done = style_action_button(QPushButton("✅ 完成"), min_w=88)
         btn_done.clicked.connect(lambda: self._finish("done"))
         btn_snooze = style_action_button(QPushButton("😴 忽略 10 分钟"), min_w=130)
         btn_snooze.clicked.connect(lambda: self._finish("snooze"))
         btn_dismiss = style_action_button(QPushButton("关闭本次"), min_w=96)
         btn_dismiss.clicked.connect(lambda: self._finish("dismiss"))
-        row.addWidget(btn_update)
         row.addWidget(btn_done)
         row.addWidget(btn_snooze)
         row.addWidget(btn_dismiss)
@@ -76,19 +72,5 @@ class ReminderDialog(QDialog):
         self.accept()
 
 
-def apply_reminder_action(
-    task: Task,
-    action: str,
-    fire_key: str,
-    *,
-    snooze_minutes: int = 10,
-) -> TaskReminder:
-    """根据弹窗操作返回更新后的 TaskReminder。"""
-    rem = task.reminder or TaskReminder(enabled=True)
-    rem.last_fired_key = fire_key
-    if action == "snooze":
-        until = datetime.datetime.now() + datetime.timedelta(minutes=snooze_minutes)
-        rem.snooze_until = until.isoformat(timespec="seconds")
-    else:
-        rem.snooze_until = None
-    return rem
+# 领域逻辑已移至 core/reminder.py，保留转发以兼容既有 import
+from zentray.core.reminder import apply_reminder_action  # noqa: E402,F401

@@ -51,24 +51,6 @@ class TaskListCommand(ActionCommand):
         _dispatch_task_action(action, task, controller)
 
 
-def _run_progress_dialog(controller: "TrayController", task) -> None:
-    """Qt 回退：进度对话框（Vue 路径的进度更新已并入任务列表右栏）。"""
-    from zentray.ui.dialogs import ProgressDialog
-
-    dialog = ProgressDialog(task=task)
-    if not run_modal_loop(dialog):
-        return
-    action = getattr(dialog, "result_action", "save")
-    if action == "done":
-        controller.task_service.mark_done(task.id)
-    elif action == "abandon":
-        controller.task_service.abandon(task.id)
-    else:
-        percent, note = dialog.get_data()
-        controller.task_service.update_progress(task.id, percent, note)
-    controller.update_display()
-
-
 class PomodoroStartCommand(ActionCommand):
     """开始番茄钟"""
 
@@ -172,9 +154,6 @@ def _dispatch_task_action(action: str, task, controller: "TrayController") -> No
                 data["task_type"] = "periodic_instance"
                 data["template_id"] = task.template_id
             controller.task_service.update_task(task.id, data)
-    elif action == "progress":
-        _run_progress_dialog(controller, task)
-        return  # _run_progress_dialog 已 update_display
     elif action == "select":
         controller.task_service.select_task(task.id)
 

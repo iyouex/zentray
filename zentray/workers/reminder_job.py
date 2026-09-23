@@ -18,10 +18,11 @@ logger = logging.getLogger(__name__)
 class ReminderWorker(QThread):
     """
     每 30s 扫描一次到期提醒。
-    命中时发出 reminder_due(task, fire_key)，由主线程弹窗。
+    命中时一轮聚合成 reminder_due([(task, fire_key), ...]) 单次发出，
+    由主线程弹聚合窗（多提醒一窗卡片式）。
     """
 
-    reminder_due = Signal(object, str)  # Task, fire_key
+    reminder_due = Signal(list)  # [(Task, fire_key), ...]
 
     def __init__(self, task_repo: TaskRepository, parent=None):
         super().__init__(parent)
@@ -43,6 +44,7 @@ class ReminderWorker(QThread):
     def _scan(self):
         now = datetime.datetime.now()
         tasks = self.task_repo.find_all()
+        batch = []
         for task in tasks:
             rem = getattr(task, "reminder", None)
             if not rem or not rem.enabled:
@@ -56,10 +58,16 @@ class ReminderWorker(QThread):
             keys = due_reminder_keys(rem, now, periodicity=periodicity)
             if keys:
                 self._pending_ids.add(task.id)
-                self.reminder_due.emit(task, keys[0])
+                batch.append((task, keys[0]))
+        if batch:
+            self.reminder_due.emit(batch)
 
     def clear_pending(self, task_id: str) -> None:
         self._pending_ids.discard(task_id)
+
+    def clear_pending_batch(self, task_ids) -> None:
+        for tid in task_ids:
+            self._pending_ids.discard(tid)
 
     def stop(self):
         self.is_running = False

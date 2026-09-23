@@ -229,9 +229,15 @@ def execute_daily_plan(today_str: str, task_repo: TaskRepository) -> bool:
     tasks = task_repo.find_all()
     lines = []
     for t in tasks:
+        subs = getattr(t, "subtasks", None) or []
+        sub_txt = (
+            f", 子任务 {sum(1 for s in subs if s.get('status') == 'done')}/{len(subs)}"
+            if subs
+            else ""
+        )
         lines.append(
             f"- [{t.priority}] {t.title} "
-            f"(进度 {getattr(t, 'progress', 0)}%, 截止 {t.deadline or '无'})"
+            f"(截止 {t.deadline or '无'}{sub_txt})"
         )
     pending = "\n".join(lines) if lines else "当前没有活跃任务。"
 
