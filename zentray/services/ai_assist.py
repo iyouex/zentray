@@ -155,6 +155,11 @@ class AIAssistService:
             return data["choices"][0]["message"]["content"]
         except AIAssistError:
             raise
+        except requests.HTTPError as e:
+            # 透出服务端错误信息（如 GLM 1113 余额不足），别只给 429 Client Error
+            detail = _http_error_detail(e.response)
+            logger.warning("AI assist error (%s): %s", feature, detail)
+            raise AIAssistError(f"模型调用失败：{detail}", feature) from e
         except Exception as e:
             logger.warning("AI assist error (%s): %s", feature, e)
             raise AIAssistError(f"模型调用失败：{e}", feature) from e
@@ -284,6 +289,16 @@ class AIAssistService:
 
 
 # ---------------- fake fixtures ----------------
+
+
+def _http_error_detail(resp) -> str:
+    """HTTP 错误透出服务端 message（OpenAI 兼容 error.message），取不到退回状态码。"""
+    try:
+        msg = ((resp.json() or {}).get("error") or {}).get("message")
+    except Exception:
+        msg = None
+    return f"HTTP {resp.status_code}：{msg}" if msg else f"HTTP {resp.status_code} {getattr(resp, 'reason', '')}".rstrip()
+
 
 def _fake_draft(text: str, category_names: List[str]) -> dict:
     cat = next((c for c in category_names if text and c in text), category_names[0] if category_names else "")

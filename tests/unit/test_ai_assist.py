@@ -20,6 +20,23 @@ def test_strip_fences_variants():
     assert _strip_fences("") == ""
 
 
+def test_http_error_detail_surfaces_provider_message():
+    from zentray.services.ai_assist import _http_error_detail
+
+    class R:
+        status_code, reason = 429, "Too Many Requests"
+        def json(self):
+            return {"error": {"code": "1113", "message": "余额不足或无可用资源包,请充值。"}}
+
+    class RB:
+        status_code, reason = 405, "Not Allowed"
+        def json(self):
+            raise ValueError("not json")
+
+    assert _http_error_detail(R()) == "HTTP 429：余额不足或无可用资源包,请充值。"
+    assert _http_error_detail(RB()) == "HTTP 405 Not Allowed"
+
+
 def test_clean_draft_normalizes():
     d = _clean_draft(
         {
