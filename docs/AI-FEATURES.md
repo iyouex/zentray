@@ -55,8 +55,16 @@
   - `parse_text(text, category_names, today)` → draft dict
   - `parse_image(data_url, category_names, today)` → `{"drafts": [...]}`（1~5 条）
   - `suggest(tasks_summary, today, focus_title)` → suggestions list（focus_id 由路由层解析为标题传入）
-- 共用 `_chat(messages, ...)`：OpenAI 兼容 `/chat/completions`；`temperature=0.2`；图片走 `image_url` content part；响应剥 ```` ```json ```` 围栏后 `json.loads`，失败即抛错。
+- 共用 `_chat(messages, ...)`：OpenAI 兼容 `/chat/completions`；`temperature=0.2`；`max_tokens` 首档 4000、空响应（推理模型思考吃光预算）自动 4 倍重试一次；图片走 `image_url` content part；响应剥 ```` ```json ```` 围栏后 `json.loads`，失败即抛错。
 - **Fake 模式**：环境变量 `ZENTRAY_AI_FAKE=1` 时三方法返回确定性 fixture（不联网），供自动化回归与无 Key 演示。
+
+**厂商接入速查（Base URL）**：
+
+| 厂商 / 套餐 | Base URL | 说明 |
+|---|---|---|
+| OpenAI | `https://api.openai.com/v1` | 默认 |
+| 智谱按量（API Key 充值） | `https://open.bigmodel.cn/api/paas/v4` | 按 token 计费 |
+| **智谱 Coding Plan 订阅** | **`https://open.bigmodel.cn/api/coding/paas/v4`** | 订阅 Key 在标准端点报 1113「余额不足」，**必须**用此专属端点；`glm-5.3-flash` 为推理模型（思考计入 max_tokens，已由重试兜底） |
 
 ### 3.2 设置结构（`settings_manager.py`）
 ```python

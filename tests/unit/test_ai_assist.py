@@ -37,6 +37,69 @@ def test_http_error_detail_surfaces_provider_message():
     assert _http_error_detail(RB()) == "HTTP 405 Not Allowed"
 
 
+def _mock_profile(monkeypatch):
+    class Prof:
+        api_key, base_url, model = "k", "http://x/v1", "glm-5.3-flash"
+
+    class AI:
+        active_profile = staticmethod(lambda: Prof())
+
+    class SM:
+        _instance = None
+        ai = AI()
+
+    monkeypatch.setattr("zentray.services.settings_manager.SettingsManager", SM)
+
+
+class _Resp:
+    def __init__(self, payload):
+        self._p = payload
+
+    def raise_for_status(self):
+        pass
+
+    def json(self):
+        return self._p
+
+
+def test_chat_retries_when_reasoning_eats_budget(monkeypatch):
+    """推理模型吃光 max_tokens（content 空 + finish_reason=length）→ 4 倍预算重试一次。"""
+    import zentray.services.ai_assist as m
+
+    _mock_profile(monkeypatch)
+    seq = [
+        {"choices": [{"finish_reason": "length", "message": {"content": "", "reasoning_content": "思考中"}}]},
+        {"choices": [{"finish_reason": "stop", "message": {"content": "ok"}}]},
+    ]
+    it, budgets = iter(seq), []
+    real_post = m.requests.post
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        budgets.append(json["max_tokens"])
+        return _Resp(next(it))
+
+    monkeypatch.setattr(m.requests, "post", fake_post)
+    out = m.AIAssistService._chat([{"role": "user", "content": "x"}], feature="t")
+    assert out == "ok"
+    assert budgets == [4000, 16000]
+    assert real_post  # 引用未删
+
+
+def test_chat_no_retry_when_content_present(monkeypatch):
+    import zentray.services.ai_assist as m
+
+    _mock_profile(monkeypatch)
+    budgets = []
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        budgets.append(json["max_tokens"])
+        return _Resp({"choices": [{"finish_reason": "stop", "message": {"content": "hi"}}]})
+
+    monkeypatch.setattr(m.requests, "post", fake_post)
+    assert m.AIAssistService._chat([{"role": "user", "content": "x"}], feature="t") == "hi"
+    assert budgets == [4000]
+
+
 def test_clean_draft_normalizes():
     d = _clean_draft(
         {
