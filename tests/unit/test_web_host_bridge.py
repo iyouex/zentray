@@ -32,6 +32,15 @@ def test_bridge_page_never_calls_removed_view_api():
     assert "self.view()" not in _SRC, "PySide6 6.11 已移除 QWebEnginePage.view()，用 self.parent() 获取视图"
 
 
+def test_pick_bridge_deferred_via_single_shot():
+    """pick- 导航必须在导航回调外弹对话框（QTimer.singleShot(0) 推迟），
+    否则模态对话框在回调内重入 WebEngine。"""
+    assert 's.startswith("zentray://pick-")' in _SRC
+    assert "QTimer.singleShot(0, lambda: self._run_pick(kind, payload))" in _SRC
+    assert "_run_pick" in _SRC
+    assert "zentray:pick-result" in _SRC, "结果须以 CustomEvent 回填前端"
+
+
 def test_bridge_page_constructed_with_view_as_parent():
     # _BridgePage(self.view) 必须保留：这是 self.parent() 能拿到视图的前提
     assert "_BridgePage(self.view)" in _SRC

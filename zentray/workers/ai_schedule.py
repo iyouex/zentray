@@ -27,6 +27,9 @@ class JobScheduleState:
     last_review_date: Optional[str] = None
     plan_hm: Optional[str] = None  # "H:M" 上次已知触发点
     review_hm: Optional[str] = None
+    # 自动备份（每 N 天粒度，不复用每日 last_date == today 判定）
+    last_backup_date: Optional[str] = None
+    last_backup_at: Optional[str] = None  # ISO 时间戳，供设置页展示
 
     def to_dict(self) -> dict:
         return {
@@ -34,6 +37,8 @@ class JobScheduleState:
             "last_review_date": self.last_review_date,
             "plan_hm": self.plan_hm,
             "review_hm": self.review_hm,
+            "last_backup_date": self.last_backup_date,
+            "last_backup_at": self.last_backup_at,
         }
 
     @classmethod
@@ -44,6 +49,8 @@ class JobScheduleState:
             last_review_date=data.get("last_review_date") or None,
             plan_hm=data.get("plan_hm") or None,
             review_hm=data.get("review_hm") or None,
+            last_backup_date=data.get("last_backup_date") or None,
+            last_backup_at=data.get("last_backup_at") or None,
         )
 
 
@@ -71,6 +78,29 @@ def should_fire_job(
     if last_date == today:
         return False
     return is_at_or_after(now, trigger_hour, trigger_minute)
+
+
+def should_fire_backup(
+    now: datetime,
+    *,
+    enabled: bool,
+    last_date: Optional[str],
+    trigger_hour: int,
+    interval_days: int,
+) -> bool:
+    """自动备份：到点或过点补跑 + 距上次成功备份 >= interval_days 天。
+    频率切换无需清标记（间隔判定天然兼容）。"""
+    if not enabled:
+        return False
+    if not is_at_or_after(now, trigger_hour, 0):
+        return False
+    if not last_date:
+        return True
+    try:
+        last = datetime.strptime(last_date, "%Y-%m-%d").date()
+    except ValueError:
+        return True
+    return (now.date() - last).days >= int(interval_days)
 
 
 def load_state(path: Optional[Path] = None) -> JobScheduleState:
