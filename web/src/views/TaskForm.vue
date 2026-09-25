@@ -114,6 +114,36 @@
                   <a-input v-model="form.schedule_end_date" placeholder="YYYY-MM-DD" />
                 </a-form-item>
               </template>
+
+              <a-form-item label="关联插件">
+                <div class="plugin-row">
+                  <a-select
+                    v-model="form.plugin_id"
+                    allow-clear
+                    allow-search
+                    :options="pluginOpts"
+                    :disabled="!pluginsEnabled"
+                    :placeholder="
+                      pluginsEnabled
+                        ? '可选：关联插件'
+                        : '请先在设置中启用「插件」'
+                    "
+                    style="flex: 1"
+                  />
+                  <a-button
+                    v-if="isEdit && form.plugin_id"
+                    type="outline"
+                    :loading="runningPlugin"
+                    :disabled="!canRunPlugin"
+                    @click="onRunPlugin"
+                  >
+                    ▶ 运行
+                  </a-button>
+                </div>
+                <p v-if="selectedPluginHint" class="muted plugin-hint">
+                  {{ selectedPluginHint }}
+                </p>
+              </a-form-item>
             </a-form>
           </a-card>
 
@@ -316,6 +346,8 @@ import {
   getMeta,
   getTask,
   getTemplate,
+  listPlugins,
+  runPlugin,
   updateTask,
   updateTemplate,
 } from '@/api/client'
@@ -351,6 +383,10 @@ const meta = ref(null)
 const showAddSec = ref(false)
 const newSecName = ref('')
 const addingSec = ref(false)
+const pluginsEnabled = ref(false)
+const pluginItems = ref([])
+const pluginsBusy = ref(false)
+const runningPlugin = ref(false)
 
 const form = reactive({
   mode: 'one-time',
@@ -372,6 +408,7 @@ const form = reactive({
   subtasks: [],
   task_type: 'one-time',
   template_id: null,
+  plugin_id: null,
 })
 
 const periodOpts = [
@@ -409,6 +446,75 @@ const isWeeklyOrMonthly = computed(
     form.mode === 'periodic' &&
     (form.periodicity === 'weekly' || form.periodicity === 'monthly'),
 )
+
+// ---- 关联插件 ----
+
+const pluginOpts = computed(() => {
+  const items = pluginItems.value || []
+  return items.map((p) => ({
+    label: `${p.type === 'service' ? '🔧' : '📜'} ${p.name} (${p.id})`,
+    value: p.id,
+  }))
+})
+
+const selectedPlugin = computed(() =>
+  (pluginItems.value || []).find((p) => p.id === form.plugin_id),
+)
+
+const selectedPluginHint = computed(() => {
+  const p = selectedPlugin.value
+  if (!p) return ''
+  const desc = p.description ? ` — ${p.description}` : ''
+  return `${p.type === 'service' ? '服务' : '脚本'}${desc}`
+})
+
+const canRunPlugin = computed(() => {
+  const p = selectedPlugin.value
+  if (!p || !pluginsEnabled.value) return false
+  if (p.type === 'script' && pluginsBusy.value) return false
+  return true
+})
+
+async function loadPlugins() {
+  try {
+    const data = await listPlugins()
+    pluginsEnabled.value = Boolean(data.enabled)
+    pluginItems.value = data.items || []
+    pluginsBusy.value = Boolean(data.busy)
+  } catch (_) {
+    pluginsEnabled.value = false
+    pluginItems.value = []
+  }
+}
+
+function onRunPlugin() {
+  if (!form.plugin_id || !canRunPlugin.value) return
+  const p = selectedPlugin.value
+  const name = p?.name || form.plugin_id
+  Modal.confirm({
+    title: '运行关联插件',
+    content: `确定运行「${name}」？进度将显示在托盘顶栏。`,
+    okText: '运行',
+    async onOk() {
+      runningPlugin.value = true
+      try {
+        const body = p?.type === 'service' ? { action: 'start' } : {}
+        await runPlugin(form.plugin_id, body)
+        Message.success(
+          p?.type === 'service'
+            ? '已发送服务命令'
+            : '插件已开始运行，请看托盘进度',
+        )
+        await loadPlugins()
+      } catch (e) {
+        const msg = e?.response?.data?.error || e?.message || '运行失败'
+        Message.error(msg)
+      } finally {
+        runningPlugin.value = false
+      }
+    },
+  })
+}
 
 function onPrimaryChange() {
   form.category_secondary_id = null
@@ -677,6 +783,7 @@ function buildPayload() {
     subtasks: (form.subtasks || [])
       .filter((s) => (s.title || '').trim())
       .map((s) => ({ id: s.id, title: s.title.trim(), status: s.status || 'active' })),
+    plugin_id: form.plugin_id || null,
   }
 
   if (form.mode === 'periodic' || isTemplate.value) {
@@ -863,6 +970,7 @@ onMounted(async () => {
         form.schedule_end_date = t.schedule_end_date || ''
         form.auto_abandon_on_overdue = !!t.auto_abandon_on_overdue
         form.subtasks = (t.subtasks || []).map((s) => ({ ...s }))
+        form.plugin_id = t.plugin_id || null
         loadReminder(t.reminder)
       } else {
         const t = await getTask(taskId.value)
@@ -878,9 +986,11 @@ onMounted(async () => {
         form.template_id = t.template_id
         form.mode = 'one-time'
         form.subtasks = (t.subtasks || []).map((s) => ({ ...s }))
+        form.plugin_id = t.plugin_id || null
         loadReminder(t.reminder)
       }
     }
+    loadPlugins()
   } finally {
     loading.value = false
   }
@@ -888,6 +998,15 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.plugin-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+}
+.plugin-hint {
+  margin: 6px 0 0;
+}
 .sec-line {
   display: flex;
   gap: 8px;
