@@ -227,6 +227,10 @@ build_linux_deb() {
     rm -f "${stage}/opt/${PKG_NAME}/ZenTray/.build_stamp"
     chmod 755 "${stage}/opt/${PKG_NAME}/ZenTray/ZenTray"
 
+    # 内置插件：*.sh 必须可执行（manifest 校验要求非 win32 下 X_OK）
+    find "${stage}/opt/${PKG_NAME}/ZenTray" -path "*bundled_plugins*" -name "*.sh" \
+        -exec chmod 755 {} + 2>/dev/null || true
+
     # 防线：包内必须已包含最新前端，否则静默产出「旧 UI 的 deb」
     if frontend_is_newer_than_binary; then
         err "中止打包：$DIST_DIR 内嵌的 web/dist 已过期（前端构建晚于可执行文件）"

@@ -133,6 +133,8 @@ a = Analysis(
         ('zentray/ui/linux_tray_bridge.py', 'zentray/ui'),
         # Vue + Arco 构建产物（需先 npm run build）
         ('web/dist', 'web/dist'),
+        # 内置插件（plugin.yaml + 脚本，运行时经 get_resource_path 读取）
+        ('bundled_plugins', 'bundled_plugins'),
     ],
     hiddenimports=[
         # 核心模块
@@ -158,6 +160,13 @@ a = Analysis(
         'zentray.api.handlers',
         'zentray.workers.watcher',
         'zentray.workers.nightly_job',
+        # 插件运行时（动态 import 为主，PyInstaller 无法自动发现）
+        'zentray.plugins.models',
+        'zentray.plugins.manifest',
+        'zentray.plugins.loader',
+        'zentray.plugins.protocol',
+        'zentray.plugins.runtime',
+        'yaml',
         # DI 容器
         'zentray.dependencies',
         # pynput 平台特定后端
