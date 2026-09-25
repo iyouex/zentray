@@ -527,4 +527,63 @@ onMounted(reload)
     flex-shrink: 0;
   }
 }
+
+/* ---- 皮肤变体（body.zt-skin-* 门控） ---- */
+/* Aurora */
+body.zt-skin-aurora .date-item.active {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--color-primary) 18%, transparent),
+    transparent
+  );
+}
+body.zt-skin-aurora .tl-col {
+  padding-left: 14px;
+  position: relative;
+}
+/* 极光时间轴脊线 */
+body.zt-skin-aurora .tl-col::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--color-primary), #818cf8 60%, transparent);
+  opacity: 0.5;
+  pointer-events: none;
+}
+body.zt-skin-aurora .tl-row.active {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--color-primary) 16%, transparent),
+    transparent
+  );
+}
+body.zt-skin-aurora .detail-col {
+  border: 1px solid color-mix(in srgb, var(--color-text-primary) 9%, transparent);
+  background: color-mix(in srgb, var(--color-surface) 45%, transparent);
+  backdrop-filter: blur(14px) saturate(1.4);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+}
+/* Neo */
+body.zt-skin-neo .hist-chips :deep(.arco-checkbox) {
+  border: 1.5px solid var(--color-border);
+  border-bottom-width: 2.5px;
+  border-radius: 4px;
+  padding: 2px 8px;
+  transition: border-color var(--zt-dur-fast, 120ms) var(--zt-ease-out, ease),
+    background-color var(--zt-dur-fast, 120ms) var(--zt-ease-out, ease);
+}
+body.zt-skin-neo .hist-chips :deep(.arco-checkbox:hover) {
+  border-color: var(--zt-cyan, #53e0d9);
+}
+body.zt-skin-neo .hist-chips :deep(.arco-checkbox.arco-checkbox-checked) {
+  border-color: var(--zt-lime, #c8f542);
+  background: color-mix(in srgb, var(--zt-lime, #c8f542) 10%, transparent);
+}
+body.zt-skin-neo .detail-col {
+  border: 1.5px solid var(--color-border);
+}
 </style>

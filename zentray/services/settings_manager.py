@@ -131,12 +131,14 @@ class QuickAddSettings:
 @dataclass
 class AppearanceSettings:
     """系统/外观。theme: light | dark | system；autostart 为开机自启偏好；
-    motion: full|off 界面动效开关；shape: round|crisp 形状风格。"""
+    motion: full|off 界面动效开关；shape: round|crisp 形状风格；
+    skin: neo|aurora 界面皮肤。"""
 
     theme: str = "system"
     autostart: bool = False
     motion: str = "full"
     shape: str = "round"
+    skin: str = "neo"
 
 
 @dataclass
@@ -484,11 +486,15 @@ class SettingsManager:
             shape = str(a.get("shape") or "round").lower()
             if shape not in ("round", "crisp"):
                 shape = "round"
+            skin = str(a.get("skin") or "neo").lower()
+            if skin not in ("neo", "aurora"):
+                skin = "neo"
             self._settings.appearance = AppearanceSettings(
                 theme=theme,
                 autostart=autostart,
                 motion=motion,
                 shape=shape,
+                skin=skin,
             )
 
         # 用 review 回写 nightly 兼容

@@ -1,0 +1,336 @@
+/* =====================================================================
+   Neo Bento 皮肤层（feature/ui-themes，源自 feature/ui-neo，灵感 uiverse.io bento）
+   仅在 body.zt-skin-neo 时生效。令牌按「皮肤×主题」组合覆盖（特异性 0-2-1
+   压过基线主题块 0-1-1）；结构规则只重述与基线有差异的属性。
+   ===================================================================== */
+
+/* ---- 令牌层 ---- */
+body.zt-skin-neo {
+  /* 冷黑基调 + 青柠/电光青双色 */
+  --color-bg-base: #0b0d12;
+  --color-surface: #14181f;
+  --color-surface-hover: rgba(255, 255, 255, 0.06);
+  --color-border: #7e8899;
+  --color-primary: #c8f542;
+  --color-primary-hover: #d7ff5e;
+  --color-primary-glow: rgba(200, 245, 66, 0.32);
+  --color-text-primary: #f2f5fa;
+  --color-text-muted: #9aa5b5;
+  --color-text-subdued: #737e8e;
+  /* 小圆角 + 硬阴影 + 快速缓动 */
+  --zt-radius-win: 8px;
+  --zt-radius-card: 4px;
+  --zt-radius-md: 3px;
+  --zt-shadow-card: 3px 3px 0 rgba(0, 0, 0, 0.55);
+  --zt-shadow-card-hover: 1px 1px 0 rgba(0, 0, 0, 0.55);
+  --zt-ease-out: cubic-bezier(0.2, 0.9, 0.1, 1);
+  --zt-ease-spring: cubic-bezier(0.2, 0.9, 0.1, 1);
+  --zt-dur-fast: 120ms;
+  --zt-dur-dialog: 200ms;
+  --zt-dur-off: 100ms;
+  /* Neo 双色系统 */
+  --zt-lime: #c8f542;
+  --zt-cyan: #53e0d9;
+  --zt-ink: #0b0d10;
+  --zt-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas,
+    monospace;
+  --zt-pri-low: #9aa5b5;
+  /* Arco 方角 */
+  --border-radius-small: 2px;
+  --border-radius-medium: 3px;
+  --border-radius-large: 4px;
+}
+
+body.zt-skin-neo.theme-slate-dark,
+body.zt-skin-neo.theme-dark {
+  --color-bg-base: #0b0d12;
+  --color-surface: #14181f;
+  --color-surface-hover: rgba(255, 255, 255, 0.06);
+  --color-border: #7e8899;
+  --color-primary: #c8f542;
+  --color-primary-hover: #d7ff5e;
+  --color-primary-glow: rgba(200, 245, 66, 0.32);
+  --color-text-primary: #f2f5fa;
+  --color-text-muted: #9aa5b5;
+  --color-text-subdued: #737e8e;
+}
+
+body.zt-skin-neo.theme-oled-dark {
+  --color-surface: #0b0d11;
+  --color-surface-hover: rgba(255, 255, 255, 0.07);
+  --color-border: #6f7889;
+  --color-primary: #c8f542;
+  --color-primary-hover: #d7ff5e;
+  --color-primary-glow: rgba(200, 245, 66, 0.3);
+  --color-text-muted: #a8b0bd;
+  --color-text-subdued: #7a8290;
+}
+
+body.zt-skin-neo.theme-light {
+  --color-bg-base: #eef0ea;
+  --color-surface-hover: rgba(11, 13, 16, 0.035);
+  --color-border: #10141c;
+  --color-primary: #5c8a0a;
+  --color-primary-hover: #497008;
+  --color-primary-glow: rgba(200, 245, 66, 0.45);
+  --color-text-primary: #10141c;
+  --color-text-muted: #46505e;
+  --color-text-subdued: #6b7686;
+  /* 浅色：灰色硬阴影 */
+  --zt-shadow-card: 3px 3px 0 rgba(15, 23, 42, 0.3);
+  --zt-shadow-card-hover: 1px 1px 0 rgba(15, 23, 42, 0.3);
+  /* Arco 主色重映射：可读的深 lime（rgb 三元组） */
+  --primary-4: 124 172 22;
+  --primary-5: 101 163 13;
+  --primary-6: 92 138 10;
+  --primary-7: 74 111 8;
+}
+
+body.zt-skin-neo.zt-shape-crisp {
+  --zt-radius-win: 6px;
+  --zt-radius-card: 2px;
+  --zt-radius-md: 2px;
+  --border-radius-small: 2px;
+  --border-radius-medium: 2px;
+  --border-radius-large: 3px;
+}
+
+/* Arco 主色重映射：暗色 = lime（rgb 三元组） */
+body.zt-skin-neo[arco-theme='dark'] {
+  --primary-4: 132 160 22;
+  --primary-5: 184 232 46;
+  --primary-6: 200 245 66;
+  --primary-7: 158 192 26;
+}
+
+/* ---- 结构层 ---- */
+
+/* 页头：800 加粗大写 + 双色方块标记 */
+body.zt-skin-neo .page-header h2 {
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+}
+body.zt-skin-neo .page-header h2::before {
+  content: "";
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 9px;
+  border-radius: 1px;
+  background: linear-gradient(135deg, var(--zt-lime) 50%, var(--zt-cyan) 50%);
+  vertical-align: -1px;
+  pointer-events: none;
+}
+
+/* 周期徽标方角 */
+body.zt-skin-neo .zt-tag-periodic {
+  border-radius: 3px;
+}
+
+/* 48px Task Card：2px 描边 + 硬阴影 + 按压手感 */
+body.zt-skin-neo .task-card-item {
+  padding: 8px 14px 8px 20px;
+  border-radius: var(--zt-radius-card, 4px);
+  border: 2px solid var(--color-border);
+  transition: transform var(--zt-dur-fast) var(--zt-ease-out),
+    box-shadow var(--zt-dur-fast) var(--zt-ease-out),
+    border-color var(--zt-dur-fast) var(--zt-ease-out),
+    background 0.2s ease;
+}
+body.zt-skin-neo .task-card-item:hover {
+  transform: translate(1px, 1px);
+  border-color: color-mix(in srgb, var(--zt-cyan) 45%, var(--color-border));
+}
+/* 分类色竖条：方角贴边 */
+body.zt-skin-neo .task-card-item::before {
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  border-radius: 0;
+  background: var(--cat-color, var(--zt-cyan));
+}
+body.zt-skin-neo .task-card-item:hover::before {
+  top: 0;
+  bottom: 0;
+}
+/* 选中态：lime 描边 + 左侧 lime 竖条 */
+body.zt-skin-neo .task-card-item.active {
+  border-color: var(--zt-lime);
+  background: color-mix(in srgb, var(--zt-lime) 7%, var(--color-surface));
+}
+body.zt-skin-neo .task-card-item.active::before {
+  background: var(--zt-lime);
+}
+
+/* 快速添加：方角 + 2px 描边 + 硬阴影 */
+body.zt-skin-neo .quick-add-box {
+  border-radius: var(--zt-radius-md);
+  box-shadow: var(--zt-shadow-card);
+  border: 2px solid var(--color-border);
+  transition: border-color var(--zt-dur-fast) var(--zt-ease-out),
+    box-shadow var(--zt-dur-fast) var(--zt-ease-out);
+}
+body.zt-skin-neo .quick-add-box:focus-within {
+  border-color: var(--zt-lime);
+  box-shadow: var(--zt-shadow-card),
+    0 0 0 2px var(--color-primary-glow);
+}
+
+/* 大表面接线：实底色块 + 2px 描边 + 硬阴影 */
+body.zt-skin-neo .arco-card {
+  background: var(--color-surface);
+  border: 2px solid var(--color-border);
+  box-shadow: var(--zt-shadow-card);
+}
+
+body.zt-skin-neo .arco-tag {
+  border-radius: 3px;
+}
+
+/* 按钮：一律小方角 */
+body.zt-skin-neo .arco-btn {
+  border-radius: 4px;
+}
+body.zt-skin-neo.zt-shape-crisp .arco-btn {
+  border-radius: 3px;
+}
+
+body.zt-skin-neo .arco-message {
+  border-radius: 4px;
+}
+
+/* 空状态：虚线描边框 */
+body.zt-skin-neo .arco-empty .arco-empty-image {
+  border: 1.5px dashed var(--color-border);
+}
+
+/* 主按钮：lime 实底 + 墨字 + 硬阴影按压（status 变体交还 Arco） */
+body.zt-skin-neo .arco-btn-primary:not(.arco-btn-disabled):not(.arco-btn-loading):not(
+    .arco-btn-status-danger
+  ):not(.arco-btn-status-warning):not(.arco-btn-status-success),
+body.zt-skin-neo .arco-btn-primary:not(.arco-btn-disabled):not(.arco-btn-loading):not(
+    .arco-btn-status-danger
+  ):not(.arco-btn-status-warning):not(.arco-btn-status-success):hover,
+body.zt-skin-neo .arco-btn-primary:not(.arco-btn-disabled):not(.arco-btn-loading):not(
+    .arco-btn-status-danger
+  ):not(.arco-btn-status-warning):not(.arco-btn-status-success):active {
+  background-color: var(--zt-lime);
+  color: var(--zt-ink);
+  font-weight: 700;
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.5);
+}
+
+body.zt-skin-neo.theme-light
+  .arco-btn-primary:not(.arco-btn-disabled):not(.arco-btn-loading):not(
+    .arco-btn-status-danger
+  ):not(.arco-btn-status-warning):not(.arco-btn-status-success) {
+  box-shadow: 2px 2px 0 rgba(15, 23, 42, 0.35);
+}
+
+/* 全按钮按压手感：位移 1-2px + 阴影随动（text 型按钮除外） */
+body.zt-skin-neo .arco-btn:not(.arco-btn-text):not(.arco-btn-disabled):hover {
+  transform: translate(1px, 1px);
+}
+body.zt-skin-neo .arco-btn:not(.arco-btn-text):not(.arco-btn-disabled):active {
+  transform: translate(2px, 2px);
+}
+
+/* 次按钮：cyan 描边 */
+body.zt-skin-neo .arco-btn:not(.arco-btn-primary):not(.arco-btn-text):not(
+    .arco-btn-status-danger
+  ):not(.arco-btn-status-warning):not(.arco-btn-status-success):not(
+    .arco-btn-disabled
+  ):not(.arco-btn-loading) {
+  border: 1.5px solid color-mix(in srgb, var(--zt-cyan) 55%, var(--color-border));
+  color: var(--color-text-primary);
+  background: transparent;
+}
+body.zt-skin-neo .arco-btn:not(.arco-btn-primary):not(.arco-btn-text):not(
+    .arco-btn-status-danger
+  ):not(.arco-btn-status-warning):not(.arco-btn-status-success):not(
+    .arco-btn-disabled
+  ):not(.arco-btn-loading):hover {
+  border-color: var(--zt-cyan);
+  color: var(--zt-cyan);
+  background: color-mix(in srgb, var(--zt-cyan) 8%, transparent);
+}
+
+/* 滚动条：8px 方角双色 thumb */
+body.zt-skin-neo ::-webkit-scrollbar-thumb {
+  background: linear-gradient(
+    180deg,
+    var(--zt-lime) 0%,
+    var(--zt-cyan) 100%
+  );
+  border-radius: 0;
+}
+body.zt-skin-neo ::-webkit-scrollbar-thumb:hover {
+  filter: brightness(1.15);
+}
+body.zt-skin-neo ::-webkit-scrollbar-track {
+  border-left: 1px solid var(--color-border);
+}
+body.zt-skin-neo ::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.zt-skin-neo .arco-btn:not(.arco-btn-text):not(.arco-btn-disabled):hover,
+  body.zt-skin-neo .arco-btn:not(.arco-btn-text):not(.arco-btn-disabled):active {
+    transform: none;
+  }
+}
+
+/* ---- Neo Bento 组件层 ---- */
+
+/* lime 底上的选中字形改墨色（暗色主题 checkbox/单选按钮组） */
+body.zt-skin-neo[arco-theme='dark'] .arco-checkbox-checked .arco-checkbox-icon-check {
+  color: var(--zt-ink);
+}
+body.zt-skin-neo[arco-theme='dark'] .arco-radio-button.arco-radio-checked {
+  background-color: var(--zt-lime);
+  color: var(--zt-ink);
+  border-color: var(--zt-lime);
+}
+
+/* 设置导航选中项加粗 */
+body.zt-skin-neo .arco-menu-item.arco-menu-selected {
+  font-weight: 600;
+}
+
+/* 弹层：2px 描边 + 硬阴影 */
+body.zt-skin-neo .arco-modal {
+  border: 2px solid var(--color-border);
+  border-radius: 4px;
+  box-shadow: 5px 5px 0 rgba(0, 0, 0, 0.5);
+}
+body.zt-skin-neo.theme-light .arco-modal {
+  box-shadow: 5px 5px 0 rgba(15, 23, 42, 0.25);
+}
+body.zt-skin-neo .arco-drawer {
+  border: 2px solid var(--color-border);
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.5);
+}
+body.zt-skin-neo .arco-message {
+  border: 1.5px solid var(--color-border);
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.5);
+}
+
+/* 优先级 chip：描边随文字色（border-color 缺省取 currentColor） */
+body.zt-skin-neo .zt-pri {
+  border: 1px solid;
+}
+
+/* 数字等宽：时间/计数/倒计时一律 mono 系统栈 */
+body.zt-skin-neo .rcard-time,
+body.zt-skin-neo .tl-time,
+body.zt-skin-neo .date-label,
+body.zt-skin-neo .date-count,
+body.zt-skin-neo .zt-dl-late,
+body.zt-skin-neo .zt-dl-soon,
+body.zt-skin-neo .zt-tag-periodic,
+body.zt-skin-neo .zt-pri {
+  font-family: var(--zt-mono);
+  font-variant-numeric: tabular-nums;
+}

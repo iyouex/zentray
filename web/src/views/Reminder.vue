@@ -161,4 +161,33 @@ onMounted(async () => {
   opacity: 0;
   transform: scale(0.92);
 }
+
+/* ---- 皮肤变体（body.zt-skin-* 门控） ---- */
+/* Aurora：玻璃卡 + 极光渐变左缘 */
+body.zt-skin-aurora .rcard {
+  position: relative;
+  border: 1px solid color-mix(in srgb, var(--color-text-primary) 9%, transparent);
+  background: color-mix(in srgb, var(--color-surface) 55%, transparent);
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  padding: 10px 14px 10px 17px;
+  box-shadow: 0 8px 32px rgba(2, 6, 23, 0.35),
+    inset 0 1px 0 color-mix(in srgb, #ffffff 6%, transparent);
+  overflow: hidden;
+}
+body.zt-skin-aurora .rcard::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(180deg, var(--color-primary), #818cf8 55%, #e879f9);
+  pointer-events: none;
+}
+/* Neo：2px 描边方角 */
+body.zt-skin-neo .rcard {
+  border: 2px solid var(--color-border);
+  border-radius: var(--zt-radius-card, 4px);
+}
 </style>

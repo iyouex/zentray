@@ -5,6 +5,8 @@ import App from './App.vue'
 import router from './router'
 import { vStagger } from './directives/stagger'
 import './styles.css'
+import './themes/neo.css'
+import './themes/aurora.css'
 
 const app = createApp(App)
 app.use(ArcoVue)
