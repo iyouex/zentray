@@ -150,16 +150,20 @@ export async function setAutostart(enabled) {
   return data
 }
 
-/** 导出备份 zip */
-export async function exportBackup(include) {
-  const { data } = await http.post('/api/system/export', { include })
+/** 导出备份 zip；opts.password AES-256 加密、opts.destPath 另存为绝对路径 */
+export async function exportBackup(include, { password, destPath } = {}) {
+  const body = { include }
+  if (password) body.password = password
+  if (destPath) body.dest_path = destPath
+  const { data } = await http.post('/api/system/export', body)
   return data
 }
 
-/** 从本机 zip 路径导入（替换） */
-export async function importBackup(path, { include, safety_backup = true } = {}) {
+/** 从本机 zip 路径导入（替换）；加密包需带 password */
+export async function importBackup(path, { include, safety_backup = true, password } = {}) {
   const body = { path, safety_backup }
   if (include) body.include = include
+  if (password) body.password = password
   const { data } = await http.post('/api/system/import', body)
   return data
 }
@@ -168,6 +172,42 @@ export async function importBackup(path, { include, safety_backup = true } = {})
 export async function packArchive() {
   const { data } = await http.post('/api/system/archive/pack')
   return data
+}
+
+/** 备份目录快照列表 */
+export async function listBackups() {
+  const { data } = await http.get('/api/system/backups')
+  return data
+}
+
+/** 删除备份目录内的 zip */
+export async function deleteBackup(path) {
+  const { data } = await http.post('/api/system/backups/delete', { path })
+  return data
+}
+
+/**
+ * 原生路径选择（Qt WebEngine 桥）。kind: 'dir' | 'file' | 'save'。
+ * 返回 { kind, id, path, cancelled }；纯浏览器 dev（无注入 api 基址）直接取消。
+ */
+export function pickPath(kind, { title = '', startDir = '', defaultName = '' } = {}) {
+  if (!resolveApiBase()) {
+    return Promise.resolve({ kind, id: '', path: '', cancelled: true })
+  }
+  const id = Math.random().toString(36).slice(2)
+  return new Promise((resolve) => {
+    const handler = (e) => {
+      const r = e.detail || {}
+      if (r.id !== id) return
+      window.removeEventListener('zentray:pick-result', handler)
+      resolve(r)
+    }
+    window.addEventListener('zentray:pick-result', handler)
+    const payload = encodeURIComponent(
+      JSON.stringify({ id, title, start_dir: startDir, default_name: defaultName })
+    )
+    window.location.href = `zentray://pick-${kind}?payload=${payload}`
+  })
 }
 
 /** 首次配置向导完成 */

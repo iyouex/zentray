@@ -9,10 +9,11 @@ from __future__ import annotations
 import json
 import logging
 import weakref
+from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import urlencode
 
-from PySide6.QtCore import QObject, QUrl, Qt, Signal
+from PySide6.QtCore import QObject, QTimer, QUrl, Qt, Signal
 from PySide6.QtWidgets import QDialog, QVBoxLayout
 
 logger = logging.getLogger(__name__)
@@ -74,6 +75,28 @@ if _HAS_WEBENGINE:
                 except Exception as e:
                     logger.debug("Failed to handle zentray://move: %s", e)
                 return False
+            if s.startswith("zentray://pick-"):
+                # 原生路径选择（目录/打开/另存为）：结果经 runJavaScript 派发
+                # CustomEvent 回前端。必须 singleShot 推迟——导航回调内直接开
+                # 模态对话框会重入 WebEngine。
+                if s.startswith("zentray://pick-dir"):
+                    kind = "dir"
+                elif s.startswith("zentray://pick-file"):
+                    kind = "file"
+                else:
+                    kind = "save"
+                payload = {}
+                if "payload=" in s:
+                    from urllib.parse import unquote, parse_qs, urlparse
+
+                    q = parse_qs(urlparse(s).query)
+                    raw = (q.get("payload") or [""])[0]
+                    try:
+                        payload = json.loads(unquote(raw))
+                    except Exception:
+                        payload = {}
+                QTimer.singleShot(0, lambda: self._run_pick(kind, payload))
+                return False
             if s.startswith("zentray://close"):
                 payload = {}
                 if "payload=" in s:
@@ -88,6 +111,42 @@ if _HAS_WEBENGINE:
                 self.result_received.emit(payload)
                 return False
             return super().acceptNavigationRequest(url, nav_type, is_main_frame)
+
+        def _run_pick(self, kind: str, payload: dict) -> None:
+            """Qt 主线程弹原生对话框，结果回填前端（zentray:pick-result 事件）。"""
+            result = {"kind": kind, "id": payload.get("id"), "path": "", "cancelled": True}
+            try:
+                from PySide6.QtWidgets import QFileDialog
+
+                view = self.parent()
+                parent = view.window() if view else None
+                title = str(payload.get("title") or "")
+                start = str(payload.get("start_dir") or "")
+                if kind == "dir":
+                    path = QFileDialog.getExistingDirectory(parent, title, start)
+                elif kind == "file":
+                    path, _ = QFileDialog.getOpenFileName(
+                        parent, title, start, "备份文件 (*.zip);;所有文件 (*)"
+                    )
+                else:
+                    name = str(payload.get("default_name") or "")
+                    start_path = str(Path(start) / name) if start and name else (start or name)
+                    path, _ = QFileDialog.getSaveFileName(
+                        parent, title, start_path, "备份文件 (*.zip);;所有文件 (*)"
+                    )
+                result["path"] = path or ""
+                result["cancelled"] = not path
+            except Exception:
+                logger.exception("pick 对话框失败")
+                result = {"kind": kind, "id": payload.get("id"), "path": "", "cancelled": True}
+            try:
+                self.runJavaScript(
+                    "window.dispatchEvent(new CustomEvent('zentray:pick-result', "
+                    + json.dumps({"detail": result}, ensure_ascii=False)
+                    + "))"
+                )
+            except Exception:
+                logger.exception("pick 结果回填失败")
 
 else:
     _BridgePage = None  # type: ignore

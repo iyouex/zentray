@@ -124,6 +124,26 @@ class NightlyJobWorker(QThread):
                     self.last_review_date = today_str
                     sched.save_state(state)
 
+            # —— 自动周期备份（每 N 天，纯文件 IO 无 AI/通知依赖）——
+            backup = settings.backup
+            if sched.should_fire_backup(
+                now,
+                enabled=bool(backup.auto_enabled),
+                last_date=state.last_backup_date,
+                trigger_hour=int(backup.trigger_hour),
+                interval_days=int(backup.interval_days),
+            ):
+                logger.info(
+                    "触发自动备份 @%s (每 %d 天，保留 %d 份)",
+                    now.strftime("%H:%M"),
+                    int(backup.interval_days),
+                    int(backup.keep),
+                )
+                self._run_backup()
+                state.last_backup_date = today_str
+                state.last_backup_at = now.isoformat(timespec="seconds")
+                sched.save_state(state)
+
             for _ in range(60):
                 if not self.is_running:
                     break
@@ -154,6 +174,19 @@ class NightlyJobWorker(QThread):
                 )
         except Exception as e:
             logger.exception("Nightly review error: %s", e)
+
+    def _run_backup(self):
+        """自动备份失败只留日志，不打扰用户（下次到点重试）。"""
+        try:
+            from zentray.services.data_migration import run_auto_backup
+
+            result = run_auto_backup()
+            if result.ok:
+                logger.info("自动备份完成: %s", result.path)
+            else:
+                logger.warning("自动备份失败: %s", result.message)
+        except Exception as e:
+            logger.exception("Auto backup error: %s", e)
 
     def stop(self):
         self.is_running = False

@@ -1,4 +1,4 @@
-"""跨设备数据迁移：导出 / 导入（替换）/ 归档打包。"""
+"""跨设备数据迁移：导出 / 导入（替换）/ 归档打包 / 自动备份轮转。"""
 from __future__ import annotations
 
 import json
@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Set
+
+import pyzipper
 
 from zentray.config import (
     ACTIVE_TASKS_FILE,
@@ -22,6 +24,9 @@ logger = logging.getLogger(__name__)
 
 FORMAT_NAME = "zentray-backup"
 FORMAT_VERSION = 1
+
+# 自动备份专用前缀：轮转（prune）只清理此前缀，绝不碰手动导出/另存为/导入前安全备份
+AUTO_PREFIX = "zentray-auto"
 
 # include 键 → 相对 DATA_DIR 的路径（文件或目录）
 INCLUDE_MAP: Dict[str, str] = {
@@ -116,16 +121,32 @@ def create_export_zip(
     *,
     data_dir: Optional[Path] = None,
     prefix: str = "zentray-backup",
+    out_dir: Optional[Path] = None,
+    out_path: Optional[Path] = None,
+    password: Optional[str] = None,
 ) -> MigrationResult:
+    """导出 zip。out_path 精确指定另存为文件；out_dir 覆盖输出目录；
+    password 非空则全包 AES-256 加密（含 manifest.json）。"""
     root = Path(data_dir) if data_dir else DATA_DIR
     keys = normalize_include(include)
-    out_dir = exports_dir(root)
-    out_path = out_dir / f"{prefix}-{_stamp()}.zip"
+    if out_path is None:
+        out_path = (out_dir or exports_dir(root)) / f"{prefix}-{_stamp()}.zip"
+    out_path = Path(out_path).expanduser()
     details: Dict[str, str] = {}
     packed: List[str] = []
 
     try:
-        with zipfile.ZipFile(out_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        # 带 password 才启用 WZ_AES（pyzipper 设了 encryption 又无密码会直接报错）；
+        # 不加密时等价普通 zipfile 写出
+        with pyzipper.AESZipFile(
+            out_path,
+            "w",
+            compression=pyzipper.ZIP_DEFLATED,
+            encryption=pyzipper.WZ_AES if password else None,
+        ) as zf:
+            if password:
+                zf.setpassword(password.encode("utf-8"))
             for key in keys:
                 rel = INCLUDE_MAP[key]
                 src = root / rel
@@ -142,6 +163,7 @@ def create_export_zip(
                 "created_at": datetime.now().isoformat(timespec="seconds"),
                 "include": packed,
                 "requested_include": keys,
+                "encrypted": bool(password),
             }
             zf.writestr(
                 "manifest.json",
@@ -179,9 +201,20 @@ def pack_archive(
     )
 
 
-def read_manifest(zip_path: Path) -> Optional[dict]:
+def is_encrypted_zip(zip_path: Path) -> bool:
+    """zip 通用标志位第 0 位（ZipCrypto/AES 通用），读 infolist 即可，无需密码。"""
     try:
         with zipfile.ZipFile(zip_path, "r") as zf:
+            return any(info.flag_bits & 0x1 for info in zf.infolist())
+    except Exception:
+        return False
+
+
+def read_manifest(zip_path: Path, password: Optional[str] = None) -> Optional[dict]:
+    try:
+        with pyzipper.AESZipFile(zip_path, "r") as zf:
+            if password:
+                zf.setpassword(password.encode("utf-8"))
             if "manifest.json" in zf.namelist():
                 return json.loads(zf.read("manifest.json").decode("utf-8"))
     except Exception:
@@ -195,25 +228,47 @@ def import_replace(
     *,
     data_dir: Optional[Path] = None,
     make_safety_backup: bool = True,
+    password: Optional[str] = None,
 ) -> MigrationResult:
     """
     替换模式导入：按 include 覆盖 DATA_DIR 对应文件。
-    导入前默认对当前数据做安全备份。
+    导入前默认对当前数据做安全备份（明文）。
     """
     root = Path(data_dir) if data_dir else DATA_DIR
     src = Path(zip_path).expanduser().resolve()
     if not src.is_file():
         return MigrationResult(ok=False, message=f"备份文件不存在: {src}")
 
+    # 检测顺序：flag_bits 加密位 → 密码 → manifest（加密包的 manifest 本身是密文）
+    encrypted = is_encrypted_zip(src)
+    if encrypted and not password:
+        return MigrationResult(ok=False, message="备份已加密，请输入密码", path=str(src))
+    if encrypted:
+        # 密码探针：读任一成员（pyzipper 带 HMAC 校验，错密码抛 RuntimeError 而非解出脏数据）
+        try:
+            with pyzipper.AESZipFile(src, "r") as zf:
+                zf.setpassword(password.encode("utf-8"))
+                member = next(
+                    (n for n in zf.namelist() if not n.endswith("/")), None
+                )
+                if member:
+                    zf.read(member)
+        except RuntimeError:
+            return MigrationResult(
+                ok=False, message="密码错误或备份文件损坏", path=str(src)
+            )
+
     try:
-        with zipfile.ZipFile(src, "r") as zf:
+        with pyzipper.AESZipFile(src, "r") as zf:
+            if password:
+                zf.setpassword(password.encode("utf-8"))
             names = set(zf.namelist())
     except zipfile.BadZipFile:
         return MigrationResult(ok=False, message="不是有效的 zip 文件")
     except Exception as e:
         return MigrationResult(ok=False, message=f"无法打开备份: {e}")
 
-    manifest = read_manifest(src)
+    manifest = read_manifest(src, password=password)
     if manifest and manifest.get("format") not in (None, FORMAT_NAME):
         return MigrationResult(
             ok=False,
@@ -250,7 +305,9 @@ def import_replace(
 
     details: Dict[str, str] = {}
     try:
-        with zipfile.ZipFile(src, "r") as zf:
+        with pyzipper.AESZipFile(src, "r") as zf:
+            if password:
+                zf.setpassword(password.encode("utf-8"))
             for key in available:
                 rel = INCLUDE_MAP[key]
                 dest = root / rel
@@ -307,6 +364,128 @@ def import_replace(
             safety_backup=safety_path,
             details=details,
         )
+
+
+def backup_dir_from_settings() -> Path:
+    """设置的自定义备份目录；空或不可写则回落默认 exports。"""
+    from zentray.services.settings_manager import SettingsManager
+
+    raw = ""
+    try:
+        raw = (SettingsManager().backup.dir or "").strip()
+    except Exception:
+        pass
+    d = Path(raw).expanduser() if raw else exports_dir()
+    try:
+        d.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        logger.warning("自定义备份目录不可用，回落默认 exports: %s", e)
+        d = exports_dir()
+    return d
+
+
+_KIND_PREFIXES: List[tuple] = [
+    (f"{AUTO_PREFIX}-", "auto"),
+    ("zentray-pre-import-", "pre_import"),
+    ("zentray-archive-", "archive"),
+    ("zentray-backup-", "manual"),
+]
+
+
+def _kind_of(name: str) -> str:
+    for prefix, kind in _KIND_PREFIXES:
+        if name.startswith(prefix):
+            return kind
+    return "unknown"
+
+
+def list_backups(*, backup_dir: Optional[Path] = None) -> List[dict]:
+    """备份目录内 zip 快照列表（mtime 倒序）；加密包 manifest 读不出为 None。"""
+    d = Path(backup_dir) if backup_dir else backup_dir_from_settings()
+    if not d.is_dir():
+        return []
+    items: List[dict] = []
+    for p in sorted(d.glob("*.zip"), key=lambda x: x.stat().st_mtime, reverse=True):
+        try:
+            st = p.stat()
+        except OSError:
+            continue
+        encrypted = is_encrypted_zip(p)
+        manifest = None if encrypted else read_manifest(p)
+        items.append(
+            {
+                "name": p.name,
+                "path": str(p),
+                "size": st.st_size,
+                "mtime": datetime.fromtimestamp(st.st_mtime).isoformat(
+                    timespec="seconds"
+                ),
+                "encrypted": encrypted,
+                "kind": _kind_of(p.name),
+                "manifest": {
+                    "created_at": manifest.get("created_at"),
+                    "app_version": manifest.get("app_version"),
+                    "include": manifest.get("include") or [],
+                }
+                if manifest
+                else None,
+            }
+        )
+    return items
+
+
+def delete_backup(path: str | Path, *, backup_dir: Optional[Path] = None) -> MigrationResult:
+    """删除备份文件（信任边界：仅允许备份目录内的 zip）。"""
+    d = (Path(backup_dir) if backup_dir else backup_dir_from_settings()).resolve()
+    p = Path(path).expanduser().resolve()
+    if p.parent != d or p.suffix.lower() != ".zip" or not p.is_file():
+        return MigrationResult(ok=False, message="仅允许删除备份目录内的 zip 文件")
+    try:
+        p.unlink()
+        return MigrationResult(ok=True, message="已删除", path=str(p))
+    except OSError as e:
+        return MigrationResult(ok=False, message=f"删除失败: {e}")
+
+
+def prune_auto_backups(*, keep: int, backup_dir: Optional[Path] = None) -> int:
+    """轮转：只删 zentray-auto-* 最旧的若干份，保留 keep 份。keep<=0 不轮转。"""
+    if keep <= 0:
+        return 0
+    d = Path(backup_dir) if backup_dir else backup_dir_from_settings()
+    if not d.is_dir():
+        return 0
+    autos = sorted(d.glob(f"{AUTO_PREFIX}-*.zip"), key=lambda x: x.stat().st_mtime)
+    removed = 0
+    for p in autos[: max(0, len(autos) - int(keep))]:
+        try:
+            p.unlink()
+            removed += 1
+        except OSError:
+            logger.warning("轮转删除失败: %s", p)
+    return removed
+
+
+def run_auto_backup(
+    *,
+    data_dir: Optional[Path] = None,
+    backup_dir: Optional[Path] = None,
+) -> MigrationResult:
+    """自动备份：全量默认范围（明文）导出到备份目录，成功后按 keep 轮转。"""
+    from zentray.services.settings_manager import SettingsManager
+
+    keep = 7
+    try:
+        keep = int(SettingsManager().backup.keep)
+    except Exception:
+        pass
+    result = create_export_zip(
+        prefix=AUTO_PREFIX,
+        data_dir=data_dir,
+        out_dir=backup_dir or backup_dir_from_settings(),
+    )
+    if result.ok:
+        prune_auto_backups(keep=keep, backup_dir=backup_dir)
+    return result
 
 
 def list_include_options() -> List[dict]:

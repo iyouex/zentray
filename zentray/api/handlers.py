@@ -227,7 +227,7 @@ def handle_request(
         if method == "POST" and path == "/api/ai/suggest":
             return _ai_suggest(body)
 
-        # —— 系统：自启 + 数据迁移 ——
+        # —— 系统：自启 + 数据迁移 + 备份管理 ——
         if method == "GET" and path == "/api/system/status":
             return _system_status()
         if method == "POST" and path == "/api/system/autostart":
@@ -238,6 +238,10 @@ def handle_request(
             return _system_import(body or {})
         if method == "POST" and path == "/api/system/archive/pack":
             return _system_archive_pack()
+        if method == "GET" and path == "/api/system/backups":
+            return _system_backups()
+        if method == "POST" and path == "/api/system/backups/delete":
+            return _system_backup_delete(body or {})
 
         return 404, {"error": f"not found: {method} {path}"}
     except Exception as e:
@@ -425,6 +429,7 @@ def _settings_dict() -> dict:
         "categories": s.categories.to_dict(),
         "quick_add": asdict(s.quick_add),
         "appearance": asdict(s.appearance),
+        "backup": asdict(s.backup),
     }
 
 
@@ -554,9 +559,12 @@ def _system_status() -> tuple[int, dict]:
     from zentray.services import autostart as autostart_svc
     from zentray.services import data_migration as mig
     from zentray.services.settings_manager import SettingsManager
+    from zentray.workers.ai_schedule import load_state
 
     st = autostart_svc.status()
-    pref = bool(SettingsManager().appearance.autostart)
+    sm = SettingsManager()
+    pref = bool(sm.appearance.autostart)
+    backup_dir = mig.backup_dir_from_settings()
     return 200, {
         "version": VERSION,
         "data_dir": str(DATA_DIR),
@@ -566,6 +574,13 @@ def _system_status() -> tuple[int, dict]:
         },
         "include_options": mig.list_include_options(),
         "exports_dir": str(mig.exports_dir()),
+        "backup": {
+            **asdict(sm.backup),
+            "default_dir": str(mig.exports_dir()),
+            "dir": str(backup_dir),
+            "custom": bool((sm.backup.dir or "").strip()),
+            "last_backup_at": load_state().last_backup_at,
+        },
     }
 
 
@@ -595,7 +610,19 @@ def _system_export(body: dict) -> tuple[int, dict]:
     from zentray.services import data_migration as mig
 
     include = body.get("include")
-    result = mig.create_export_zip(include)
+    password = (body.get("password") or "").strip() or None
+    dest_path = (body.get("dest_path") or "").strip() or None
+    out_path = None
+    if dest_path:
+        if not dest_path.lower().endswith(".zip"):
+            return 400, {"error": "另存为文件必须以 .zip 结尾"}
+        out_path = dest_path
+    result = mig.create_export_zip(
+        include,
+        out_path=out_path,
+        password=password,
+        out_dir=None if out_path else mig.backup_dir_from_settings(),
+    )
     code = 200 if result.ok else 500
     return code, result.to_dict()
 
@@ -615,6 +642,7 @@ def _system_import(body: dict) -> tuple[int, dict]:
         path,
         include,
         make_safety_backup=bool(make_safety),
+        password=(body.get("password") or "").strip() or None,
     )
     if result.ok:
         try:
@@ -635,6 +663,23 @@ def _system_archive_pack() -> tuple[int, dict]:
 
     result = mig.pack_archive()
     code = 200 if result.ok else 500
+    return code, result.to_dict()
+
+
+def _system_backups() -> tuple[int, dict]:
+    from zentray.services import data_migration as mig
+
+    return 200, {"items": mig.list_backups(), "dir": str(mig.backup_dir_from_settings())}
+
+
+def _system_backup_delete(body: dict) -> tuple[int, dict]:
+    from zentray.services import data_migration as mig
+
+    path = (body.get("path") or "").strip()
+    if not path:
+        return 400, {"error": "path 必填"}
+    result = mig.delete_backup(path)
+    code = 200 if result.ok else 400
     return code, result.to_dict()
 
 
