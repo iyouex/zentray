@@ -2,7 +2,14 @@
   <div class="page">
     <div class="page-header">
       <h2>{{ isEdit ? '修改任务' : '新建任务' }}</h2>
+      <a-space v-if="aiParseOn">
+        <a-button type="outline" :loading="aiParsing" @click="onAiParse">
+          <template #icon><PhSparkle :size="16" /></template>
+          AI 解析
+        </a-button>
+      </a-space>
     </div>
+    <input v-if="aiOcrOn" ref="fileRef" type="file" accept="image/*" style="display: none" @change="onFile" />
 
     <div class="page-body">
       <a-spin :loading="loading" style="width: 100%">
@@ -112,6 +119,43 @@
 
           <a-card title="详情与提醒" :bordered="false">
             <a-form :model="form" layout="vertical">
+              <a-form-item v-if="aiOcrOn">
+                <div
+                  class="ocr-drop"
+                  :class="{ 'is-drag': dragOver, 'is-busy': aiOcrLoading }"
+                  role="button"
+                  tabindex="0"
+                  @click="pickImage"
+                  @keydown.enter.prevent="pickImage"
+                  @dragover.prevent="dragOver = true"
+                  @dragleave.prevent="dragOver = false"
+                  @drop.prevent="onDrop"
+                >
+                  <template v-if="!ocrPreview">
+                    <PhCamera :size="22" class="ocr-drop-icon" />
+                    <div class="ocr-drop-text">
+                      <span>点击选择、拖入或 Ctrl+V 粘贴图片</span>
+                      <span class="muted">识别为任务草稿，确认后填入表单（≤9MB）</span>
+                    </div>
+                  </template>
+                  <template v-else>
+                    <img class="ocr-thumb" :src="ocrPreview" alt="" />
+                    <div class="ocr-file-info">
+                      <span class="ocr-file-name">{{ ocrFileName }}</span>
+                      <span v-if="aiOcrLoading" class="ocr-status">识别中…</span>
+                      <span v-else class="muted">点击可重新选择</span>
+                    </div>
+                    <a-button
+                      v-if="!aiOcrLoading"
+                      size="mini"
+                      status="danger"
+                      @click.stop="clearOcrFile"
+                    >
+                      移除
+                    </a-button>
+                  </template>
+                </div>
+              </a-form-item>
               <a-form-item label="任务详情">
                 <a-textarea
                   v-model="form.details"
@@ -209,15 +253,61 @@
         </p>
       </div>
     </a-modal>
+
+    <!-- AI 解析 / 图片识别共用的草稿预览：逐字段确认后应用 -->
+    <a-modal
+      v-model:visible="showAiPreview"
+      title="AI 解析结果"
+      draggable
+      :width="520"
+      ok-text="应用到表单"
+      cancel-text="取消"
+      @ok="applyDraft"
+    >
+      <div v-if="previewDraft" class="ai-preview">
+        <div class="ai-row"><span class="ai-k">标题</span><span class="ai-v strong">{{ previewDraft.title }}</span></div>
+        <div class="ai-row">
+          <span class="ai-k">分类</span>
+          <span class="ai-v">
+            <template v-if="categoryMatch">{{ categoryMatch.name }}<em class="ai-ok">（已匹配）</em></template>
+            <template v-else-if="previewDraft.category">{{ previewDraft.category }}<em class="ai-warn">（未匹配已有分类，保持当前）</em></template>
+            <template v-else>—</template>
+          </span>
+        </div>
+        <div class="ai-row"><span class="ai-k">优先级</span><span class="ai-v">{{ PRI_LABEL[previewDraft.priority] || '中' }}</span></div>
+        <div class="ai-row"><span class="ai-k">截止日期</span><span class="ai-v">{{ previewDraft.deadline || '—' }}</span></div>
+        <div class="ai-row"><span class="ai-k">提醒时间</span><span class="ai-v">{{ previewDraft.reminder_time || '—' }}</span></div>
+        <div class="ai-row"><span class="ai-k">详情</span><span class="ai-v pre">{{ previewDraft.details || '—' }}</span></div>
+        <div class="ai-row">
+          <span class="ai-k">子任务</span>
+          <ul v-if="previewDraft.subtasks?.length" class="ai-subs">
+            <li v-for="s in previewDraft.subtasks" :key="s">{{ s }}</li>
+          </ul>
+          <span v-else class="ai-v">—</span>
+        </div>
+      </div>
+    </a-modal>
+
+    <!-- 图片识别出多条：先选哪一条 -->
+    <a-modal v-model:visible="showOcrPick" title="识别到多条任务" draggable :width="480" :footer="false">
+      <p class="muted">选择一条填入表单：</p>
+      <div v-for="(d, i) in ocrDrafts" :key="i" class="ocr-item" @click="chooseOcrDraft(d)">
+        <span class="strong">{{ d.title }}</span>
+        <span class="muted">{{ [d.category, PRI_LABEL[d.priority], d.deadline].filter(Boolean).join(' · ') }}</span>
+      </div>
+    </a-modal>
   </div>
 </template>
 
 <script setup>
-import { computed, h, onMounted, reactive, ref } from 'vue'
+import { computed, h, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Message, Modal } from '@arco-design/web-vue'
+import { PhCamera, PhSparkle } from '@phosphor-icons/vue'
 import {
   addSecondaryCategory,
+  aiOcr,
+  aiParse,
   cancelHost,
   checkReminderConflicts,
   closeHost,
@@ -323,6 +413,179 @@ const isWeeklyOrMonthly = computed(
 function onPrimaryChange() {
   form.category_secondary_id = null
 }
+
+// ---- AI 场景能力：文本解析 + 图片识别（开关来自 meta.ai_features，默认关）----
+
+const PRI_LABEL = { high: '高', medium: '中', low: '低' }
+const aiParseOn = computed(() => !!meta.value?.ai_features?.smart_parse)
+const aiOcrOn = computed(() => !!meta.value?.ai_features?.image_ocr)
+const aiParsing = ref(false)
+const aiOcrLoading = ref(false)
+const showAiPreview = ref(false)
+const previewDraft = ref(null)
+const showOcrPick = ref(false)
+const ocrDrafts = ref([])
+const fileRef = ref(null)
+const dragOver = ref(false)
+const ocrPreview = ref('')
+const ocrFileName = ref('')
+
+function clearOcrFile() {
+  if (ocrPreview.value) URL.revokeObjectURL(ocrPreview.value)
+  ocrPreview.value = ''
+  ocrFileName.value = ''
+}
+
+/** 草稿 category（名称，可能带二级「工作/开发」）→ 已有分类 id；匹配不上返回 null */
+const categoryMatch = computed(() => {
+  const d = previewDraft.value
+  if (!d?.category) return null
+  const cats = meta.value?.categories
+  const sep = cats?.level_separator || '-'
+  const list = cats?.primary_list || []
+  const name = d.category.trim()
+  for (const p of list) {
+    if (name === p.name) return { primary: p.id, secondary: null, name: p.name }
+    if (name.startsWith(p.name + sep)) {
+      const rest = name.slice((p.name + sep).length)
+      const sec = (p.secondaries || []).find((s) => s.name === rest)
+      return { primary: p.id, secondary: sec?.id || null, name: sec ? `${p.name}${sep}${sec.name}` : p.name }
+    }
+  }
+  // 模糊：互相包含的一级
+  for (const p of list) {
+    if (name.includes(p.name) || p.name.includes(name)) return { primary: p.id, secondary: null, name: p.name }
+  }
+  return null
+})
+
+async function onAiParse() {
+  const text = [form.title, form.details].filter((x) => x && x.trim()).join('\n')
+  if (!text) {
+    Message.warning('先填写标题或详情，再让 AI 解析')
+    return
+  }
+  aiParsing.value = true
+  try {
+    previewDraft.value = await aiParse(text)
+    showAiPreview.value = true
+  } catch (e) {
+    Message.error(e?.response?.data?.error || e?.message || 'AI 解析失败')
+  } finally {
+    aiParsing.value = false
+  }
+}
+
+function pickImage() {
+  if (!aiOcrLoading.value) fileRef.value?.click()
+}
+
+async function onFile(e) {
+  const f = e.target.files?.[0]
+  e.target.value = ''
+  if (f) await runOcr(f)
+}
+
+/** 拖放：取首个图片文件，非图片提示 */
+function onDrop(e) {
+  dragOver.value = false
+  const f = Array.from(e.dataTransfer?.files || []).find((x) => x.type.startsWith('image/'))
+  if (!f) {
+    Message.warning('仅支持图片文件')
+    return
+  }
+  runOcr(f)
+}
+
+async function runOcr(file) {
+  if (aiOcrLoading.value) return
+  clearOcrFile()
+  if (file.size > 9 * 1024 * 1024) {
+    Message.warning('图片过大（>9MB），请压缩后重试')
+    return
+  }
+  ocrFileName.value = file.name || '剪贴板图片'
+  ocrPreview.value = URL.createObjectURL(file)
+  aiOcrLoading.value = true
+  try {
+    const dataUrl = await new Promise((res, rej) => {
+      const r = new FileReader()
+      r.onload = () => res(r.result)
+      r.onerror = rej
+      r.readAsDataURL(file)
+    })
+    const drafts = await aiOcr(dataUrl)
+    if (!drafts.length) {
+      Message.info('图片中未识别到待办线索')
+      return
+    }
+    if (drafts.length === 1) {
+      previewDraft.value = drafts[0]
+      showAiPreview.value = true
+    } else {
+      ocrDrafts.value = drafts
+      showOcrPick.value = true
+    }
+  } catch (e) {
+    Message.error(e?.response?.data?.error || e?.message || '图片识别失败')
+  } finally {
+    aiOcrLoading.value = false
+  }
+}
+
+/** 直接 Ctrl+V 粘贴截图进表单页 */
+async function onPaste(e) {
+  if (!aiOcrOn.value) return
+  const item = Array.from(e.clipboardData?.items || []).find((i) => i.type.startsWith('image/'))
+  if (!item) return
+  const f = item.getAsFile()
+  if (f) {
+    e.preventDefault()
+    await runOcr(f)
+  }
+}
+
+function chooseOcrDraft(d) {
+  showOcrPick.value = false
+  previewDraft.value = d
+  showAiPreview.value = true
+}
+
+/** 应用草稿到表单：分类按名称匹配（匹配不上不动）；子任务追加去重 */
+function applyDraft() {
+  const d = previewDraft.value
+  if (!d?.title) return
+  form.title = d.title
+  if (d.priority) form.priority = d.priority
+  const m = categoryMatch.value
+  if (m) {
+    form.category_primary_id = m.primary
+    form.category_secondary_id = m.secondary
+  }
+  if (d.deadline && form.mode !== 'periodic' && !isTemplate.value) {
+    form.has_deadline = true
+    form.deadline = d.deadline
+  }
+  if (d.reminder_time) {
+    form.reminder_enabled = true
+    form.reminder_time = d.reminder_time
+  }
+  if (d.details) form.details = d.details
+  if (d.subtasks?.length) {
+    const exist = new Set(form.subtasks.map((s) => (s.title || '').trim()))
+    for (const t of d.subtasks) {
+      if (!exist.has(t)) form.subtasks.push({ id: null, title: t, status: 'active' })
+    }
+  }
+  showAiPreview.value = false
+  Message.success('已应用 AI 解析结果')
+}
+
+onMounted(() => window.addEventListener('paste', onPaste))
+onUnmounted(() => {
+  window.removeEventListener('paste', onPaste)
+  clearOcrFile()
+})
 
 function primaryName() {
   const o = primaryOpts.value.find((x) => x.value === form.category_primary_id)
@@ -652,5 +915,141 @@ onMounted(async () => {
 .muted {
   color: var(--color-text-3);
   font-size: 12px;
+}
+/* AI 解析预览 */
+.ai-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ai-row {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+}
+.ai-k {
+  flex: none;
+  width: 64px;
+  font-size: 12px;
+  color: var(--color-text-3);
+}
+.ai-v {
+  font-size: 13px;
+  word-break: break-word;
+}
+.ai-v.pre {
+  white-space: pre-line;
+}
+.ai-v.strong {
+  font-weight: 600;
+}
+.strong {
+  font-weight: 600;
+}
+.ai-ok {
+  color: rgb(var(--success-6));
+  font-style: normal;
+  font-size: 12px;
+  margin-left: 4px;
+}
+.ai-warn {
+  color: rgb(var(--warning-6));
+  font-style: normal;
+  font-size: 12px;
+  margin-left: 4px;
+}
+.ai-subs {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 13px;
+}
+.ocr-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--zt-radius-card, 12px);
+  cursor: pointer;
+  margin-bottom: 8px;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+.ocr-item:hover {
+  border-color: var(--color-primary);
+  background: var(--color-primary-glow);
+}
+
+/* ---- 图片识别上传区（点击/拖拽/粘贴三合一） ---- */
+.ocr-drop {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  border: 1.5px dashed var(--color-border);
+  border-radius: var(--zt-radius-md, 12px);
+  cursor: pointer;
+  transition: border-color var(--zt-dur-fast, 120ms) ease,
+    background-color var(--zt-dur-fast, 120ms) ease,
+    box-shadow var(--zt-dur-fast, 120ms) ease;
+}
+.ocr-drop:hover {
+  border-color: var(--color-primary-hover);
+  background: var(--color-surface-hover);
+}
+.ocr-drop.is-drag {
+  border-color: var(--color-primary);
+  background: var(--color-surface-hover);
+  box-shadow: 0 0 0 1.5px var(--color-primary-glow);
+}
+.ocr-drop.is-drag > * {
+  pointer-events: none;
+}
+.ocr-drop.is-busy {
+  cursor: default;
+}
+.ocr-drop-icon {
+  color: var(--color-text-subdued);
+  flex: none;
+}
+.ocr-drop-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+  color: var(--color-text-primary);
+}
+.ocr-thumb {
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
+  flex: none;
+  border-radius: var(--zt-radius-md, 12px);
+  border: 1px solid var(--color-border);
+}
+.ocr-file-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.ocr-file-name {
+  font-size: 13px;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ocr-status {
+  font-size: 12px;
+  color: var(--color-primary);
+  animation: ocr-blink 1.2s ease-in-out infinite;
+}
+@keyframes ocr-blink {
+  50% {
+    opacity: 0.45;
+  }
 }
 </style>

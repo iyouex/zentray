@@ -149,7 +149,6 @@ body,
   flex-shrink: 0;
   margin: 0;
   padding: 12px 0 16px;
-  border-top: 1px solid var(--color-border);
   background: inherit;
 }
 
@@ -185,6 +184,7 @@ body,
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 /* 周期实例小徽标 */
 .zt-tag-periodic {

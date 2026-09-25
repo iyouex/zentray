@@ -130,7 +130,40 @@
         </a-card>
 
         <a-card title="任务详情与操作" :bordered="true">
+          <template v-if="suggestOn" #extra>
+            <a-button size="small" type="outline" :loading="suggestLoading" @click="onAiSuggest">
+              <template #icon><PhLightbulb :size="15" /></template>
+              AI 建议
+            </a-button>
+          </template>
           <div class="col-scroll">
+            <!-- AI 建议卡片：应用即改任务，忽略即消失 -->
+            <div v-if="suggestOn && (aiSuggestions.length || suggestLoading)" class="ai-suggest-box">
+              <a-spin :loading="suggestLoading" style="width: 100%">
+                <div v-for="(s, i) in aiSuggestions" :key="i" class="ai-suggest-card">
+                  <div class="ai-suggest-main">
+                    <a-tag size="small" :color="SUGGEST_COLOR[s.type] || 'gray'">{{ SUGGEST_LABEL[s.type] || '建议' }}</a-tag>
+                    <span class="ai-suggest-text">{{ s.text }}</span>
+                  </div>
+                  <span v-if="s.target_title" class="ai-suggest-target">→ {{ s.target_title }}</span>
+                  <div class="ai-suggest-ops">
+                    <a-button
+                      v-if="canApplySuggest(s)"
+                      size="mini"
+                      type="primary"
+                      status="success"
+                      @click="applySuggest(i)"
+                    >
+                      应用
+                    </a-button>
+                    <a-button size="mini" type="secondary" @click="aiSuggestions.splice(i, 1)">忽略</a-button>
+                  </div>
+                </div>
+                <p v-if="!suggestLoading && !aiSuggestions.length" class="ai-suggest-empty">
+                  暂无建议，列表状态良好 👌
+                </p>
+              </a-spin>
+            </div>
             <!-- 任务态（单次 + 周期实例 + 孤儿） -->
             <template v-if="currentTask">
               <p class="title">{{ currentTask.title }}</p>
@@ -308,13 +341,15 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Message, Modal } from '@arco-design/web-vue'
-import { PhPlus, PhX, PhRepeat, PhArrowsCounterClockwise, PhPencil, PhCheck, PhTrash } from '@phosphor-icons/vue'
+import { PhPlus, PhX, PhRepeat, PhArrowsCounterClockwise, PhPencil, PhCheck, PhTrash, PhLightbulb } from '@phosphor-icons/vue'
 import {
   abandonTask,
   addSubtask,
+  aiSuggest,
   cancelHost,
   closeHost,
   deleteTemplate,
+  getMeta,
   listArchivedTasks,
   listTasks,
   listTemplates,
@@ -322,6 +357,7 @@ import {
   selectTask,
   setSubtaskStatus,
   skipTemplate,
+  updateTask,
   updateTemplate,
 } from '@/api/client'
 import { categoryColor } from '@/theme'
@@ -762,6 +798,72 @@ function onDeleteTemplate() {
 }
 
 onMounted(reload)
+
+// ---- AI 建议（开关来自 meta.ai_features.task_suggest，默认关）----
+
+const SUGGEST_LABEL = { priority: '优先级', deadline: '截止日', split: '拆子任务', review: '复盘提醒', clean: '清理建议' }
+const SUGGEST_COLOR = { priority: 'orangered', deadline: 'orange', split: 'cyan', review: 'purple', clean: 'gray' }
+const suggestOn = ref(false)
+const suggestLoading = ref(false)
+const aiSuggestions = ref([])
+
+onMounted(async () => {
+  try {
+    const meta = await getMeta()
+    suggestOn.value = !!meta?.ai_features?.task_suggest
+  } catch (_) {}
+})
+
+async function onAiSuggest() {
+  suggestLoading.value = true
+  aiSuggestions.value = []
+  try {
+    aiSuggestions.value = await aiSuggest(currentTask.value?.id || '')
+  } catch (e) {
+    Message.error(e?.response?.data?.error || e?.message || '获取建议失败')
+  } finally {
+    suggestLoading.value = false
+  }
+}
+
+/** priority/deadline/split 带有效 patch 才可应用；review/clean 为纯文本提醒 */
+function canApplySuggest(s) {
+  if (s.type === 'priority') return !!s.patch?.priority
+  if (s.type === 'deadline') return !!s.patch?.deadline
+  if (s.type === 'split') return !!s.patch?.subtask_titles?.length
+  return false
+}
+
+/** 建议目标：标题精确 → 互相包含 → 当前选中任务 */
+function findSuggestTarget(s) {
+  const title = s.target_title
+  if (!title) return currentTask.value
+  return (
+    tasks.value.find((t) => t.title === title) ||
+    tasks.value.find((t) => t.title.includes(title) || title.includes(t.title)) ||
+    currentTask.value
+  )
+}
+
+async function applySuggest(i) {
+  const s = aiSuggestions.value[i]
+  const t = findSuggestTarget(s)
+  if (!t) return
+  try {
+    if (s.type === 'priority') {
+      await updateTask(t.id, { priority: s.patch.priority })
+    } else if (s.type === 'deadline') {
+      await updateTask(t.id, { deadline: s.patch.deadline })
+    } else if (s.type === 'split') {
+      for (const st of s.patch.subtask_titles || []) await addSubtask(t.id, st)
+    }
+    Message.success('已应用')
+    aiSuggestions.value.splice(i, 1)
+    reload()
+  } catch (e) {
+    Message.error(e?.message || '应用失败')
+  }
+}
 </script>
 
 <style scoped>
@@ -920,5 +1022,106 @@ onMounted(reload)
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* ---- 皮肤变体（body.zt-skin-* 门控，scoped 属性编译不受影响） ---- */
+/* Aurora */
+body.zt-skin-aurora .task-card-item.active {
+  border-color: color-mix(in srgb, var(--color-primary, #0d9488) 60%, transparent);
+  background: color-mix(in srgb, var(--color-primary, #0d9488) 10%, transparent);
+}
+body.zt-skin-aurora .filter-row .fchip[aria-pressed='true'] {
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--color-primary) 28%, transparent),
+    color-mix(in srgb, #818cf8 26%, transparent)
+  );
+  color: var(--color-text-primary);
+  border-color: color-mix(in srgb, var(--color-primary) 55%, transparent);
+  box-shadow: 0 2px 10px var(--color-primary-glow);
+}
+body.zt-skin-aurora .sub-row {
+  border-top: 1px solid color-mix(in srgb, var(--color-text-primary) 8%, transparent);
+}
+/* Neo */
+body.zt-skin-neo .task-card-item.active {
+  border-color: var(--zt-lime, #c8f542);
+  background: color-mix(in srgb, var(--zt-lime, #c8f542) 7%, var(--color-surface));
+}
+/* kbd 键帽风格筛选 chip：小圆角 + 1.5px 描边 + 加粗底边 */
+body.zt-skin-neo .filter-row .fchip {
+  background: var(--color-surface);
+  border: 1.5px solid var(--color-border);
+  border-bottom-width: 3px;
+  border-radius: 4px;
+  padding: 4px 12px;
+  transition: color var(--zt-dur-fast, 120ms) var(--zt-ease-out, ease),
+    background-color var(--zt-dur-fast, 120ms) var(--zt-ease-out, ease),
+    border-color var(--zt-dur-fast, 120ms) var(--zt-ease-out, ease),
+    transform var(--zt-dur-fast, 120ms) var(--zt-ease-out, ease);
+}
+body.zt-skin-neo .filter-row .fchip:hover {
+  border-color: var(--zt-cyan, #53e0d9);
+  transform: translate(1px, 1px);
+  border-bottom-width: 2px;
+}
+body.zt-skin-neo .filter-row .fchip[aria-pressed='true'] {
+  background: var(--zt-lime, #c8f542);
+  color: var(--zt-ink, #0b0d10);
+  border-color: var(--zt-lime, #c8f542);
+  border-bottom-color: color-mix(in srgb, var(--zt-ink, #0b0d10) 45%, var(--zt-lime, #c8f542));
+  font-weight: 600;
+}
+body.zt-skin-neo .zt-card-prog {
+  border-radius: 0;
+  background: rgba(148, 163, 184, 0.2);
+  border: 1px solid color-mix(in srgb, var(--color-border) 55%, transparent);
+}
+body.zt-skin-neo .zt-card-prog i {
+  border-radius: 0;
+}
+
+/* AI 建议卡片 */
+.ai-suggest-box {
+  border: 1px solid var(--color-border);
+  border-radius: var(--zt-radius-card, 12px);
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  background: var(--color-fill-1, rgba(148, 163, 184, 0.06));
+}
+.ai-suggest-card {
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--color-border-2);
+}
+.ai-suggest-card:last-child {
+  border-bottom: none;
+}
+.ai-suggest-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.ai-suggest-text {
+  font-size: 13px;
+  flex: 1;
+  word-break: break-word;
+}
+.ai-suggest-target {
+  display: block;
+  font-size: 12px;
+  color: var(--color-text-3);
+  margin: 4px 0 0 2px;
+}
+.ai-suggest-ops {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+.ai-suggest-empty {
+  font-size: 13px;
+  color: var(--color-text-3);
+  text-align: center;
+  margin: 6px 0;
 }
 </style>
