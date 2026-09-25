@@ -18,6 +18,7 @@
           <a-menu-item key="pomodoro">🍅 番茄钟</a-menu-item>
           <a-menu-item key="categories">🏷️ 分类</a-menu-item>
           <a-menu-item key="system">🖥️ 系统</a-menu-item>
+          <a-menu-item key="backup">💾 备份</a-menu-item>
           <a-menu-item key="history">📜 历史</a-menu-item>
         </a-menu>
 
@@ -458,19 +459,35 @@
                   />
                 </div>
               </a-card>
+            </div>
+          </template>
 
-              <a-card class="sys-card" :bordered="false" title="数据迁移">
-                <p class="sys-desc" style="margin-bottom: 12px">
-                  导出任务、配置、历史与归档，便于跨设备迁移。导入为<strong>替换</strong>模式，导入前会自动生成本地安全备份。
-                </p>
+          <!-- 备份：五卡片（存储目录 / 手动备份 / 自动策略 / 恢复 / 历史快照） -->
+          <template v-else-if="mainKey === 'backup'">
+            <div class="system-settings">
+              <a-card class="sys-card" :bordered="false" title="备份存储目录">
+                <div class="sys-row">
+                  <div style="min-width: 0">
+                    <div class="sys-title">
+                      {{ backupDirDirty ? '待保存' : backupStatus.custom ? '自定义目录' : '默认目录' }}
+                      <a-tag v-if="backupDirDirty" size="small" color="orange">未保存</a-tag>
+                    </div>
+                    <div class="sys-path"><code>{{ backupDirDisplay }}</code></div>
+                    <div class="sys-hint muted">
+                      更改后需点底部「保存设置」生效；手动/自动备份与历史快照均写入此目录。
+                    </div>
+                  </div>
+                  <a-space>
+                    <a-button :disabled="!backupDirDisplay" @click="onChangeBackupDir">更改目录</a-button>
+                    <a-button v-if="form.backup.dir" @click="form.backup.dir = ''">恢复默认</a-button>
+                  </a-space>
+                </div>
+              </a-card>
 
-                <div class="sys-section-label">导出内容</div>
+              <a-card class="sys-card" :bordered="false" title="手动即时备份">
+                <div class="sys-section-label">备份内容</div>
                 <a-checkbox-group v-model="exportInclude" direction="vertical" class="export-checks">
-                  <a-checkbox
-                    v-for="opt in includeOptions"
-                    :key="opt.key"
-                    :value="opt.key"
-                  >
+                  <a-checkbox v-for="opt in includeOptions" :key="opt.key" :value="opt.key">
                     {{ opt.label }}
                     <a-tag v-if="opt.sensitive" size="small" color="orangered" style="margin-left: 6px">
                       含密钥
@@ -478,40 +495,134 @@
                   </a-checkbox>
                 </a-checkbox-group>
 
-                <a-space style="margin-top: 12px" wrap>
+                <div class="sys-section-label" style="margin-top: 14px">密码加密（AES-256）</div>
+                <div class="bk-inline">
+                  <a-switch v-model="encryptEnabled" size="small" />
+                  <a-input-password
+                    v-if="encryptEnabled"
+                    v-model="backupPassword"
+                    placeholder="备份密码（恢复时需输入）"
+                    style="width: 240px"
+                    allow-clear
+                  />
+                </div>
+
+                <a-space style="margin-top: 14px" wrap>
                   <a-button type="primary" :loading="exportLoading" @click="onExportBackup">
-                    导出备份
+                    立即备份
                   </a-button>
-                  <a-button :loading="archivePackLoading" @click="onPackArchive">
-                    打包归档
-                  </a-button>
+                  <a-button :loading="saveAsLoading" @click="onExportSaveAs">另存为…</a-button>
+                  <a-button :loading="archivePackLoading" @click="onPackArchive">仅打包归档</a-button>
                 </a-space>
                 <p v-if="lastExportPath" class="sys-path">
                   最近导出：<code>{{ lastExportPath }}</code>
                 </p>
+              </a-card>
 
-                <a-divider />
+              <a-card class="sys-card" :bordered="false" title="自动周期备份策略">
+                <div class="sys-row">
+                  <div>
+                    <div class="sys-title">自动备份</div>
+                    <div class="sys-desc">
+                      按周期自动全量备份（明文，默认六项）。到点未开机会在下次启动后补跑；改动需点底部保存。
+                    </div>
+                  </div>
+                  <a-switch v-model="form.backup.auto_enabled" />
+                </div>
+                <div v-if="form.backup.auto_enabled" class="bk-policy">
+                  <span class="bk-policy-k">频率</span>
+                  <a-select
+                    v-model="form.backup.interval_days"
+                    size="small"
+                    style="width: 100px"
+                    :options="[
+                      { label: '每天', value: 1 },
+                      { label: '每 3 天', value: 3 },
+                      { label: '每周', value: 7 },
+                    ]"
+                  />
+                  <span class="bk-policy-k">保留份数</span>
+                  <a-input-number v-model="form.backup.keep" :min="1" :max="50" size="small" style="width: 88px" />
+                  <span class="bk-policy-k">备份时刻</span>
+                  <a-select v-model="form.backup.trigger_hour" size="small" style="width: 84px" :options="HOUR_OPTS" />
+                </div>
+                <p class="sys-hint muted">
+                  上次自动备份：{{ backupStatus.last_backup_at || '尚未自动备份' }}。
+                  轮转仅清理自动备份自身（zentray-auto-*），不影响手动导出。
+                </p>
+              </a-card>
 
-                <div class="sys-section-label">导入备份（替换）</div>
+              <a-card class="sys-card" :bordered="false" title="从备份文件恢复">
                 <div class="sys-import-row">
                   <a-input
                     v-model="importPath"
-                    placeholder="本机 zip 绝对路径，例如 /home/you/.../zentray-backup-....zip"
+                    placeholder="本机 zip 绝对路径，或点右侧按钮选择"
                     allow-clear
+                    @clear="importNeedsPassword = false"
                   />
-                  <a-button
-                    type="primary"
-                    status="warning"
-                    :loading="importLoading"
-                    @click="onImportBackup"
-                  >
-                    导入
+                  <a-button @click="onPickBackupFile">选择文件</a-button>
+                  <a-button type="primary" status="warning" :loading="importLoading" @click="onImportBackup">
+                    恢复
                   </a-button>
                 </div>
+                <div v-if="importNeedsPassword" class="bk-inline" style="margin-top: 10px">
+                  <span class="bk-policy-k">备份密码</span>
+                  <a-input-password v-model="importPassword" placeholder="该备份已加密" style="width: 240px" allow-clear />
+                </div>
                 <a-alert type="warning" style="margin-top: 10px">
-                  导入将覆盖所选类别的本地数据；操作前会自动写入安全备份到 exports 目录。
+                  恢复为<strong>替换</strong>模式：覆盖本地所选数据；操作前会自动写入安全备份。
                 </a-alert>
                 <p v-if="lastImportMsg" class="sys-path">{{ lastImportMsg }}</p>
+              </a-card>
+
+              <a-card class="sys-card bk-snapshots" :bordered="false" title="历史备份快照">
+                <template #extra>
+                  <a-space>
+                    <a-tag size="small">{{ snapshots.length }} 个备份</a-tag>
+                    <a-button size="small" :loading="snapshotsLoading" @click="loadBackups">刷新</a-button>
+                  </a-space>
+                </template>
+                <a-table
+                  :data="snapshots"
+                  :loading="snapshotsLoading"
+                  :pagination="snapshots.length > 8 ? { pageSize: 8 } : false"
+                  size="small"
+                  :scroll="{ x: 620 }"
+                >
+                  <template #columns>
+                    <a-table-column title="文件名" data-index="name" :width="240">
+                      <template #cell="{ record }">
+                        <span class="bk-name" :title="record.name">{{ record.name }}</span>
+                      </template>
+                    </a-table-column>
+                    <a-table-column title="大小" :width="84">
+                      <template #cell="{ record }">{{ fmtSize(record.size) }}</template>
+                    </a-table-column>
+                    <a-table-column title="时间" :width="150">
+                      <template #cell="{ record }">{{ fmtTime(record.mtime) }}</template>
+                    </a-table-column>
+                    <a-table-column title="状态" :width="140">
+                      <template #cell="{ record }">
+                        <a-tag size="small" :color="KIND_COLOR[record.kind] || 'gray'">
+                          {{ KIND_LABEL[record.kind] || record.kind }}
+                        </a-tag>
+                        <a-tag v-if="record.encrypted" size="small" color="orangered">加密</a-tag>
+                      </template>
+                    </a-table-column>
+                    <a-table-column title="操作" :width="128">
+                      <template #cell="{ record }">
+                        <a-space size="mini">
+                          <a-button size="mini" type="outline" @click="restoreSnapshot(record)">恢复</a-button>
+                          <a-button size="mini" status="danger" @click="deleteSnapshot(record)">删除</a-button>
+                        </a-space>
+                      </template>
+                    </a-table-column>
+                  </template>
+                  <template #empty>
+                    <a-empty description="暂无备份文件" />
+                  </template>
+                </a-table>
+                <p class="sys-hint muted">目录：<code>{{ backupStatus.dir || backupDirDisplay }}</code></p>
               </a-card>
             </div>
           </template>
@@ -538,11 +649,14 @@ import { Message, Modal } from '@arco-design/web-vue'
 import {
   cancelHost,
   closeHost,
+  deleteBackup,
   exportBackup,
   getSettings,
   getSystemStatus,
   importBackup,
+  listBackups,
   packArchive,
+  pickPath,
   saveSettings,
   setAutostart,
 } from '@/api/client'
@@ -571,6 +685,29 @@ const lastExportPath = ref('')
 const importPath = ref('')
 const importLoading = ref(false)
 const lastImportMsg = ref('')
+
+// —— 备份页 ——
+const backupStatus = ref({}) // /api/system/status 的 backup 节（dir/default_dir/custom/last_backup_at）
+const snapshots = ref([])
+const snapshotsLoading = ref(false)
+const encryptEnabled = ref(false)
+const backupPassword = ref('')
+const importNeedsPassword = ref(false)
+const importPassword = ref('')
+const saveAsLoading = ref(false)
+const savedBackupDir = ref('')
+
+const HOUR_OPTS = Array.from({ length: 24 }, (_, h) => ({
+  label: `${String(h).padStart(2, '0')}:00`,
+  value: h,
+}))
+const KIND_LABEL = { auto: '自动', manual: '手动', pre_import: '导入前', archive: '归档', unknown: '其他' }
+const KIND_COLOR = { auto: 'green', manual: 'arcoblue', pre_import: 'orange', archive: 'purple', unknown: 'gray' }
+
+const backupDirDisplay = computed(
+  () => (form.backup.dir || '').trim() || backupStatus.value.default_dir || backupStatus.value.dir || ''
+)
+const backupDirDirty = computed(() => (form.backup.dir || '').trim() !== savedBackupDir.value)
 
 const form = reactive(emptyForm())
 
@@ -631,6 +768,7 @@ function emptyForm() {
     },
     quick_add: { default_category: '工作', default_priority: 'medium' },
     appearance: { theme: 'system', autostart: false, motion: 'full', shape: 'round', skin: 'neo' },
+    backup: { dir: '', auto_enabled: false, interval_days: 1, keep: 7, trigger_hour: 9 },
   }
 }
 
@@ -757,6 +895,7 @@ function shortKey(k) {
 
 function onMainNav(key) {
   mainKey.value = key
+  if (key === 'backup') loadBackupPage()
 }
 
 function onThemePreview() {
@@ -781,6 +920,7 @@ async function loadSystemStatus() {
     if (!exportInclude.value.length) {
       exportInclude.value = opts.filter((o) => o.default).map((o) => o.key)
     }
+    backupStatus.value = data?.backup || {}
   } catch (e) {
     // 系统 API 不可用时不影响其它设置
     autostartHint.value = e?.message || '无法读取系统状态'
@@ -806,38 +946,110 @@ async function onAutostartChange(val) {
   }
 }
 
+/** env 含密钥时先确认；返回 false 表示用户取消 */
+async function confirmEnvIfAny() {
+  if (!exportInclude.value.includes('env')) return true
+  return new Promise((resolve) => {
+    Modal.confirm({
+      draggable: true,
+      title: '包含密钥',
+      content: '导出内容包含 .env（API Key 等）。请妥善保管备份文件，确认继续？',
+      okText: '继续导出',
+      onOk: () => resolve(true),
+      onCancel: () => resolve(false),
+    })
+  })
+}
+
+function backupPasswordPayload() {
+  if (!encryptEnabled.value) return ''
+  if (!backupPassword.value) {
+    Message.warning('已开启加密，请填写备份密码')
+    return null
+  }
+  return backupPassword.value
+}
+
 async function onExportBackup() {
   if (!exportInclude.value.length) {
     Message.warning('请至少选择一项导出内容')
     return
   }
-  if (exportInclude.value.includes('env')) {
-    const ok = await new Promise((resolve) => {
-      Modal.confirm({
-        draggable: true,
-        title: '包含密钥',
-        content: '导出内容包含 .env（API Key 等）。请妥善保管备份文件，确认继续？',
-        okText: '继续导出',
-        onOk: () => resolve(true),
-        onCancel: () => resolve(false),
-      })
-    })
-    if (!ok) return
-  }
+  const password = backupPasswordPayload()
+  if (password === null) return
+  if (!(await confirmEnvIfAny())) return
   exportLoading.value = true
   try {
-    const data = await exportBackup(exportInclude.value)
+    const data = await exportBackup(exportInclude.value, { password })
     if (!data?.ok) {
       Message.error(data?.message || '导出失败')
       return
     }
     lastExportPath.value = data.path || ''
     Message.success(`导出成功${data.path ? `：${data.path}` : ''}`)
+    await loadBackups()
   } catch (e) {
     Message.error(e?.response?.data?.message || e?.message || '导出失败')
   } finally {
     exportLoading.value = false
   }
+}
+
+/** 另存为：原生保存对话框选路径后导出到该位置 */
+async function onExportSaveAs() {
+  if (!exportInclude.value.length) {
+    Message.warning('请至少选择一项导出内容')
+    return
+  }
+  const password = backupPasswordPayload()
+  if (password === null) return
+  const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+  const r = await pickPath('save', {
+    title: '备份另存为',
+    startDir: backupDirDisplay.value,
+    defaultName: `zentray-backup-${stamp}.zip`,
+  })
+  if (r.cancelled || !r.path) {
+    if (!r.id) Message.info('仅桌面端支持路径选择')
+    return
+  }
+  const destPath = r.path.toLowerCase().endsWith('.zip') ? r.path : `${r.path}.zip`
+  if (!(await confirmEnvIfAny())) return
+  saveAsLoading.value = true
+  try {
+    const data = await exportBackup(exportInclude.value, { destPath, password })
+    if (!data?.ok) {
+      Message.error(data?.message || '导出失败')
+      return
+    }
+    lastExportPath.value = data.path || ''
+    Message.success(`已另存${data.path ? `：${data.path}` : ''}`)
+    await loadBackups()
+  } catch (e) {
+    Message.error(e?.response?.data?.message || e?.message || '导出失败')
+  } finally {
+    saveAsLoading.value = false
+  }
+}
+
+async function onChangeBackupDir() {
+  const r = await pickPath('dir', { title: '选择备份存储目录', startDir: backupDirDisplay.value })
+  if (r.cancelled || !r.path) {
+    if (!r.id) Message.info('仅桌面端支持目录选择')
+    return
+  }
+  form.backup.dir = r.path
+}
+
+/** 原生文件选择器挑备份 zip；若快照表里是加密包，预置密码框 */
+async function onPickBackupFile() {
+  const r = await pickPath('file', { title: '选择备份文件', startDir: backupDirDisplay.value })
+  if (r.cancelled || !r.path) {
+    if (!r.id) Message.info('仅桌面端支持文件选择')
+    return
+  }
+  importPath.value = r.path
+  importNeedsPassword.value = snapshots.value.some((s) => s.path === r.path && s.encrypted)
 }
 
 async function onPackArchive() {
@@ -882,10 +1094,13 @@ async function onImportBackup() {
     const data = await importBackup(path, {
       include: exportInclude.value.length ? exportInclude.value : undefined,
       safety_backup: true,
+      password: importNeedsPassword.value ? importPassword.value || undefined : undefined,
     })
     if (!data?.ok) {
       Message.error(data?.message || data?.error || '导入失败')
       lastImportMsg.value = data?.message || data?.error || ''
+      // 服务端判定缺密码/密码错误：展开密码框让用户补
+      if ((lastImportMsg.value || '').includes('密码')) importNeedsPassword.value = true
       return
     }
     lastImportMsg.value = [
@@ -900,11 +1115,73 @@ async function onImportBackup() {
     normalizeLoaded(s)
     onThemePreview()
     await loadSystemStatus()
+    await loadBackups()
   } catch (e) {
     Message.error(e?.response?.data?.message || e?.response?.data?.error || e?.message || '导入失败')
   } finally {
     importLoading.value = false
   }
+}
+
+// —— 备份页：快照列表 / 恢复 / 删除 ——
+async function loadBackups() {
+  snapshotsLoading.value = true
+  try {
+    const data = await listBackups()
+    snapshots.value = data?.items || []
+  } catch (e) {
+    // 快照拉取失败不阻塞页面，保留旧列表
+    snapshots.value = []
+  } finally {
+    snapshotsLoading.value = false
+  }
+}
+
+function loadBackupPage() {
+  loadSystemStatus()
+  loadBackups()
+}
+
+/** 快照行「恢复」：回填路径 + 密码态，走 onImportBackup 的确认流程 */
+function restoreSnapshot(record) {
+  importPath.value = record.path
+  importNeedsPassword.value = !!record.encrypted
+  importPassword.value = ''
+  onImportBackup()
+}
+
+function deleteSnapshot(record) {
+  Modal.confirm({
+    draggable: true,
+    title: '删除备份',
+    content: `确定删除 ${record.name}？此操作不可恢复。`,
+    okText: '删除',
+    okButtonProps: { status: 'danger' },
+    onOk: async () => {
+      try {
+        const data = await deleteBackup(record.path)
+        if (!data?.ok) {
+          Message.error(data?.message || '删除失败')
+          return
+        }
+        Message.success('已删除')
+        await loadBackups()
+      } catch (e) {
+        Message.error(e?.response?.data?.message || e?.message || '删除失败')
+      }
+    },
+  })
+}
+
+function fmtSize(n) {
+  if (!Number.isFinite(n)) return '—'
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+  return `${(n / 1024 / 1024).toFixed(1)} MB`
+}
+
+function fmtTime(iso) {
+  return (iso || '').replace('T', ' ').slice(0, 16)
 }
 
 function addApiProfile() {
@@ -963,6 +1240,17 @@ function normalizeLoaded(s) {
     form.categories.wrap_right = ']'
   }
   if (!form.quick_add) form.quick_add = emptyForm().quick_add
+  // 备份：normalize 时补默认 + 钳制（trigger_hour 0 点合法，不能用 || 兜底）
+  const bk = { ...emptyForm().backup, ...(s.backup || {}) }
+  if (![1, 3, 7].includes(bk.interval_days)) bk.interval_days = 1
+  if (!Number.isFinite(bk.keep)) bk.keep = 7
+  bk.keep = Math.max(1, Math.min(50, bk.keep))
+  if (!Number.isFinite(bk.trigger_hour)) bk.trigger_hour = 9
+  bk.trigger_hour = Math.max(0, Math.min(23, bk.trigger_hour))
+  bk.auto_enabled = !!bk.auto_enabled
+  bk.dir = (bk.dir || '').trim()
+  form.backup = bk
+  savedBackupDir.value = bk.dir
   if (!form.polling) form.polling = emptyForm().polling
   if (!form.pomodoro) form.pomodoro = emptyForm().pomodoro
   if (!form.pomodoro.tray_display) form.pomodoro.tray_display = 'countdown'
@@ -1381,5 +1669,32 @@ body.zt-skin-neo .nav-main {
 }
 .muted {
   color: var(--color-text-3);
+}
+
+/* —— 备份页 —— */
+.bk-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.bk-policy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+.bk-policy-k {
+  font-size: 13px;
+  color: var(--color-text-2);
+}
+.bk-name {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bk-snapshots :deep(.arco-table-th) {
+  background: var(--color-fill-1);
 }
 </style>

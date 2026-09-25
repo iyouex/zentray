@@ -142,6 +142,18 @@ class AppearanceSettings:
 
 
 @dataclass
+class BackupSettings:
+    """备份。dir 空 = 默认 exports；interval_days 限 1|3|7（每天/每 3 天/每周）；
+    keep 1~50 份轮转；trigger_hour 每日触发钟点（分钟固定 0，过点补跑）。"""
+
+    dir: str = ""
+    auto_enabled: bool = False
+    interval_days: int = 1
+    keep: int = 7
+    trigger_hour: int = 9
+
+
+@dataclass
 class AIApiProfile:
     """命名模型接入配置；同时仅 active_api_id 对应的一个生效。"""
 
@@ -341,6 +353,7 @@ class AppSettings:
     categories: CategorySettings = field(default_factory=default_category_settings)
     quick_add: QuickAddSettings = field(default_factory=QuickAddSettings)
     appearance: AppearanceSettings = field(default_factory=AppearanceSettings)
+    backup: BackupSettings = field(default_factory=BackupSettings)
 
 
 class SettingsManager:
@@ -524,6 +537,27 @@ class SettingsManager:
                 shape=shape,
                 skin=skin,
             )
+        if "backup" in data:
+            b = data["backup"] or {}
+
+            def _int_or(key: str, default: int) -> int:
+                # 触发钟点 0 点合法，不能用 `or` 兜底
+                v = b.get(key)
+                try:
+                    return int(v)
+                except (TypeError, ValueError):
+                    return default
+
+            interval = _int_or("interval_days", 1)
+            if interval not in (1, 3, 7):
+                interval = 1
+            self._settings.backup = BackupSettings(
+                dir=str(b.get("dir") or "").strip(),
+                auto_enabled=bool(b.get("auto_enabled", False)),
+                interval_days=interval,
+                keep=max(1, min(50, _int_or("keep", 7))),
+                trigger_hour=max(0, min(23, _int_or("trigger_hour", 9))),
+            )
 
         # 用 review 回写 nightly 兼容
         self._sync_nightly_from_review()
@@ -622,6 +656,7 @@ class SettingsManager:
             "categories": self._settings.categories.to_dict(),
             "quick_add": asdict(self._settings.quick_add),
             "appearance": asdict(self._settings.appearance),
+            "backup": asdict(self._settings.backup),
         }
         with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
@@ -657,6 +692,10 @@ class SettingsManager:
     @property
     def appearance(self) -> AppearanceSettings:
         return self._settings.appearance
+
+    @property
+    def backup(self) -> BackupSettings:
+        return self._settings.backup
 
     def get_all(self) -> AppSettings:
         return self._settings

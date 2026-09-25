@@ -88,7 +88,7 @@ def _start_nightly_if_needed(runtime: AppRuntime, task_repo: TaskRepository) -> 
         ai = sm.ai
         need = bool(
             (ai.plan.enabled or ai.review.enabled) and sm.is_ai_configured()
-        ) or sm.is_notification_configured()
+        ) or sm.is_notification_configured() or bool(sm.backup.auto_enabled)
     except Exception:
         features = get_enabled_features()
         need = features["notification"] or features["ai_coach"]

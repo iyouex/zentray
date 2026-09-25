@@ -162,6 +162,9 @@ a = Analysis(
         'zentray.dependencies',
         # pynput 平台特定后端
         'pynput.keyboard._xorg',
+        # 备份加密（AES zip；pycryptodomex 为 pyzipper 的 AES 后端）
+        'pyzipper',
+        'Cryptodome.Cipher.AES',
         # WebEngine
         'PySide6.QtWebEngineWidgets',
         'PySide6.QtWebEngineCore',
