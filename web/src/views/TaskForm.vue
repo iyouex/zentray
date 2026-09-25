@@ -2,18 +2,14 @@
   <div class="page">
     <div class="page-header">
       <h2>{{ isEdit ? '修改任务' : '新建任务' }}</h2>
-      <a-space v-if="aiParseOn || aiOcrOn">
-        <a-button v-if="aiParseOn" type="outline" :loading="aiParsing" @click="onAiParse">
+      <a-space v-if="aiParseOn">
+        <a-button type="outline" :loading="aiParsing" @click="onAiParse">
           <template #icon><PhSparkle :size="16" /></template>
           AI 解析
         </a-button>
-        <a-button v-if="aiOcrOn" type="outline" :loading="aiOcrLoading" @click="pickImage">
-          <template #icon><PhCamera :size="16" /></template>
-          图片识别
-        </a-button>
       </a-space>
     </div>
-    <input ref="fileRef" type="file" accept="image/*" style="display: none" @change="onFile" />
+    <input v-if="aiOcrOn" ref="fileRef" type="file" accept="image/*" style="display: none" @change="onFile" />
 
     <div class="page-body">
       <a-spin :loading="loading" style="width: 100%">
@@ -123,6 +119,43 @@
 
           <a-card title="详情与提醒" :bordered="false">
             <a-form :model="form" layout="vertical">
+              <a-form-item v-if="aiOcrOn">
+                <div
+                  class="ocr-drop"
+                  :class="{ 'is-drag': dragOver, 'is-busy': aiOcrLoading }"
+                  role="button"
+                  tabindex="0"
+                  @click="pickImage"
+                  @keydown.enter.prevent="pickImage"
+                  @dragover.prevent="dragOver = true"
+                  @dragleave.prevent="dragOver = false"
+                  @drop.prevent="onDrop"
+                >
+                  <template v-if="!ocrPreview">
+                    <PhCamera :size="22" class="ocr-drop-icon" />
+                    <div class="ocr-drop-text">
+                      <span>点击选择、拖入或 Ctrl+V 粘贴图片</span>
+                      <span class="muted">识别为任务草稿，确认后填入表单（≤9MB）</span>
+                    </div>
+                  </template>
+                  <template v-else>
+                    <img class="ocr-thumb" :src="ocrPreview" alt="" />
+                    <div class="ocr-file-info">
+                      <span class="ocr-file-name">{{ ocrFileName }}</span>
+                      <span v-if="aiOcrLoading" class="ocr-status">识别中…</span>
+                      <span v-else class="muted">点击可重新选择</span>
+                    </div>
+                    <a-button
+                      v-if="!aiOcrLoading"
+                      size="mini"
+                      status="danger"
+                      @click.stop="clearOcrFile"
+                    >
+                      移除
+                    </a-button>
+                  </template>
+                </div>
+              </a-form-item>
               <a-form-item label="任务详情">
                 <a-textarea
                   v-model="form.details"
@@ -393,6 +426,15 @@ const previewDraft = ref(null)
 const showOcrPick = ref(false)
 const ocrDrafts = ref([])
 const fileRef = ref(null)
+const dragOver = ref(false)
+const ocrPreview = ref('')
+const ocrFileName = ref('')
+
+function clearOcrFile() {
+  if (ocrPreview.value) URL.revokeObjectURL(ocrPreview.value)
+  ocrPreview.value = ''
+  ocrFileName.value = ''
+}
 
 /** 草稿 category（名称，可能带二级「工作/开发」）→ 已有分类 id；匹配不上返回 null */
 const categoryMatch = computed(() => {
@@ -435,7 +477,7 @@ async function onAiParse() {
 }
 
 function pickImage() {
-  fileRef.value?.click()
+  if (!aiOcrLoading.value) fileRef.value?.click()
 }
 
 async function onFile(e) {
@@ -444,11 +486,26 @@ async function onFile(e) {
   if (f) await runOcr(f)
 }
 
+/** 拖放：取首个图片文件，非图片提示 */
+function onDrop(e) {
+  dragOver.value = false
+  const f = Array.from(e.dataTransfer?.files || []).find((x) => x.type.startsWith('image/'))
+  if (!f) {
+    Message.warning('仅支持图片文件')
+    return
+  }
+  runOcr(f)
+}
+
 async function runOcr(file) {
+  if (aiOcrLoading.value) return
+  clearOcrFile()
   if (file.size > 9 * 1024 * 1024) {
     Message.warning('图片过大（>9MB），请压缩后重试')
     return
   }
+  ocrFileName.value = file.name || '剪贴板图片'
+  ocrPreview.value = URL.createObjectURL(file)
   aiOcrLoading.value = true
   try {
     const dataUrl = await new Promise((res, rej) => {
@@ -525,7 +582,10 @@ function applyDraft() {
 }
 
 onMounted(() => window.addEventListener('paste', onPaste))
-onUnmounted(() => window.removeEventListener('paste', onPaste))
+onUnmounted(() => {
+  window.removeEventListener('paste', onPaste)
+  clearOcrFile()
+})
 
 function primaryName() {
   const o = primaryOpts.value.find((x) => x.value === form.category_primary_id)
@@ -917,5 +977,79 @@ onMounted(async () => {
 .ocr-item:hover {
   border-color: var(--color-primary);
   background: var(--color-primary-glow);
+}
+
+/* ---- 图片识别上传区（点击/拖拽/粘贴三合一） ---- */
+.ocr-drop {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  border: 1.5px dashed var(--color-border);
+  border-radius: var(--zt-radius-md, 12px);
+  cursor: pointer;
+  transition: border-color var(--zt-dur-fast, 120ms) ease,
+    background-color var(--zt-dur-fast, 120ms) ease,
+    box-shadow var(--zt-dur-fast, 120ms) ease;
+}
+.ocr-drop:hover {
+  border-color: var(--color-primary-hover);
+  background: var(--color-surface-hover);
+}
+.ocr-drop.is-drag {
+  border-color: var(--color-primary);
+  background: var(--color-surface-hover);
+  box-shadow: 0 0 0 1.5px var(--color-primary-glow);
+}
+.ocr-drop.is-drag > * {
+  pointer-events: none;
+}
+.ocr-drop.is-busy {
+  cursor: default;
+}
+.ocr-drop-icon {
+  color: var(--color-text-subdued);
+  flex: none;
+}
+.ocr-drop-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+  color: var(--color-text-primary);
+}
+.ocr-thumb {
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
+  flex: none;
+  border-radius: var(--zt-radius-md, 12px);
+  border: 1px solid var(--color-border);
+}
+.ocr-file-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.ocr-file-name {
+  font-size: 13px;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ocr-status {
+  font-size: 12px;
+  color: var(--color-primary);
+  animation: ocr-blink 1.2s ease-in-out infinite;
+}
+@keyframes ocr-blink {
+  50% {
+    opacity: 0.45;
+  }
 }
 </style>

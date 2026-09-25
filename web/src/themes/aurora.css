@@ -162,6 +162,18 @@ body.zt-skin-aurora .arco-textarea-wrapper:focus-within {
     0 0 14px color-mix(in srgb, #818cf8 22%, transparent);
 }
 
+/* 图片识别拖放区：玻璃底 + 聚焦双色辉光（对齐输入框聚焦样式） */
+body.zt-skin-aurora .ocr-drop {
+  background: color-mix(in srgb, var(--color-surface) 46%, transparent);
+  border-color: color-mix(in srgb, var(--color-text-primary) 12%, transparent);
+}
+body.zt-skin-aurora .ocr-drop:hover,
+body.zt-skin-aurora .ocr-drop.is-drag {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 1.5px var(--color-primary-glow),
+    0 0 14px color-mix(in srgb, #818cf8 22%, transparent);
+}
+
 body.zt-skin-aurora ::-webkit-scrollbar-thumb {
   background: linear-gradient(
     180deg,
