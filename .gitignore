@@ -65,3 +65,9 @@ dist/releases/win_build.*
 
 # superpowers 本地会话产物
 .superpowers/
+
+# AI 编码工具文件仅本地开发，不上远程（用户约定 2026-09-25）
+.agents/
+skills-lock.json
+CLAUDE.md
+docs/superpowers/
