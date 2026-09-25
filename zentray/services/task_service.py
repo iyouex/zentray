@@ -457,6 +457,7 @@ class TaskService:
             template_id=data.get("template_id") or str(uuid.uuid4()),
             last_generated_period=data.get("last_generated_period"),
             subtasks=self._normalize_subtasks(data.get("subtasks")),
+            plugin_id=(data.get("plugin_id") or None) or None,
         )
 
     def _normalize_category_fields(self, data: dict) -> dict:

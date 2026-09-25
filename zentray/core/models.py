@@ -30,6 +30,8 @@ class Task:
     auto_abandon_on_overdue: bool = False
     # 子任务清单（取代进度条）：[{id, title, status: active|done|abandoned}]
     subtasks: List[dict] = field(default_factory=list)
+    # 关联插件 id（运行入口见任务列表/编辑页）
+    plugin_id: Optional[str] = None
 
     def __post_init__(self):
         if self.attachments is None:
@@ -44,6 +46,8 @@ class Task:
             self.category = "工作"
         if self.subtasks is None:
             self.subtasks = []
+        if isinstance(self.plugin_id, str) and not self.plugin_id.strip():
+            self.plugin_id = None
         if isinstance(self.reminder, dict):
             self.reminder = TaskReminder.from_dict(self.reminder)
 
@@ -94,6 +98,8 @@ class PeriodicTemplate:
     paused: bool = False
     # 预设子任务：每次派发实例时复制（新 id、status=active）
     subtasks: List[dict] = field(default_factory=list)
+    # 关联插件 id（派发实例时继承）
+    plugin_id: Optional[str] = None
 
     def __post_init__(self):
         if self.details is None:
@@ -106,6 +112,8 @@ class PeriodicTemplate:
             self.category = "工作"
         if self.subtasks is None:
             self.subtasks = []
+        if isinstance(self.plugin_id, str) and not self.plugin_id.strip():
+            self.plugin_id = None
         if isinstance(self.reminder, dict):
             self.reminder = TaskReminder.from_dict(self.reminder)
         try:
