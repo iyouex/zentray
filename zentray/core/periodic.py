@@ -212,6 +212,7 @@ def build_due_instance(tmpl: "PeriodicTemplate", today: datetime.date) -> Option
             for s in (getattr(tmpl, "subtasks", None) or [])
             if isinstance(s, dict) and s.get("title")
         ],
+        plugin_id=getattr(tmpl, "plugin_id", None) or None,
     )
     tmpl.last_generated_period = spawn_key_after_create(tmpl, today)
     return new_task

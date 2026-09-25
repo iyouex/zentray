@@ -1,0 +1,8 @@
+id: sample-script
+name: 示例脚本
+version: 0.1.0
+type: script
+api_version: 1
+entry: run.sh
+timeout_sec: 30
+description: 测试用示例脚本

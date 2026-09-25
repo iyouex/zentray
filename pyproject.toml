@@ -33,6 +33,7 @@ dependencies = [
     "pynput>=1.7.6",
     "injector>=0.21.0",
     "pyzipper>=0.3.6",
+    "PyYAML>=6.0",
 ]
 
 [project.optional-dependencies]

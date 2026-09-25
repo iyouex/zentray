@@ -154,6 +154,18 @@ class BackupSettings:
 
 
 @dataclass
+class OpsSettings:
+    """插件运行时设置（settings.json 字段名 ops 保持兼容）。"""
+
+    enabled: bool = False
+    load_bundled: bool = True
+    load_user: bool = True
+    # 空字符串表示使用默认 DATA_DIR/plugins
+    user_plugins_dir: str = ""
+    confirm_before_run: bool = True
+
+
+@dataclass
 class AIApiProfile:
     """命名模型接入配置；同时仅 active_api_id 对应的一个生效。"""
 
@@ -354,6 +366,7 @@ class AppSettings:
     quick_add: QuickAddSettings = field(default_factory=QuickAddSettings)
     appearance: AppearanceSettings = field(default_factory=AppearanceSettings)
     backup: BackupSettings = field(default_factory=BackupSettings)
+    ops: OpsSettings = field(default_factory=OpsSettings)
 
 
 class SettingsManager:
@@ -558,6 +571,15 @@ class SettingsManager:
                 keep=max(1, min(50, _int_or("keep", 7))),
                 trigger_hour=max(0, min(23, _int_or("trigger_hour", 9))),
             )
+        if "ops" in data:
+            o = data["ops"] or {}
+            self._settings.ops = OpsSettings(
+                enabled=bool(o.get("enabled", False)),
+                load_bundled=bool(o.get("load_bundled", True)),
+                load_user=bool(o.get("load_user", True)),
+                user_plugins_dir=str(o.get("user_plugins_dir") or ""),
+                confirm_before_run=bool(o.get("confirm_before_run", True)),
+            )
 
         # 用 review 回写 nightly 兼容
         self._sync_nightly_from_review()
@@ -657,6 +679,7 @@ class SettingsManager:
             "quick_add": asdict(self._settings.quick_add),
             "appearance": asdict(self._settings.appearance),
             "backup": asdict(self._settings.backup),
+            "ops": asdict(self._settings.ops),
         }
         with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
@@ -696,6 +719,17 @@ class SettingsManager:
     @property
     def backup(self) -> BackupSettings:
         return self._settings.backup
+
+    @property
+    def ops(self) -> OpsSettings:
+        return self._settings.ops
+
+    def get_ops_user_plugins_dir(self) -> Path:
+        """用户插件目录（绝对路径）。"""
+        raw = (self.ops.user_plugins_dir or "").strip()
+        if raw:
+            return Path(raw).expanduser().resolve()
+        return (DATA_DIR / "plugins").resolve()
 
     def get_all(self) -> AppSettings:
         return self._settings

@@ -17,6 +17,8 @@ from PySide6.QtWidgets import QApplication
 from zentray.services.task_service import TaskService
 from zentray.services.pomodoro_service import PomodoroService
 from zentray.services.settings_manager import SettingsManager
+from zentray.plugins.loader import PluginLoader
+from zentray.plugins.runtime import PluginRuntime
 from zentray.ui.renderer import TrayRenderer
 from zentray.ui.menu_builder import MenuBuilder
 
@@ -48,9 +50,20 @@ class TrayController(QObject):
         # 启动阶段：仅应用图标，等首次轮播 tick 再显示饼图+标题
         self._carousel_started = False
 
+        # 插件运行时（信号必须连 QObject 绑定方法：发射方在 python 线程，
+        # AutoConnection 会排队回主线程；连 lambda 会进错误线程）
+        self.plugin_runtime = PluginRuntime()
+        self.plugin_loader = PluginLoader()
+        self._ops_plugins = []
+        self._ops_active = False
+        self._ops_tray_text = ""
+
         self.renderer.backend.action_received.connect(self.handle_action)
         self.pomodoro_service.time_updated.connect(self._on_pomodoro_tick)
         self.pomodoro_service.pomodoro_finished.connect(self._on_pomodoro_end)
+        self.plugin_runtime.log_line.connect(self._on_ops_log)
+        self.plugin_runtime.script_finished.connect(self._on_ops_finished)
+        self.plugin_runtime.busy_changed.connect(self._on_ops_busy)
 
         # 可靠轮播：重复定时器（挂到 self，避免被 GC）
         self.poll_timer = QTimer(self)
@@ -67,6 +80,7 @@ class TrayController(QObject):
             self.task_service.advance_rotation()
 
         # 启动占位：应用图标、无标题；菜单先建好
+        self.reload_ops_plugins()
         self._show_boot_placeholder(update_menu=True)
         self.start_rotation()
 
@@ -108,9 +122,39 @@ class TrayController(QObject):
         if not dispatch(action_id, self):
             logger.debug("未识别的菜单 action: %s", action_id)
 
+    def reload_ops_plugins(self) -> None:
+        """按设置扫描插件。"""
+        from zentray.resources import get_resource_path
+
+        ops = self._settings.ops
+        if not ops.enabled:
+            self._ops_plugins = []
+            return
+        # 开发态：仓库根 bundled_plugins；打包态：PyInstaller 解压目录
+        bundled = get_resource_path("bundled_plugins")
+        user = self._settings.get_ops_user_plugins_dir()
+        self._ops_plugins = self.plugin_loader.scan(
+            bundled_dir=bundled if bundled.is_dir() else None,
+            user_dir=user,
+            load_bundled=ops.load_bundled,
+            load_user=ops.load_user,
+        )
+        logger.info(
+            "插件已加载 %s 个（失败 %s）",
+            len(self._ops_plugins),
+            len(self.plugin_loader.failures),
+        )
+
     def _on_poll_tick(self) -> None:
         """定时推进轮播并刷新顶栏标题。"""
         try:
+            if self._ops_active or self.plugin_runtime.is_busy:
+                # 脚本抢占：不推进任务轮播，仅保持 ops 文案
+                if not self._carousel_started:
+                    self._carousel_started = True
+                self.update_display(update_menu=False)
+                return
+
             if self.pomodoro_service.is_active:
                 if not self._carousel_started:
                     self._carousel_started = True
@@ -148,6 +192,7 @@ class TrayController(QObject):
 
     def apply_settings(self) -> None:
         self._settings = SettingsManager.reload()
+        self.reload_ops_plugins()
         # 空闲时同步专注时长；进行中不打断当前倒计时
         if hasattr(self.pomodoro_service, "sync_duration_from_settings"):
             self.pomodoro_service.sync_duration_from_settings()
@@ -169,11 +214,18 @@ class TrayController(QObject):
         from zentray.resources import tray_pie_icon_name, tray_tomato_icon_name
 
         # 启动阶段未进入轮播：强制仅应用图标
-        if not self._carousel_started and not self.pomodoro_service.is_active:
+        if (
+            not self._carousel_started
+            and not self.pomodoro_service.is_active
+            and not self._ops_active
+        ):
             self._show_boot_placeholder(update_menu=update_menu)
             return
 
-        if self.pomodoro_service.is_active:
+        if self._ops_active or self.plugin_runtime.is_busy:
+            icon = "app_icon"
+            text = (self._ops_tray_text or "⚡ 脚本运行中")[:50]
+        elif self.pomodoro_service.is_active:
             # 左侧：随倒计时填充的番茄饼图；右侧：文案或倒计时
             pct = self.pomodoro_service.get_elapsed_progress_percent()
             icon = tray_tomato_icon_name(pct)
@@ -215,6 +267,9 @@ class TrayController(QObject):
     def _refresh_menu(self) -> None:
         items = self.menu_builder.build_main_menu(
             is_pomodoro=self.pomodoro_service.is_active,
+            ops_enabled=bool(self._settings.ops.enabled),
+            ops_plugins=self._ops_plugins,
+            ops_busy=self.plugin_runtime.is_busy or self._ops_active,
         )
         if self.menu_builder.should_update(items):
             self.renderer.update_menu(items)
@@ -238,6 +293,49 @@ class TrayController(QObject):
 
     def _on_pomodoro_end(self) -> None:
         self.renderer.show_notification("专注结束", "番茄钟已完成，休息一下吧！")
+        self._carousel_started = True
+        self.update_display(update_menu=True)
+        self.start_rotation()
+
+    # ==========================================
+    # 插件脚本生命周期（信号槽，主线程）
+    # ==========================================
+
+    def _on_ops_log(self, text: str) -> None:
+        self._ops_active = True
+        self._carousel_started = True
+        self._ops_tray_text = (text or "")[:50]
+        self.renderer.set_state("app_icon", self._ops_tray_text)
+        self._last_icon = "app_icon"
+        self._last_label = self._ops_tray_text
+
+    def _on_ops_busy(self, busy: bool) -> None:
+        if busy:
+            self._ops_active = True
+            self._carousel_started = True
+        self._refresh_menu()
+
+    def _on_ops_finished(self, plugin_id: str, success: bool, summary: str) -> None:
+        self._ops_active = False
+        self._ops_tray_text = ""
+        name = plugin_id
+        plug = self.plugin_loader.get(plugin_id)
+        if plug:
+            name = plug.manifest.name
+        status = "执行成功" if success else f"执行失败: {summary}"
+        self.renderer.show_notification(f"脚本: {name}", status[:120])
+        try:
+            from zentray.services.activity_log import log_event
+
+            log_event(
+                "system",
+                "plugin_run",
+                title=name,
+                detail=summary,
+                meta={"id": plugin_id, "ok": success},
+            )
+        except Exception:
+            pass
         self._carousel_started = True
         self.update_display(update_menu=True)
         self.start_rotation()

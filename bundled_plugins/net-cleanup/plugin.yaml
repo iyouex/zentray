@@ -1,0 +1,10 @@
+id: net-cleanup
+name: 网络清理（示例）
+version: 0.1.0
+type: script
+api_version: 1
+entry: run.sh
+timeout_sec: 120
+description: >-
+  示例插件：刷新 DNS/解析缓存与路由缓存，并打印当前代理相关环境变量。
+  不修改 VPN/代理软件配置，不需要写死公司脚本。
