@@ -393,6 +393,12 @@
                       <a-radio value="dark">深色</a-radio>
                     </a-radio-group>
                   </a-form-item>
+                  <a-form-item label="界面皮肤">
+                    <a-radio-group v-model="form.appearance.skin" @change="onAppearancePreview">
+                      <a-radio value="neo">Neo</a-radio>
+                      <a-radio value="aurora">Aurora</a-radio>
+                    </a-radio-group>
+                  </a-form-item>
                   <a-form-item label="界面动效">
                     <a-switch
                       v-model="form.appearance.motion"
@@ -593,7 +599,7 @@ function emptyForm() {
       primary_list: [],
     },
     quick_add: { default_category: '工作', default_priority: 'medium' },
-    appearance: { theme: 'system', autostart: false, motion: 'full', shape: 'round' },
+    appearance: { theme: 'system', autostart: false, motion: 'full', shape: 'round', skin: 'neo' },
   }
 }
 
@@ -914,6 +920,7 @@ function normalizeLoaded(s) {
   if (form.appearance.autostart == null) form.appearance.autostart = false
   if (form.appearance.motion == null) form.appearance.motion = 'full'
   if (form.appearance.shape == null) form.appearance.shape = 'round'
+  if (form.appearance.skin !== 'neo' && form.appearance.skin !== 'aurora') form.appearance.skin = 'neo'
   if (!form.categories) form.categories = emptyForm().categories
   if (!Array.isArray(form.categories.primary_list)) form.categories.primary_list = []
   // 括号强制成对
@@ -1028,6 +1035,38 @@ onMounted(async () => {
   position: sticky;
   top: 0;
   overflow: auto;
+}
+/* ---- 皮肤变体（body.zt-skin-* 门控） ---- */
+/* Aurora：导航玻璃 + 激活项极光渐变拖尾 */
+body.zt-skin-aurora .nav-main {
+  border: 1px solid color-mix(in srgb, var(--color-text-primary) 9%, transparent);
+  background: color-mix(in srgb, var(--color-surface) 55%, transparent);
+  backdrop-filter: blur(18px) saturate(1.5);
+  -webkit-backdrop-filter: blur(18px) saturate(1.5);
+  box-shadow: 0 8px 32px rgba(2, 6, 23, 0.35),
+    inset 0 1px 0 color-mix(in srgb, #ffffff 6%, transparent);
+}
+body.zt-skin-aurora .nav-main :deep(.arco-menu-selected) {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--color-primary) 22%, transparent),
+    transparent
+  );
+}
+/* Neo：设置页容器去描边纯阴影 */
+body.zt-skin-neo .settings-page-body :deep(.arco-card) {
+  border: none;
+}
+body.zt-skin-neo .settings-page-body :deep(.arco-collapse) {
+  border: none;
+  border-radius: var(--zt-radius-card);
+  background: var(--color-surface);
+  box-shadow: var(--zt-shadow-card);
+}
+body.zt-skin-neo .nav-main {
+  border: none;
+  box-shadow: var(--zt-shadow-card);
+  background: var(--color-surface);
 }
 .settings-body {
   min-width: 0;

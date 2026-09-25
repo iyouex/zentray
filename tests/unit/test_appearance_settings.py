@@ -12,18 +12,20 @@ def test_appearance_defaults(tmp_data_dir):
     sm = SettingsManager.reload()
     assert sm.appearance.motion == "full"
     assert sm.appearance.shape == "round"
+    assert sm.appearance.skin == "neo"
 
 
 def test_appearance_invalid_values_fall_back(tmp_data_dir):
     sf = sm_mod.SETTINGS_FILE
     sf.parent.mkdir(parents=True, exist_ok=True)
     sf.write_text(
-        json.dumps({"appearance": {"theme": "dark", "motion": "banana", "shape": 3}}),
+        json.dumps({"appearance": {"theme": "dark", "motion": "banana", "shape": 3, "skin": "glass"}}),
         encoding="utf-8",
     )
     sm = SettingsManager.reload()
     assert sm.appearance.motion == "full"
     assert sm.appearance.shape == "round"
+    assert sm.appearance.skin == "neo"
     assert sm.appearance.theme == "dark"
 
 
@@ -31,10 +33,12 @@ def test_appearance_roundtrip(tmp_data_dir):
     sm = SettingsManager.reload()
     sm.appearance.motion = "off"
     sm.appearance.shape = "crisp"
+    sm.appearance.skin = "aurora"
     sm.save()
     sm2 = SettingsManager.reload()
     assert sm2.appearance.motion == "off"
     assert sm2.appearance.shape == "crisp"
+    assert sm2.appearance.skin == "aurora"
 
 
 def test_appearance_theme_int_dirty_value(tmp_data_dir):

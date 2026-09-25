@@ -130,4 +130,9 @@ function nudge(dir) {
   padding: 0 8px 0 4px;
   white-space: nowrap;
 }
+
+/* Neo：数字等宽 */
+body.zt-skin-neo .num-input :deep(.arco-input) {
+  font-family: var(--zt-mono, ui-monospace, monospace);
+}
 </style>

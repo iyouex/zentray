@@ -1,0 +1,207 @@
+/* =====================================================================
+   Aurora 极光皮肤层（feature/ui-themes，源自 feature/ui-aurora，灵感 uiverse.io）
+   仅在 body.zt-skin-aurora 时生效：极光渐变背景 + 玻璃拟态表面 + 渐变强调。
+   消费基线令牌，不重定义；装饰层全部 pointer-events:none。
+   ===================================================================== */
+
+/* 角度令牌：选中卡描边流转（@property 注册才可被 keyframe 补间） */
+@property --aurora-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+/* 内容抬到极光层之上（模态等 teleport 直挂 body，z-index 更高不受影响） */
+body.zt-skin-aurora #app {
+  position: relative;
+  z-index: 1;
+}
+
+/* 极光背景：body::before 四团大光晕缓慢漂移；渐变自带柔边，低模糊即可 */
+body.zt-skin-aurora::before {
+  content: "";
+  position: fixed;
+  inset: -25%;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(38% 45% at 22% 28%, rgba(45, 212, 191, 0.16), transparent 70%),
+    radial-gradient(34% 40% at 78% 22%, rgba(129, 140, 248, 0.15), transparent 70%),
+    radial-gradient(40% 42% at 62% 82%, rgba(232, 121, 249, 0.12), transparent 70%),
+    radial-gradient(30% 36% at 12% 78%, rgba(56, 189, 248, 0.12), transparent 70%);
+  filter: blur(28px) saturate(1.35);
+  animation: aurora-drift 42s ease-in-out infinite alternate;
+}
+
+@keyframes aurora-drift {
+  from {
+    transform: translate3d(-2%, -1.5%, 0) rotate(-2deg) scale(1.02);
+  }
+  to {
+    transform: translate3d(2%, 2%, 0) rotate(2deg) scale(1.06);
+  }
+}
+
+/* 浅色主题光晕减淡成粉彩水洗；纯黑主题稍收敛避免灰雾 */
+body.zt-skin-aurora.theme-light::before {
+  opacity: 0.55;
+}
+body.zt-skin-aurora.theme-oled-dark::before {
+  opacity: 0.8;
+}
+
+/* 极光漂移属装饰动效：motion-off 与系统 reduce 都要彻底停 */
+body.zt-skin-aurora.zt-motion-off::before {
+  animation: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.zt-skin-aurora::before {
+    animation: none !important;
+  }
+}
+
+/* ---- 玻璃表面：卡片/胶囊半透明 + 背景模糊 + 高光内描边 ---- */
+body.zt-skin-aurora .arco-card,
+body.zt-skin-aurora .quick-add-box {
+  background: color-mix(in srgb, var(--color-surface) 58%, transparent);
+  backdrop-filter: blur(18px) saturate(1.5);
+  -webkit-backdrop-filter: blur(18px) saturate(1.5);
+  border: 1px solid color-mix(in srgb, var(--color-text-primary) 9%, transparent);
+  box-shadow: 0 8px 32px rgba(2, 6, 23, 0.35),
+    inset 0 1px 0 color-mix(in srgb, #ffffff 6%, transparent);
+}
+
+body.zt-skin-aurora.theme-light .arco-card,
+body.zt-skin-aurora.theme-light .quick-add-box {
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.14),
+    inset 0 1px 0 color-mix(in srgb, #ffffff 55%, transparent);
+}
+
+/* 任务卡玻璃化（hover 呼吸条与 Flip 兼容不变） */
+body.zt-skin-aurora .task-card-item {
+  background: color-mix(in srgb, var(--color-surface) 46%, transparent);
+  backdrop-filter: blur(14px) saturate(1.4);
+  -webkit-backdrop-filter: blur(14px) saturate(1.4);
+  border-color: color-mix(in srgb, var(--color-text-primary) 9%, transparent);
+}
+
+body.zt-skin-aurora .task-card-item:hover {
+  border-color: color-mix(in srgb, var(--color-text-primary) 16%, transparent);
+}
+
+/* 选中任务卡：极光描边环（mask 留 1.5px 环，随 --aurora-angle 流转） */
+body.zt-skin-aurora .task-card-item.active::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: conic-gradient(
+    from var(--aurora-angle),
+    color-mix(in srgb, var(--color-primary) 90%, transparent),
+    #818cf8,
+    #e879f9,
+    #38bdf8,
+    color-mix(in srgb, var(--color-primary) 90%, transparent)
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  animation: aurora-spin 5s linear infinite;
+}
+
+@keyframes aurora-spin {
+  to {
+    --aurora-angle: 360deg;
+  }
+}
+
+/* 描边流转停用条件：motion-off 全局 kill 已覆盖伪元素；reduce 下补显式停止 */
+@media (prefers-reduced-motion: reduce) {
+  body.zt-skin-aurora .task-card-item.active::after {
+    animation-duration: 0s !important;
+  }
+}
+
+/* ---- 渐变主按钮（语义色 success/danger/warning 不吃渐变，用属性守卫） ---- */
+body.zt-skin-aurora .arco-btn-primary:not([class*='arco-btn-status']):not(.arco-btn-danger) {
+  background: linear-gradient(135deg, var(--color-primary) 10%, #6366f1 95%);
+  border: none;
+  box-shadow: 0 4px 16px var(--color-primary-glow), 0 1px 3px rgba(2, 6, 23, 0.4);
+}
+
+body.zt-skin-aurora .arco-btn-primary:not([class*='arco-btn-status']):not(.arco-btn-danger):hover {
+  filter: brightness(1.12) saturate(1.1);
+}
+
+/* ---- 页头：极光渐变下划线（h2 文字本身不做渐变，避开 SplitText 拆字） ---- */
+body.zt-skin-aurora .page-header {
+  position: relative;
+}
+
+body.zt-skin-aurora .page-header::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -6px;
+  height: 2px;
+  width: 46%;
+  border-radius: 999px;
+  pointer-events: none;
+  background: linear-gradient(90deg, var(--color-primary), #818cf8 55%, transparent);
+  opacity: 0.55;
+}
+
+/* ---- 输入聚焦双色光晕 / 滚动条渐变 ---- */
+body.zt-skin-aurora .arco-input-wrapper:focus-within,
+body.zt-skin-aurora .arco-textarea-wrapper:focus-within {
+  box-shadow: 0 0 0 1.5px var(--color-primary-glow),
+    0 0 14px color-mix(in srgb, #818cf8 22%, transparent);
+}
+
+body.zt-skin-aurora ::-webkit-scrollbar-thumb {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-primary) 55%, var(--color-border)),
+    var(--color-border)
+  );
+}
+
+/* ---- 弹窗玻璃（面板浮在已模糊遮罩上，双层景深） ---- */
+body.zt-skin-aurora .arco-modal {
+  background: color-mix(in srgb, var(--color-surface) 82%, transparent);
+  backdrop-filter: blur(22px) saturate(1.4);
+  -webkit-backdrop-filter: blur(22px) saturate(1.4);
+  border: 1px solid color-mix(in srgb, #ffffff 10%, transparent);
+}
+
+/* ---- 下拉面板轻玻璃 ---- */
+body.zt-skin-aurora .arco-dropdown {
+  background: color-mix(in srgb, var(--color-surface) 88%, transparent);
+  backdrop-filter: blur(16px) saturate(1.3);
+  -webkit-backdrop-filter: blur(16px) saturate(1.3);
+}
+
+/* ---- 向导步骤：激活节点渐变发光 ---- */
+body.zt-skin-aurora .arco-steps-item-active .arco-steps-item-node {
+  background: linear-gradient(135deg, var(--color-primary), #6366f1);
+  box-shadow: 0 0 14px var(--color-primary-glow);
+  color: #ffffff;
+}
+
+/* ---- 快速添加胶囊：玻璃 + 双色聚焦辉光 ---- */
+body.zt-skin-aurora .quick-add-box {
+  background: color-mix(in srgb, var(--color-surface) 55%, transparent);
+  backdrop-filter: blur(22px) saturate(1.5);
+  -webkit-backdrop-filter: blur(22px) saturate(1.5);
+}
+
+body.zt-skin-aurora .quick-add-box:focus-within {
+  border-color: var(--color-primary);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45),
+    0 0 0 1.5px var(--color-primary-glow),
+    0 0 28px color-mix(in srgb, #818cf8 25%, transparent);
+}

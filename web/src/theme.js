@@ -141,18 +141,22 @@ export function categoryColor(name) {
 }
 
 /**
- * 外观偏好：动效开关与形状风格（spec §5）。
- * body class: zt-motion-off / zt-shape-crisp，令牌层按 class 切换档位。
+ * 外观偏好：动效开关与形状风格（spec §5）+ 界面皮肤（neo|aurora）。
+ * body class: zt-motion-off / zt-shape-crisp / zt-skin-neo|zt-skin-aurora，
+ * 令牌层与皮肤层按 class 切换档位。
  */
 export function applyAppearance(prefs) {
   const motion = prefs?.motion === 'off' ? 'off' : 'full'
   const shape = prefs?.shape === 'crisp' ? 'crisp' : 'round'
+  const skin = prefs?.skin === 'aurora' ? 'aurora' : 'neo'
   const root = document.body
   tweenClassFlip(
     root,
     () => {
       root.classList.toggle('zt-motion-off', motion === 'off')
       root.classList.toggle('zt-shape-crisp', shape === 'crisp')
+      root.classList.toggle('zt-skin-aurora', skin === 'aurora')
+      root.classList.toggle('zt-skin-neo', skin === 'neo')
     },
     FLOW_SHAPE_VARS,
     DUR.shape,
@@ -160,5 +164,6 @@ export function applyAppearance(prefs) {
   )
   root.dataset.ztMotion = motion
   root.dataset.ztShape = shape
-  return { motion, shape }
+  root.dataset.ztSkin = skin
+  return { motion, shape, skin }
 }
