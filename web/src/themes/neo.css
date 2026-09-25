@@ -334,3 +334,18 @@ body.zt-skin-neo .zt-pri {
   font-family: var(--zt-mono);
   font-variant-numeric: tabular-nums;
 }
+
+/* 图片识别拖放区：2px 虚线方角 + cyan hover */
+body.zt-skin-neo .ocr-drop {
+  border: 2px dashed var(--color-border);
+  border-radius: var(--zt-radius-md);
+}
+body.zt-skin-neo .ocr-drop:hover,
+body.zt-skin-neo .ocr-drop.is-drag {
+  border-color: var(--zt-cyan);
+  background: color-mix(in srgb, var(--zt-cyan) 8%, transparent);
+  box-shadow: none;
+}
+body.zt-skin-neo .ocr-thumb {
+  border-radius: 3px;
+}
