@@ -2,7 +2,18 @@
   <div class="page">
     <div class="page-header">
       <h2>{{ isEdit ? '修改任务' : '新建任务' }}</h2>
+      <a-space v-if="aiParseOn || aiOcrOn">
+        <a-button v-if="aiParseOn" type="outline" :loading="aiParsing" @click="onAiParse">
+          <template #icon><PhSparkle :size="16" /></template>
+          AI 解析
+        </a-button>
+        <a-button v-if="aiOcrOn" type="outline" :loading="aiOcrLoading" @click="pickImage">
+          <template #icon><PhCamera :size="16" /></template>
+          图片识别
+        </a-button>
+      </a-space>
     </div>
+    <input ref="fileRef" type="file" accept="image/*" style="display: none" @change="onFile" />
 
     <div class="page-body">
       <a-spin :loading="loading" style="width: 100%">
@@ -209,15 +220,61 @@
         </p>
       </div>
     </a-modal>
+
+    <!-- AI 解析 / 图片识别共用的草稿预览：逐字段确认后应用 -->
+    <a-modal
+      v-model:visible="showAiPreview"
+      title="AI 解析结果"
+      draggable
+      :width="520"
+      ok-text="应用到表单"
+      cancel-text="取消"
+      @ok="applyDraft"
+    >
+      <div v-if="previewDraft" class="ai-preview">
+        <div class="ai-row"><span class="ai-k">标题</span><span class="ai-v strong">{{ previewDraft.title }}</span></div>
+        <div class="ai-row">
+          <span class="ai-k">分类</span>
+          <span class="ai-v">
+            <template v-if="categoryMatch">{{ categoryMatch.name }}<em class="ai-ok">（已匹配）</em></template>
+            <template v-else-if="previewDraft.category">{{ previewDraft.category }}<em class="ai-warn">（未匹配已有分类，保持当前）</em></template>
+            <template v-else>—</template>
+          </span>
+        </div>
+        <div class="ai-row"><span class="ai-k">优先级</span><span class="ai-v">{{ PRI_LABEL[previewDraft.priority] || '中' }}</span></div>
+        <div class="ai-row"><span class="ai-k">截止日期</span><span class="ai-v">{{ previewDraft.deadline || '—' }}</span></div>
+        <div class="ai-row"><span class="ai-k">提醒时间</span><span class="ai-v">{{ previewDraft.reminder_time || '—' }}</span></div>
+        <div class="ai-row"><span class="ai-k">详情</span><span class="ai-v pre">{{ previewDraft.details || '—' }}</span></div>
+        <div class="ai-row">
+          <span class="ai-k">子任务</span>
+          <ul v-if="previewDraft.subtasks?.length" class="ai-subs">
+            <li v-for="s in previewDraft.subtasks" :key="s">{{ s }}</li>
+          </ul>
+          <span v-else class="ai-v">—</span>
+        </div>
+      </div>
+    </a-modal>
+
+    <!-- 图片识别出多条：先选哪一条 -->
+    <a-modal v-model:visible="showOcrPick" title="识别到多条任务" draggable :width="480" :footer="false">
+      <p class="muted">选择一条填入表单：</p>
+      <div v-for="(d, i) in ocrDrafts" :key="i" class="ocr-item" @click="chooseOcrDraft(d)">
+        <span class="strong">{{ d.title }}</span>
+        <span class="muted">{{ [d.category, PRI_LABEL[d.priority], d.deadline].filter(Boolean).join(' · ') }}</span>
+      </div>
+    </a-modal>
   </div>
 </template>
 
 <script setup>
-import { computed, h, onMounted, reactive, ref } from 'vue'
+import { computed, h, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Message, Modal } from '@arco-design/web-vue'
+import { PhCamera, PhSparkle } from '@phosphor-icons/vue'
 import {
   addSecondaryCategory,
+  aiOcr,
+  aiParse,
   cancelHost,
   checkReminderConflicts,
   closeHost,
@@ -323,6 +380,152 @@ const isWeeklyOrMonthly = computed(
 function onPrimaryChange() {
   form.category_secondary_id = null
 }
+
+// ---- AI 场景能力：文本解析 + 图片识别（开关来自 meta.ai_features，默认关）----
+
+const PRI_LABEL = { high: '高', medium: '中', low: '低' }
+const aiParseOn = computed(() => !!meta.value?.ai_features?.smart_parse)
+const aiOcrOn = computed(() => !!meta.value?.ai_features?.image_ocr)
+const aiParsing = ref(false)
+const aiOcrLoading = ref(false)
+const showAiPreview = ref(false)
+const previewDraft = ref(null)
+const showOcrPick = ref(false)
+const ocrDrafts = ref([])
+const fileRef = ref(null)
+
+/** 草稿 category（名称，可能带二级「工作/开发」）→ 已有分类 id；匹配不上返回 null */
+const categoryMatch = computed(() => {
+  const d = previewDraft.value
+  if (!d?.category) return null
+  const cats = meta.value?.categories
+  const sep = cats?.level_separator || '-'
+  const list = cats?.primary_list || []
+  const name = d.category.trim()
+  for (const p of list) {
+    if (name === p.name) return { primary: p.id, secondary: null, name: p.name }
+    if (name.startsWith(p.name + sep)) {
+      const rest = name.slice((p.name + sep).length)
+      const sec = (p.secondaries || []).find((s) => s.name === rest)
+      return { primary: p.id, secondary: sec?.id || null, name: sec ? `${p.name}${sep}${sec.name}` : p.name }
+    }
+  }
+  // 模糊：互相包含的一级
+  for (const p of list) {
+    if (name.includes(p.name) || p.name.includes(name)) return { primary: p.id, secondary: null, name: p.name }
+  }
+  return null
+})
+
+async function onAiParse() {
+  const text = [form.title, form.details].filter((x) => x && x.trim()).join('\n')
+  if (!text) {
+    Message.warning('先填写标题或详情，再让 AI 解析')
+    return
+  }
+  aiParsing.value = true
+  try {
+    previewDraft.value = await aiParse(text)
+    showAiPreview.value = true
+  } catch (e) {
+    Message.error(e?.response?.data?.error || e?.message || 'AI 解析失败')
+  } finally {
+    aiParsing.value = false
+  }
+}
+
+function pickImage() {
+  fileRef.value?.click()
+}
+
+async function onFile(e) {
+  const f = e.target.files?.[0]
+  e.target.value = ''
+  if (f) await runOcr(f)
+}
+
+async function runOcr(file) {
+  if (file.size > 9 * 1024 * 1024) {
+    Message.warning('图片过大（>9MB），请压缩后重试')
+    return
+  }
+  aiOcrLoading.value = true
+  try {
+    const dataUrl = await new Promise((res, rej) => {
+      const r = new FileReader()
+      r.onload = () => res(r.result)
+      r.onerror = rej
+      r.readAsDataURL(file)
+    })
+    const drafts = await aiOcr(dataUrl)
+    if (!drafts.length) {
+      Message.info('图片中未识别到待办线索')
+      return
+    }
+    if (drafts.length === 1) {
+      previewDraft.value = drafts[0]
+      showAiPreview.value = true
+    } else {
+      ocrDrafts.value = drafts
+      showOcrPick.value = true
+    }
+  } catch (e) {
+    Message.error(e?.response?.data?.error || e?.message || '图片识别失败')
+  } finally {
+    aiOcrLoading.value = false
+  }
+}
+
+/** 直接 Ctrl+V 粘贴截图进表单页 */
+async function onPaste(e) {
+  if (!aiOcrOn.value) return
+  const item = Array.from(e.clipboardData?.items || []).find((i) => i.type.startsWith('image/'))
+  if (!item) return
+  const f = item.getAsFile()
+  if (f) {
+    e.preventDefault()
+    await runOcr(f)
+  }
+}
+
+function chooseOcrDraft(d) {
+  showOcrPick.value = false
+  previewDraft.value = d
+  showAiPreview.value = true
+}
+
+/** 应用草稿到表单：分类按名称匹配（匹配不上不动）；子任务追加去重 */
+function applyDraft() {
+  const d = previewDraft.value
+  if (!d?.title) return
+  form.title = d.title
+  if (d.priority) form.priority = d.priority
+  const m = categoryMatch.value
+  if (m) {
+    form.category_primary_id = m.primary
+    form.category_secondary_id = m.secondary
+  }
+  if (d.deadline && form.mode !== 'periodic' && !isTemplate.value) {
+    form.has_deadline = true
+    form.deadline = d.deadline
+  }
+  if (d.reminder_time) {
+    form.reminder_enabled = true
+    form.reminder_time = d.reminder_time
+  }
+  if (d.details) form.details = d.details
+  if (d.subtasks?.length) {
+    const exist = new Set(form.subtasks.map((s) => (s.title || '').trim()))
+    for (const t of d.subtasks) {
+      if (!exist.has(t)) form.subtasks.push({ id: null, title: t, status: 'active' })
+    }
+  }
+  showAiPreview.value = false
+  Message.success('已应用 AI 解析结果')
+}
+
+onMounted(() => window.addEventListener('paste', onPaste))
+onUnmounted(() => window.removeEventListener('paste', onPaste))
 
 function primaryName() {
   const o = primaryOpts.value.find((x) => x.value === form.category_primary_id)
@@ -652,5 +855,67 @@ onMounted(async () => {
 .muted {
   color: var(--color-text-3);
   font-size: 12px;
+}
+/* AI 解析预览 */
+.ai-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ai-row {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+}
+.ai-k {
+  flex: none;
+  width: 64px;
+  font-size: 12px;
+  color: var(--color-text-3);
+}
+.ai-v {
+  font-size: 13px;
+  word-break: break-word;
+}
+.ai-v.pre {
+  white-space: pre-line;
+}
+.ai-v.strong {
+  font-weight: 600;
+}
+.strong {
+  font-weight: 600;
+}
+.ai-ok {
+  color: rgb(var(--success-6));
+  font-style: normal;
+  font-size: 12px;
+  margin-left: 4px;
+}
+.ai-warn {
+  color: rgb(var(--warning-6));
+  font-style: normal;
+  font-size: 12px;
+  margin-left: 4px;
+}
+.ai-subs {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 13px;
+}
+.ocr-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--zt-radius-card, 12px);
+  cursor: pointer;
+  margin-bottom: 8px;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+.ocr-item:hover {
+  border-color: var(--color-primary);
+  background: var(--color-primary-glow);
 }
 </style>

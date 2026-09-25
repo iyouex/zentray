@@ -198,6 +198,27 @@ export async function fetchAiReport(name) {
   return data
 }
 
+// ---- AI 场景能力（docs/AI-FEATURES.md）——模型可能较慢，单独放宽超时 ----
+
+/** 文本 → 任务草稿 */
+export async function aiParse(text) {
+  const { data } = await http.post('/api/ai/parse', { text }, { timeout: 70000 })
+  return data.draft
+}
+
+/** 图片 dataURL → 多条任务草稿 */
+export async function aiOcr(image) {
+  const { data } = await http.post('/api/ai/ocr', { image }, { timeout: 90000 })
+  return data.drafts || []
+}
+
+/** 任务建议；focusId 可选（当前选中任务优先围绕） */
+export async function aiSuggest(focusId = '') {
+  const body = focusId ? { focus_id: focusId } : {}
+  const { data } = await http.post('/api/ai/suggest', body, { timeout: 70000 })
+  return data.suggestions || []
+}
+
 /** 关闭宿主窗口并回传结果（Qt WebEngine） */
 export function closeHost(payload = {}) {
   const json = encodeURIComponent(JSON.stringify(payload || {}))

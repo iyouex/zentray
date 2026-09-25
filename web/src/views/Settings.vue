@@ -12,17 +12,48 @@
           :selected-keys="[mainKey]"
           @menu-item-click="onMainNav"
         >
-          <a-menu-item key="ai_hub">AI 与通知</a-menu-item>
-          <a-menu-item key="polling">任务轮播</a-menu-item>
-          <a-menu-item key="pomodoro">番茄钟</a-menu-item>
-          <a-menu-item key="categories">分类</a-menu-item>
-          <a-menu-item key="system">系统</a-menu-item>
+          <a-menu-item key="ai">✨ AI 能力</a-menu-item>
+          <a-menu-item key="notify">🔔 通知</a-menu-item>
+          <a-menu-item key="polling">📋 任务</a-menu-item>
+          <a-menu-item key="pomodoro">🍅 番茄钟</a-menu-item>
+          <a-menu-item key="categories">🏷️ 分类</a-menu-item>
+          <a-menu-item key="system">🖥️ 系统</a-menu-item>
           <a-menu-item key="history">📜 历史</a-menu-item>
         </a-menu>
 
-        <div class="settings-body" :class="{ 'is-ai': mainKey === 'ai_hub', 'is-history': mainKey === 'history' }">
-          <template v-if="mainKey === 'ai_hub'">
+        <div class="settings-body" :class="{ 'is-ai': mainKey === 'ai', 'is-history': mainKey === 'history' }">
+          <template v-if="mainKey === 'ai'">
+            <!-- 场景能力开关：卡片网格，默认全关 -->
+            <section class="feat-section">
+              <div class="feat-grid">
+                <div
+                  v-for="f in AI_FEATURES"
+                  :key="f.key"
+                  class="feat-card"
+                  :class="{ on: form.ai.features[f.key] }"
+                >
+                  <span class="feat-icon">{{ f.icon }}</span>
+                  <div class="feat-info">
+                    <span class="feat-name">{{ f.name }}</span>
+                    <span class="feat-desc">{{ f.desc }}</span>
+                  </div>
+                  <a-switch v-model="form.ai.features[f.key]" size="small" />
+                </div>
+              </div>
+              <p class="hint">
+                场景能力默认关闭；开启后立即出现在对应入口，模型调用复用下方「模型接入」中的当前 API。
+              </p>
+            </section>
+
             <a-tabs class="ai-tabs" type="rounded" v-model:active-key="aiTab">
+              <a-tab-pane key="plan" title="每日计划">
+                <JobEditor v-model="form.ai.plan" kind-label="每日计划" />
+              </a-tab-pane>
+
+              <a-tab-pane key="review" title="每日复盘">
+                <JobEditor v-model="form.ai.review" kind-label="每日复盘" />
+              </a-tab-pane>
+
               <!-- 模型接入：折叠行 + 当前配置可编辑 -->
               <a-tab-pane key="api" title="模型接入">
                 <section class="section">
@@ -110,73 +141,65 @@
                   </a-collapse>
                 </section>
               </a-tab-pane>
-
-              <a-tab-pane key="plan" title="每日计划">
-                <JobEditor v-model="form.ai.plan" kind-label="每日计划" />
-              </a-tab-pane>
-
-              <a-tab-pane key="review" title="每日复盘">
-                <JobEditor v-model="form.ai.review" kind-label="每日复盘" />
-              </a-tab-pane>
-
-              <!-- 通知：固定渠道，不可增删，可折叠 -->
-              <a-tab-pane key="notify" title="通知渠道">
-                <section class="section">
-                  <p class="hint">
-                    内置渠道（不可增删），可同时开启。点击行展开配置。
-                  </p>
-                  <a-collapse
-                    v-model:active-key="notifyExpandKeys"
-                    :bordered="true"
-                    expand-icon-position="right"
-                  >
-                    <a-collapse-item
-                      v-for="ch in fixedChannels"
-                      :key="ch.id"
-                      :name="ch.id"
-                    >
-                      <template #header>
-                        <div class="ch-row-header" @click.stop>
-                          <span class="ch-title">{{ ch.name }}</span>
-                          <a-tag size="small" :color="ch.enabled ? 'green' : 'gray'">
-                            {{ ch.enabled ? '已开启' : '已关闭' }}
-                          </a-tag>
-                          <a-switch
-                            v-model="ch.enabled"
-                            size="small"
-                            checked-text="开"
-                            unchecked-text="关"
-                            @click.stop
-                          />
-                        </div>
-                      </template>
-
-                      <div v-if="ch.type === 'app_popup'" class="ch-body">
-                        <a-alert type="info">
-                          开启后，计划/复盘完成时会通过<strong>托盘系统通知</strong>弹出提醒。
-                        </a-alert>
-                      </div>
-                      <a-form v-else layout="vertical" size="small" class="ch-body">
-                        <a-form-item label="App Token">
-                          <a-input
-                            v-model="ch.wxpusher_app_token"
-                            placeholder="AT_..."
-                            :disabled="!ch.enabled"
-                          />
-                        </a-form-item>
-                        <a-form-item label="UID">
-                          <a-input
-                            v-model="ch.wxpusher_uid"
-                            placeholder="UID_..."
-                            :disabled="!ch.enabled"
-                          />
-                        </a-form-item>
-                      </a-form>
-                    </a-collapse-item>
-                  </a-collapse>
-                </section>
-              </a-tab-pane>
             </a-tabs>
+          </template>
+
+          <!-- 通知：从 AI 页拆出的独立页（固定渠道，不可增删，可折叠） -->
+          <template v-else-if="mainKey === 'notify'">
+            <section class="section">
+              <p class="hint">
+                内置渠道（不可增删），可同时开启。点击行展开配置。
+              </p>
+              <a-collapse
+                v-model:active-key="notifyExpandKeys"
+                :bordered="true"
+                expand-icon-position="right"
+              >
+                <a-collapse-item
+                  v-for="ch in fixedChannels"
+                  :key="ch.id"
+                  :name="ch.id"
+                >
+                  <template #header>
+                    <div class="ch-row-header" @click.stop>
+                      <span class="ch-title">{{ ch.name }}</span>
+                      <a-tag size="small" :color="ch.enabled ? 'green' : 'gray'">
+                        {{ ch.enabled ? '已开启' : '已关闭' }}
+                      </a-tag>
+                      <a-switch
+                        v-model="ch.enabled"
+                        size="small"
+                        checked-text="开"
+                        unchecked-text="关"
+                        @click.stop
+                      />
+                    </div>
+                  </template>
+
+                  <div v-if="ch.type === 'app_popup'" class="ch-body">
+                    <a-alert type="info">
+                      开启后，计划/复盘完成时会通过<strong>托盘系统通知</strong>弹出提醒。
+                    </a-alert>
+                  </div>
+                  <a-form v-else layout="vertical" size="small" class="ch-body">
+                    <a-form-item label="App Token">
+                      <a-input
+                        v-model="ch.wxpusher_app_token"
+                        placeholder="AT_..."
+                        :disabled="!ch.enabled"
+                      />
+                    </a-form-item>
+                    <a-form-item label="UID">
+                      <a-input
+                        v-model="ch.wxpusher_uid"
+                        placeholder="UID_..."
+                        :disabled="!ch.enabled"
+                      />
+                    </a-form-item>
+                  </a-form>
+                </a-collapse-item>
+              </a-collapse>
+            </section>
           </template>
 
           <template v-else-if="mainKey === 'polling'">
@@ -531,8 +554,8 @@ import NumberSpinner from '@/components/NumberSpinner.vue'
 const setThemeMode = inject('setThemeMode', null)
 const loading = ref(false)
 const saving = ref(false)
-const mainKey = ref('ai_hub')
-const aiTab = ref('api')
+const mainKey = ref('ai')
+const aiTab = ref('plan')
 const apiExpandKeys = ref([])
 const notifyExpandKeys = ref([])
 
@@ -550,6 +573,13 @@ const importLoading = ref(false)
 const lastImportMsg = ref('')
 
 const form = reactive(emptyForm())
+
+/** AI 场景能力卡片（docs/AI-FEATURES.md）：键名对应 ai.features.* */
+const AI_FEATURES = [
+  { key: 'smart_parse', icon: '✨', name: '智能解析', desc: '快速添加与任务表单中，一句话自动补全分类/优先级/截止与子任务' },
+  { key: 'image_ocr', icon: '📷', name: '图片识别', desc: '上传或粘贴截图，AI 识别其中的待办并生成任务草稿' },
+  { key: 'task_suggest', icon: '💡', name: '任务建议', desc: '基于任务列表给出优先级/截止/拆分建议，可一键应用' },
+]
 
 /** 固定两条渠道，不允许增删 */
 const fixedChannels = computed(() => ensureFixedChannels(form.notification))
@@ -590,6 +620,7 @@ function emptyForm() {
       active_api_id: 'default',
       plan: emptyJob(8, 0),
       review: emptyJob(23, 30),
+      features: { smart_parse: false, image_ocr: false, task_suggest: false },
     },
     categories: {
       enabled_secondary: true,
@@ -908,6 +939,7 @@ function normalizeLoaded(s) {
   }
   if (!form.ai.plan) form.ai.plan = emptyJob(8, 0)
   if (!form.ai.review) form.ai.review = emptyJob(23, 30)
+  if (!form.ai.features) form.ai.features = { smart_parse: false, image_ocr: false, task_suggest: false }
   // 公休日：若仅一侧开启，展开为两边一致（以「都开」为准显示）
   for (const job of [form.ai.plan, form.ai.review]) {
     if (job.skip_weekends || job.skip_holidays) {
@@ -1078,7 +1110,7 @@ body.zt-skin-neo .nav-main {
 .settings-body.is-history {
   overflow: hidden;
 }
-/* AI 页：标签栏固定，仅 pane 内容滚动 */
+/* AI 页：场景开关 + 标签栏固定，仅 pane 内容滚动 */
 .settings-body.is-ai {
   overflow: hidden;
   display: flex;
@@ -1086,7 +1118,7 @@ body.zt-skin-neo .nav-main {
 }
 .settings-body.is-ai :deep(.ai-tabs),
 .settings-body.is-ai :deep(.arco-tabs) {
-  height: 100%;
+  flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -1106,6 +1138,50 @@ body.zt-skin-neo .nav-main {
 }
 .section {
   max-width: 900px;
+}
+/* AI 场景能力开关卡片网格 */
+.feat-section {
+  flex: none;
+  margin-bottom: 4px;
+}
+.feat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 10px;
+}
+.feat-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border-2);
+  border-radius: var(--zt-radius-card, 12px);
+  background: var(--color-fill-1, rgba(148, 163, 184, 0.06));
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+.feat-card.on {
+  border-color: var(--color-primary);
+  background: var(--color-primary-glow);
+}
+.feat-icon {
+  font-size: 22px;
+  flex: none;
+}
+.feat-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.feat-name {
+  font-weight: 600;
+  font-size: 13.5px;
+}
+.feat-desc {
+  font-size: 12px;
+  color: var(--color-text-3);
+  line-height: 1.4;
 }
 .hint {
   color: var(--color-text-3);
