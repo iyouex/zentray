@@ -73,8 +73,14 @@ kill_app_processes() {
         [[ -z "$pid" ]] && continue
         targets+=("$pid")
     done < <(
-        { pgrep -f '[Zz]enTray'; pgrep -f 'linux_tray_bridge'; pgrep -f 'zentray/main.py'; } 2>/dev/null |
-            sort -u || true
+        {
+            pgrep -f '[Zz]enTray'
+            pgrep -f 'linux_tray_bridge'
+            pgrep -f 'zentray/main.py'
+            # 旧版 /usr/bin/zentray 包装 sh：其兜底 exec 会在 app 被杀后把 app
+            # 重新拉起（cmdline 无大写 ZenTray，上面的模式扫不到），必须一并杀
+            pgrep -f '/usr/bin/zentray'
+        } 2>/dev/null | sort -u || true
     )
 
     # 排除脚本自身进程链（$$ 及祖先），防止外层命令行含 ZenTray 字样时自杀

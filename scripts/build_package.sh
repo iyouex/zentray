@@ -268,10 +268,13 @@ build_linux_deb() {
 
     # 启动包装：已在运行则直连单实例 socket 激活（免重复起进程，
     # 实测任务栏再点击 3.2s → ~0.2s）；未运行/激活失败则冷启动完整应用。
+    # 必须 exec python3 自替换：若 sh 存活等待子进程，app 被 TERM 杀掉时
+    # 退出码 143 非零 → sh 落入兜底 exec 把 app 重新拉起，卸载要跑两次
+    # （2026-09-26 实锤：卸载后幸存进程的 PPid=bash，即重生自包装脚本）。
     cat > "${stage}/usr/bin/${PKG_NAME}" <<'WRAP'
 #!/bin/sh
 if command -v /usr/bin/python3 >/dev/null 2>&1; then
-    if /usr/bin/python3 - "$@" <<'PY'
+    exec /usr/bin/python3 - "$@" <<'PY'
 import os, socket, sys
 
 
@@ -294,10 +297,8 @@ def _activate():
 if not _activate():
     os.execv("/opt/zentray/ZenTray/ZenTray", ["/opt/zentray/ZenTray/ZenTray"] + sys.argv[1:])
 PY
-    then
-        exit 0
-    fi
 fi
+# 仅当系统连 python3 都没有时才不经激活直启
 exec /opt/zentray/ZenTray/ZenTray "$@"
 WRAP
     chmod 755 "${stage}/usr/bin/${PKG_NAME}"
