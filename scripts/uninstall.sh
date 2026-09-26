@@ -10,9 +10,8 @@
 # 默认不删除用户数据（任务/设置）。若要一并清空配置，加 --purge 或运行 clean_config.sh
 #
 # 用法:
-#   ./scripts/uninstall.sh              # 卸载应用，保留配置
+#   ./scripts/uninstall.sh              # 卸载应用（先结束进程，不询问），保留配置
 #   ./scripts/uninstall.sh --purge      # 卸载 + 清理配置/缓存
-#   ./scripts/uninstall.sh --yes        # 跳过确认
 #   ./scripts/uninstall.sh -h
 # ============================================================================
 set -euo pipefail
@@ -22,7 +21,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib_common.sh"
 
 PURGE=false
-YES=false
 
 usage() {
     cat <<EOF
@@ -32,21 +30,21 @@ usage() {
 
 选项:
   --purge     同时删除用户数据目录（等价再跑 clean_config.sh）
-  --yes, -y   不询问确认
+  --yes, -y   兼容参数（现在默认就不询问）
   -h, --help  显示帮助
 
 典型测试流程:
   ./scripts/build_package.sh
   sudo apt install -y ./dist/releases/zentray_*_amd64.deb
   # ... 手动测功能 ...
-  ./scripts/uninstall.sh --yes
+  ./scripts/uninstall.sh
 EOF
 }
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --purge) PURGE=true ;;
-        --yes|-y) YES=true ;;
+        --yes|-y) : ;; # 兼容旧用法（现默认不询问）
         -h|--help) usage; exit 0 ;;
         *) err "未知选项: $1"; usage; exit 1 ;;
     esac
@@ -58,15 +56,6 @@ echo "  包名:       ${PKG_NAME}"
 echo "  用户安装:   ${USER_INSTALL_DIR}"
 echo "  用户数据:   ${USER_DATA_DIR}"
 echo "  清除配置:   ${PURGE}"
-
-if ! $YES; then
-    echo ""
-    read -r -p "确认卸载? [y/N] " ans
-    case "$ans" in
-        y|Y|yes|YES) ;;
-        *) echo "已取消"; exit 0 ;;
-    esac
-fi
 
 # ------------------------------------------------------------------------
 section "1. 结束进程"
