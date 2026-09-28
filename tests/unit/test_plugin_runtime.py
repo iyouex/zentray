@@ -242,3 +242,37 @@ def test_run_plugin_api_passes_params(qapp, tmp_data_dir, monkeypatch):
     assert reports, "run_report 未发出"
     # target 显式传入；level 未传回落 default "1"
     assert "--mode=echo web 1" in _read_log(reports[0])
+
+
+def test_param_preset_beats_default_when_omitted(qapp, tmp_data_dir, monkeypatch):
+    """run_script 未传 param_values → 预设 > manifest default（触发器路径同此）。"""
+    from zentray.services.settings_manager import SettingsManager
+
+    rt, loader = _make_runtime(tmp_data_dir, monkeypatch)
+    sm = SettingsManager.reload()
+    sm.ops.param_presets = {"param-echo": {"target": "dns"}}
+    report = _run_and_wait(qapp, rt, loader.get("param-echo"))
+    assert report["ok"] is True, report["summary"]
+    # target 用预设 dns；level 无预设回落 default 1
+    assert "--mode=echo dns 1" in _read_log(report)
+
+
+def test_explicit_values_beat_preset(qapp, tmp_data_dir, monkeypatch):
+    from zentray.services.settings_manager import SettingsManager
+
+    rt, loader = _make_runtime(tmp_data_dir, monkeypatch)
+    sm = SettingsManager.reload()
+    sm.ops.param_presets = {"param-echo": {"target": "dns"}}
+    report = _run_and_wait(
+        qapp, rt, loader.get("param-echo"), param_values=["web", "2"]
+    )
+    assert "--mode=echo web 2" in _read_log(report)
+
+
+def test_report_has_run_id_and_times(qapp, tmp_data_dir, monkeypatch):
+    rt, loader = _make_runtime(tmp_data_dir, monkeypatch)
+    report = _run_and_wait(qapp, rt, loader.get("param-echo"))
+    assert report["run_id"].startswith("20")
+    assert report["run_id"].endswith("_param-echo")
+    assert report["started_at"]  # ISO 起点
+    assert report["time"] >= report["started_at"]  # time=结束时刻

@@ -16,7 +16,7 @@ import os
 import uuid
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 from zentray.config import DATA_DIR
 from zentray.core.categories import CategorySettings, default_category_settings
@@ -165,6 +165,12 @@ class OpsSettings:
     # 空字符串表示使用默认 DATA_DIR/plugins
     user_plugins_dir: str = ""
     confirm_before_run: bool = True
+    # v2.1 调度规则覆盖层：pid -> trigger dict 列表（缺失=回落 manifest.triggers）
+    trigger_overrides: Dict[str, list] = field(default_factory=dict)
+    # v2.1 参数预设（单组）：pid -> {param_name: value}
+    param_presets: Dict[str, dict] = field(default_factory=dict)
+    # 安装时间：pid -> ISO（安装 API 写入，列表「更新时间」排序用）
+    installed_at: Dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -575,10 +581,26 @@ class SettingsManager:
             )
         if "ops" in data:
             o = data["ops"] or {}
+            ov = o.get("trigger_overrides")
+            pp = o.get("param_presets")
             self._settings.ops = OpsSettings(
                 enabled=bool(o.get("enabled", False)),
                 user_plugins_dir=str(o.get("user_plugins_dir") or ""),
                 confirm_before_run=bool(o.get("confirm_before_run", True)),
+                trigger_overrides={
+                    str(k): [t for t in v if isinstance(t, dict)]
+                    for k, v in (ov or {}).items()
+                    if isinstance(v, list)
+                },
+                param_presets={
+                    str(k): {str(n): str(val) for n, val in d.items()}
+                    for k, d in (pp or {}).items()
+                    if isinstance(d, dict)
+                },
+                installed_at={
+                    str(k): str(v)
+                    for k, v in (o.get("installed_at") or {}).items()
+                },
             )
 
         # 用 review 回写 nightly 兼容

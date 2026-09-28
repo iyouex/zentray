@@ -134,10 +134,38 @@ def should_fire(
     return False, watermark or ""
 
 
+def effective_triggers(pid: str, manifest_triggers: list) -> list:
+    """调度规则覆盖层：settings.ops.trigger_overrides[pid] 优先，缺失回落 manifest。
+
+    覆盖层整体非列表 → 回落 manifest；条目非法 → 丢弃该条并记日志
+    （坏数据不打断轮询线程）。空列表=显式禁用全部触发。
+    """
+    try:
+        from zentray.services.settings_manager import SettingsManager
+
+        raw = SettingsManager().ops.trigger_overrides.get(pid)
+    except Exception:
+        raw = None
+    if raw is None:
+        return list(manifest_triggers)
+    if not isinstance(raw, list):
+        logger.warning("插件 %s 调度规则覆盖层非法（非列表），回落 manifest", pid)
+        return list(manifest_triggers)
+
+    from zentray.plugins.manifest import _validate_triggers
+    from zentray.plugins.models import PluginType
+
+    errors: list = []
+    out = _validate_triggers(raw, PluginType.SCRIPT, 2, errors)
+    if errors:
+        logger.warning("插件 %s 调度规则覆盖层含非法条目，已忽略: %s", pid, errors)
+    return out
+
+
 def event_triggers(plug: LoadedPlugin, event: str) -> list:
     return [
         t
-        for t in plug.manifest.triggers
+        for t in effective_triggers(plug.manifest.id, plug.manifest.triggers)
         if t.type == TriggerType.EVENT and t.event is not None and t.event.value == event
     ]
 
@@ -244,7 +272,7 @@ def poll_timers() -> None:
     _rescan()
     now = _dt.datetime.now()
     for plug in loader.plugins:
-        for trig in plug.manifest.triggers:
+        for trig in effective_triggers(plug.manifest.id, plug.manifest.triggers):
             if trig.type == TriggerType.EVENT:
                 continue
             key = trigger_key(plug.manifest.id, trig)

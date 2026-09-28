@@ -76,6 +76,7 @@ class PluginManifest:
     timeout_sec: int = 300
     env: Dict[str, str] = field(default_factory=dict)
     description: str = ""
+    category: str = ""
     triggers: List[PluginTrigger] = field(default_factory=list)
     params: List[PluginParam] = field(default_factory=list)
     write_back: bool = False

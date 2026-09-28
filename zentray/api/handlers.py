@@ -532,9 +532,20 @@ def _plugins_list(*, scan_always: bool = False) -> dict:
     )
     from zentray.plugins import triggers as _triggers
 
+    import datetime as _dt
+
     items = []
     for p in loader.plugins:
         m = p.manifest
+        # v2.1：列表元数据——分类 / 命名入参 / 更新时间（installed_at 兜底目录
+        # mtime）/ 调度规则展示走覆盖层 effective
+        try:
+            updated_at = sm.ops.installed_at.get(m.id) or _dt.datetime.fromtimestamp(
+                m.root.stat().st_mtime
+            ).isoformat(timespec="seconds")
+        except OSError:
+            updated_at = ""
+        eff = _triggers.effective_triggers(m.id, m.triggers)
         items.append(
             {
                 "id": m.id,
@@ -542,11 +553,18 @@ def _plugins_list(*, scan_always: bool = False) -> dict:
                 "type": m.type.value,
                 "version": m.version,
                 "description": m.description or "",
+                "category": m.category or "",
                 "source": p.source,
                 "entry": m.entry,
                 "root": str(m.root),
                 "status": "ok",
-                "triggers": [t.describe() for t in m.triggers],
+                "triggers": [t.describe() for t in eff],
+                "trigger_override": m.id in sm.ops.trigger_overrides,
+                "params": [
+                    {"name": x.name, "default": x.default, "description": x.description}
+                    for x in m.params
+                ],
+                "updated_at": updated_at,
                 "write_back": bool(m.write_back),
                 "authorized": _triggers.is_authorized(m.id),
             }
@@ -680,6 +698,11 @@ def _install_validated_dir(src: Path, manifest, overwrite: bool) -> tuple[int, d
             sh.chmod(sh.stat().st_mode | 0o111)
         except OSError:
             pass
+    # v2.1：记录安装/更新时间（列表排序用）
+    import datetime as _dt
+
+    sm.ops.installed_at[manifest.id] = _dt.datetime.now().isoformat(timespec="seconds")
+    sm.save()
     return 200, {
         "ok": True,
         "message": f"已安装到 {dest}",

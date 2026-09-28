@@ -133,6 +133,17 @@ class PluginRuntime(QObject):
         ok = completed.returncode == 0
         return ok, f"{action} " + ("成功" if ok else "失败")
 
+    @staticmethod
+    def _preset_or_default(m, param) -> str:
+        """入参缺省值：预设（settings.ops.param_presets）> manifest default。"""
+        try:
+            from zentray.services.settings_manager import SettingsManager
+
+            preset = SettingsManager().ops.param_presets.get(m.id) or {}
+            return str(preset.get(param.name, param.default))
+        except Exception:
+            return param.default
+
     def _run_script_thread(
         self,
         plugin: LoadedPlugin,
@@ -143,12 +154,14 @@ class PluginRuntime(QObject):
         m = plugin.manifest
         self._runs_dir.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        log_path = self._runs_dir / f"{stamp}_{m.id}.log"
-        meta_json = self._runs_dir / f"{stamp}_{m.id}.json"
+        run_id = f"{stamp}_{m.id}"
+        started_at = datetime.now().isoformat(timespec="seconds")
+        log_path = self._runs_dir / f"{run_id}.log"
+        meta_json = self._runs_dir / f"{run_id}.json"
         last_json = self._runs_dir / "last.json"
 
         values = list(param_values) if param_values is not None else [
-            p.default for p in m.params
+            self._preset_or_default(m, p) for p in m.params
         ]
         cmd = [str(m.entry_path), *m.args, *values]
         env = os.environ.copy()
@@ -248,6 +261,8 @@ class PluginRuntime(QObject):
             report = {
                 "id": m.id,
                 "name": m.name,
+                "run_id": run_id,
+                "started_at": started_at,
                 "ok": ok,
                 "summary": summary,
                 "result_text": last_result.text if last_result is not None else "",

@@ -131,6 +131,7 @@ def _validate_mapping(raw: Dict[str, Any], root: Path) -> ValidationResult:
         env = {str(k): str(v) for k, v in env.items()}
 
     description = str(raw.get("description") or "").strip()
+    category = str(raw.get("category") or "").strip()
 
     if ptype == PluginType.SERVICE:
         # api_version=1: entry start|stop|status 约定，无需额外 commands 块
@@ -189,6 +190,7 @@ def _validate_mapping(raw: Dict[str, Any], root: Path) -> ValidationResult:
         timeout_sec=timeout_sec,
         env=env,
         description=description,
+        category=category,
         triggers=triggers,
         params=params,
         write_back=write_back,

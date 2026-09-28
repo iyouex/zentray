@@ -277,3 +277,74 @@ def test_poll_timers_fires_authorized_daily(monkeypatch, tmp_path):
     assert ids == ["trig-plug"]  # task_done 事件不参与定时轮询
     state = triggers.load_state()
     assert state.watermarks["trig-plug:daily:00:00"]
+
+
+# ==========================================
+# v2.1：调度规则覆盖层 effective_triggers
+# ==========================================
+
+
+def _set_overrides(overrides):
+    from zentray.services.settings_manager import SettingsManager
+
+    sm = SettingsManager.reload()
+    sm.ops.trigger_overrides = overrides
+    return sm
+
+
+def test_effective_triggers_override_replaces(tmp_path, tmp_data_dir):
+    manifest = _make_trig_plugin(tmp_path)
+    _set_overrides({"trig-plug": [{"type": "daily", "time": "08:30"}]})
+    eff = triggers.effective_triggers("trig-plug", manifest.triggers)
+    assert [t.type for t in eff] == [TriggerType.DAILY]
+    assert eff[0].time == "08:30"
+
+
+def test_effective_triggers_missing_falls_back(tmp_path, tmp_data_dir):
+    manifest = _make_trig_plugin(tmp_path)
+    _set_overrides({"other-plug": [{"type": "daily", "time": "08:30"}]})
+    eff = triggers.effective_triggers("trig-plug", manifest.triggers)
+    assert eff == list(manifest.triggers)
+
+
+def test_effective_triggers_non_list_falls_back(tmp_path, tmp_data_dir):
+    manifest = _make_trig_plugin(tmp_path)
+    _set_overrides({"trig-plug": "garbage"})
+    eff = triggers.effective_triggers("trig-plug", manifest.triggers)
+    assert eff == list(manifest.triggers)
+
+
+def test_effective_triggers_invalid_entries_dropped(tmp_path, tmp_data_dir):
+    manifest = _make_trig_plugin(tmp_path)
+    _set_overrides(
+        {
+            "trig-plug": [
+                {"type": "daily", "time": "9:3"},  # 非法 time
+                {"type": "interval", "minutes": 15},
+            ]
+        }
+    )
+    eff = triggers.effective_triggers("trig-plug", manifest.triggers)
+    assert [t.type for t in eff] == [TriggerType.INTERVAL]
+    assert eff[0].minutes == 15
+
+
+def test_effective_triggers_empty_list_disables(tmp_path, tmp_data_dir):
+    manifest = _make_trig_plugin(tmp_path)
+    _set_overrides({"trig-plug": []})
+    assert triggers.effective_triggers("trig-plug", manifest.triggers) == []
+
+
+def test_event_triggers_respects_override(tmp_path, tmp_data_dir, monkeypatch):
+    """manifest 声明 pomodoro_end，覆盖层改成 task_done → 事件判定跟着变。"""
+    manifest = _make_trig_plugin(tmp_path, event="pomodoro_end")
+    _set_overrides(
+        {"trig-plug": [{"type": "event", "event": "task_done"}]}
+    )
+    loader = PluginLoader()
+    loader._plugins[manifest.id] = LoadedPlugin(
+        manifest=manifest, source="user", validation=None
+    )
+    plug = loader.get(manifest.id)
+    assert triggers.event_triggers(plug, "task_done")
+    assert triggers.event_triggers(plug, "pomodoro_end") == []

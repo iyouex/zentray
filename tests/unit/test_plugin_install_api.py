@@ -175,3 +175,52 @@ def test_plugin_run_log_reads_content(tmp_data_dir):
     assert code == 200
     assert "hello" in body["content"]
     assert body["truncated"] is False
+
+
+# ==========================================
+# v2.1：installed_at / 列表元数据
+# ==========================================
+
+
+def _zip_plugin(src_root: Path, pid: str = "zip-plug") -> Path:
+    plug = _make_plugin_dir(src_root, pid)
+    zp = src_root / "plug.zip"
+    with zipfile.ZipFile(zp, "w") as zf:
+        for f in plug.rglob("*"):
+            zf.write(f, f.relative_to(plug))
+    return zp
+
+
+def test_install_writes_installed_at(tmp_data_dir):
+    zp = _zip_plugin(tmp_data_dir / "zipsrc6")
+    code, body = _install_plugin_zip({"path": str(zp)})
+    assert code == 200, body
+    from zentray.services.settings_manager import SettingsManager
+
+    assert "zip-plug" in SettingsManager.reload().ops.installed_at
+
+
+def test_plugins_list_v21_metadata(tmp_data_dir, monkeypatch):
+    from zentray.api.handlers import _plugins_list
+    from zentray.plugins import triggers as _triggers
+
+    monkeypatch.setattr(_triggers, "STATE_FILE", tmp_data_dir / "pt.json")
+    body = _plugins_list(scan_always=True)
+    items = {i["id"]: i for i in body["items"]}
+    nc = items["net-cleanup"]
+    # 新字段齐备
+    assert nc["category"] == ""  # category 标签阶段 5 才补
+    assert nc["params"] == []
+    assert nc["updated_at"]  # mtime 兜底
+    assert nc["trigger_override"] is False
+    assert isinstance(nc["triggers"], list)
+
+    # 覆盖层生效：triggers 展示 effective，trigger_override 置位
+    from zentray.services.settings_manager import SettingsManager
+
+    sm = SettingsManager.reload()
+    sm.ops.trigger_overrides = {"net-cleanup": [{"type": "interval", "minutes": 15}]}
+    body = _plugins_list(scan_always=True)
+    nc = {i["id"]: i for i in body["items"]}["net-cleanup"]
+    assert nc["triggers"] == ["每 15 分钟"]
+    assert nc["trigger_override"] is True
