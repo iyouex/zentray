@@ -245,6 +245,14 @@
                   <template #icon><PhTrash :size="16" /></template>
                   废弃
                 </a-button>
+                <a-button
+                  v-if="currentTask.plugin_id"
+                  type="outline"
+                  @click="onRunPlugin"
+                >
+                  <template #icon><PhPlay :size="16" /></template>
+                  运行关联插件
+                </a-button>
               </div>
             </template>
 
@@ -341,7 +349,7 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Message, Modal } from '@arco-design/web-vue'
-import { PhPlus, PhX, PhRepeat, PhArrowsCounterClockwise, PhPencil, PhCheck, PhTrash, PhLightbulb } from '@phosphor-icons/vue'
+import { PhPlus, PhX, PhRepeat, PhArrowsCounterClockwise, PhPencil, PhCheck, PhTrash, PhLightbulb, PhPlay } from '@phosphor-icons/vue'
 import {
   abandonTask,
   addSubtask,
@@ -353,7 +361,9 @@ import {
   listArchivedTasks,
   listTasks,
   listTemplates,
+  listPlugins,
   markDone,
+  runPlugin,
   selectTask,
   setSubtaskStatus,
   skipTemplate,
@@ -633,6 +643,34 @@ async function onSelect() {
   await selectTask(t.id)
   Message.success('已切换')
   closeHost({ action: 'select', id: t.id })
+}
+
+async function onRunPlugin() {
+  const t = currentTask.value
+  if (!t?.plugin_id) return
+  try {
+    const info = await listPlugins()
+    const p = (info.items || []).find((x) => x.id === t.plugin_id)
+    const name = p?.name || t.plugin_id
+    Modal.confirm({
+      title: '运行关联插件',
+      content: `确定运行「${name}」？进度将显示在托盘顶栏。`,
+      okText: '运行',
+      async onOk() {
+        try {
+          const body = p?.type === 'service' ? { action: 'start' } : {}
+          await runPlugin(t.plugin_id, body)
+          Message.success(
+            p?.type === 'service' ? '已发送服务命令' : '插件已开始运行，请看托盘进度',
+          )
+        } catch (e) {
+          Message.error(e?.response?.data?.error || e?.message || '运行失败')
+        }
+      },
+    })
+  } catch (e) {
+    Message.error(e?.response?.data?.error || e?.message || '插件信息获取失败')
+  }
 }
 
 function goEdit() {

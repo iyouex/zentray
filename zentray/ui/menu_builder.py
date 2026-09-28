@@ -9,16 +9,60 @@ class MenuBuilder:
     def __init__(self):
         self._last_items = None
 
+    def build_ops_submenu(self, plugins: list = None, ops_busy: bool = False) -> Optional[dict]:
+        """构建「🧩 插件」子菜单；无可用插件时返回 None（动态入口）。"""
+        plugins = plugins or []
+        scripts = []
+        services = []
+        for p in plugins:
+            m = p.manifest
+            if m.type.value == "script":
+                scripts.append({
+                    "id": f"ops.script.{m.id}",
+                    "label": m.name,
+                    "enabled": not ops_busy,
+                })
+            else:
+                services.append({
+                    "id": f"ops.service.{m.id}",
+                    "label": m.name,
+                    "submenu": [
+                        {"id": f"ops.service.{m.id}.start", "label": "▶ 启动", "enabled": not ops_busy},
+                        {"id": f"ops.service.{m.id}.stop", "label": "⏹ 停止", "enabled": not ops_busy},
+                        {"id": f"ops.service.{m.id}.status", "label": "ℹ 状态"},
+                    ],
+                })
+
+        if not scripts and not services:
+            return None
+
+        submenu: List[dict] = []
+        if scripts:
+            submenu.append({"id": "ops._hdr_scripts", "label": "📜 脚本", "enabled": False})
+            submenu.extend(scripts)
+        if services:
+            if submenu:
+                submenu.append("separator")
+            submenu.append({"id": "ops._hdr_services", "label": "🔧 服务", "enabled": False})
+            submenu.extend(services)
+        submenu.append("separator")
+        submenu.append({"id": "ops.open_last_log", "label": "📄 上次运行日志"})
+        return {"id": "ops_menu", "label": "🧩 插件", "submenu": submenu}
+
     def build_main_menu(
         self,
         is_pomodoro: bool,
         pomodoro_minutes: Optional[int] = None,
         extend_minutes: Optional[int] = None,
+        ops_enabled: bool = False,
+        ops_plugins: Optional[list] = None,
+        ops_busy: bool = False,
     ) -> List[dict]:
         """
         构建主菜单。
 
         注意：菜单结构不依赖轮播当前标题/当前任务星标，避免轮播时整菜单重建闪动。
+        插件子菜单为动态入口：启用且 ≥1 个可用插件才出现，未装时保持极简结构不变。
         """
         if pomodoro_minutes is None or extend_minutes is None:
             try:
@@ -58,12 +102,18 @@ class MenuBuilder:
             items.append({
                 "id": "pomodoro",
                 "label": f"🍅 专注 {pomodoro_minutes} 分钟",
-                "enabled": True,
+                "enabled": not ops_busy,
             })
 
         items.append("separator")
         items.append({"id": "settings", "label": "⚙️ 设置"})
         items.append({"id": "quit", "label": "❌ 退出程序"})
+
+        if ops_enabled:
+            ops_menu = self.build_ops_submenu(ops_plugins, ops_busy=ops_busy)
+            if ops_menu:
+                items.insert(0, ops_menu)
+                items.insert(1, "separator")
 
         return items
 

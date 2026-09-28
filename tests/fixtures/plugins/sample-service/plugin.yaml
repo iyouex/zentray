@@ -1,0 +1,7 @@
+id: sample-service
+name: 示例服务
+version: 0.1.0
+type: service
+api_version: 1
+entry: service.sh
+description: 测试用示例服务

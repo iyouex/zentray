@@ -63,8 +63,23 @@ VENV_PYTHON="${PROJECT_DIR}/venv/bin/python"
 DIST_DIR="${PROJECT_DIR}/dist/ZenTray"
 DIST_BIN="${DIST_DIR}/ZenTray"
 
+# 构建来源（分支检测失败/分离头时中止——曾因静默降级 main 产出无后缀包，
+# 装上才发现不是当前分支的代码）
+GIT_BRANCH="$(git branch --show-current 2>/dev/null || true)"
+if [[ -z "$GIT_BRANCH" ]]; then
+    err "无法确定当前 git 分支（分离 HEAD 或不在 git 仓库），中止打包"
+    err "请先切到明确分支再构建，保证包名后缀与来源一致"
+    exit 1
+fi
+GIT_COMMIT="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+GIT_DIRTY=""
+if ! git diff --quiet 2>/dev/null || ! git diff --cached --quiet 2>/dev/null; then
+    GIT_DIRTY="（含未提交改动）"
+fi
+
 section "构建参数"
 echo "  版本:     ${VERSION}"
+echo "  分支:     ${GIT_BRANCH} @ ${GIT_COMMIT}${GIT_DIRTY}"
 echo "  清理:     ${CLEAN}"
 echo "  产物目录: ${RELEASES_DIR}"
 
@@ -186,12 +201,12 @@ build_linux_deb() {
     stage="${PROJECT_DIR}/build/deb_stage"
 
     # 命名规范：
-    #   main/master → zentray_<VERSION>_<arch>.deb（Version: <VERSION>）
-    #   功能分支   → zentray_<VERSION>+<branch>.<N>_<arch>.deb（Version: 同名）
+    #   master → zentray_<VERSION>_<arch>.deb（Version: <VERSION>）
+    #   其它分支 → zentray_<VERSION>+<branch>.<N>_<arch>.deb（Version: 同名）
     # 分支后缀必须进 Debian Version 字段：所有分支包若都叫 0.5.1，apt 视
     # 同版本为「已是最新」而拒绝覆盖安装，装完仍是旧程序（历史踩坑）。
     # 「+」排序高于裸版本号，同分支 N 递增即可正常升级。
-    branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)"
+    branch="$GIT_BRANCH"
     if [[ "$branch" != "main" && "$branch" != "master" ]]; then
         # feature/ai-everywhere → feature.ai.everywhere（Debian 版本串仅允许字母数字与 . + ~）
         dot_branch="$(echo "$branch" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/./g; s/^\.+//; s/\.+$//')"
@@ -213,6 +228,7 @@ build_linux_deb() {
     fi
     deb_name="${PKG_NAME}_${deb_version}_${arch}.deb"
     info "包名: ${deb_name}"
+    info "来源: ${GIT_BRANCH} @ ${GIT_COMMIT}${GIT_DIRTY}"
     rm -rf "$stage"
     mkdir -p \
         "${stage}/DEBIAN" \
@@ -226,6 +242,10 @@ build_linux_deb() {
     cp -a "$DIST_DIR" "${stage}/opt/${PKG_NAME}/ZenTray"
     rm -f "${stage}/opt/${PKG_NAME}/ZenTray/.build_stamp"
     chmod 755 "${stage}/opt/${PKG_NAME}/ZenTray/ZenTray"
+
+    # 内置插件：*.sh 必须可执行（manifest 校验要求非 win32 下 X_OK）
+    find "${stage}/opt/${PKG_NAME}/ZenTray" -path "*bundled_plugins*" -name "*.sh" \
+        -exec chmod 755 {} + 2>/dev/null || true
 
     # 防线：包内必须已包含最新前端，否则静默产出「旧 UI 的 deb」
     if frontend_is_newer_than_binary; then
@@ -248,10 +268,13 @@ build_linux_deb() {
 
     # 启动包装：已在运行则直连单实例 socket 激活（免重复起进程，
     # 实测任务栏再点击 3.2s → ~0.2s）；未运行/激活失败则冷启动完整应用。
+    # 必须 exec python3 自替换：若 sh 存活等待子进程，app 被 TERM 杀掉时
+    # 退出码 143 非零 → sh 落入兜底 exec 把 app 重新拉起，卸载要跑两次
+    # （2026-09-26 实锤：卸载后幸存进程的 PPid=bash，即重生自包装脚本）。
     cat > "${stage}/usr/bin/${PKG_NAME}" <<'WRAP'
 #!/bin/sh
 if command -v /usr/bin/python3 >/dev/null 2>&1; then
-    if /usr/bin/python3 - "$@" <<'PY'
+    exec /usr/bin/python3 - "$@" <<'PY'
 import os, socket, sys
 
 
@@ -274,10 +297,8 @@ def _activate():
 if not _activate():
     os.execv("/opt/zentray/ZenTray/ZenTray", ["/opt/zentray/ZenTray/ZenTray"] + sys.argv[1:])
 PY
-    then
-        exit 0
-    fi
 fi
+# 仅当系统连 python3 都没有时才不经激活直启
 exec /opt/zentray/ZenTray/ZenTray "$@"
 WRAP
     chmod 755 "${stage}/usr/bin/${PKG_NAME}"
@@ -290,6 +311,9 @@ WRAP
     sed "s|__VERSION__|${deb_version}|g" \
         "${PROJECT_DIR}/packaging/debian/control.in" \
         > "${stage}/DEBIAN/control"
+    # 来源追溯字段：dpkg-deb -I <包> 即可查构建分支与提交
+    printf 'X-ZenTray-Branch: %s\nX-ZenTray-Commit: %s\n' \
+        "$GIT_BRANCH" "$GIT_COMMIT" >> "${stage}/DEBIAN/control"
     # 若 architecture 非 amd64 则替换
     if [[ "$arch" != "amd64" ]]; then
         sed -i "s/^Architecture: .*/Architecture: ${arch}/" "${stage}/DEBIAN/control"
@@ -369,13 +393,14 @@ if $INSTALL_AFTER; then
 fi
 
 section "构建汇总"
+echo "  本包构建自: ${GIT_BRANCH} @ ${GIT_COMMIT}（版本 ${VERSION}）${GIT_DIRTY}"
 ls -lh "${RELEASES_DIR}" 2>/dev/null | sed 's/^/  /' || true
 echo ""
 echo -e "  ${BOLD}Linux 安装测试:${NC}"
 echo -e "    ${CYAN}sudo apt install -y $(cat "${RELEASES_DIR}/.latest_linux_deb" 2>/dev/null || echo "./dist/releases/${PKG_NAME}_*.deb")${NC}"
 echo -e "    安装前先退出正在运行的 ZenTray（托盘右键退出）：单实例包装会把启动重定向到旧进程"
 echo -e "    ${CYAN}zentray${NC}   # 启动"
-echo -e "    ${CYAN}./scripts/uninstall.sh --yes${NC}"
+echo -e "    ${CYAN}./scripts/uninstall.sh${NC}"
 echo ""
 
 exit 0

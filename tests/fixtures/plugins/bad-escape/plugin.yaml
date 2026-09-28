@@ -1,0 +1,6 @@
+id: bad-escape
+name: Bad Escape
+version: 0.1.0
+type: script
+api_version: 1
+entry: ../../../etc/passwd

@@ -279,6 +279,9 @@ def main():
                 task_service=task_service_early,
                 on_changed=_on_api_changed,
                 apply_settings=_on_api_apply_settings,
+                plugin_runtime=getattr(runtime.controller, "plugin_runtime", None),
+                plugin_loader=getattr(runtime.controller, "plugin_loader", None),
+                pomodoro_service=getattr(runtime.controller, "pomodoro_service", None),
             )
         )
         if vue_ui_available():
