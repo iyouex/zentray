@@ -213,6 +213,8 @@ def handle_request(
             return _plugin_run_log(query or {})
         if method == "POST" and path == "/api/plugins/install-zip":
             return _install_plugin_zip(body or {})
+        if method == "POST" and path == "/api/plugins/preview-zip":
+            return _preview_plugin_zip(body or {})
         if (
             method == "POST"
             and path.startswith("/api/plugins/")
@@ -532,9 +534,20 @@ def _plugins_list(*, scan_always: bool = False) -> dict:
     )
     from zentray.plugins import triggers as _triggers
 
+    import datetime as _dt
+
     items = []
     for p in loader.plugins:
         m = p.manifest
+        # v2.1：列表元数据——分类 / 命名入参 / 更新时间（installed_at 兜底目录
+        # mtime）/ 调度规则展示走覆盖层 effective
+        try:
+            updated_at = sm.ops.installed_at.get(m.id) or _dt.datetime.fromtimestamp(
+                m.root.stat().st_mtime
+            ).isoformat(timespec="seconds")
+        except OSError:
+            updated_at = ""
+        eff = _triggers.effective_triggers(m.id, m.triggers)
         items.append(
             {
                 "id": m.id,
@@ -542,11 +555,28 @@ def _plugins_list(*, scan_always: bool = False) -> dict:
                 "type": m.type.value,
                 "version": m.version,
                 "description": m.description or "",
+                "category": m.category or "",
                 "source": p.source,
                 "entry": m.entry,
                 "root": str(m.root),
                 "status": "ok",
-                "triggers": [t.describe() for t in m.triggers],
+                "triggers": [t.describe() for t in eff],
+                "manifest_triggers": [
+                    {
+                        "type": t.type.value,
+                        "time": t.time,
+                        "minutes": t.minutes,
+                        "expr": t.expr,
+                        "event": t.event.value if t.event else None,
+                    }
+                    for t in m.triggers
+                ],
+                "trigger_override": m.id in sm.ops.trigger_overrides,
+                "params": [
+                    {"name": x.name, "default": x.default, "description": x.description}
+                    for x in m.params
+                ],
+                "updated_at": updated_at,
                 "write_back": bool(m.write_back),
                 "authorized": _triggers.is_authorized(m.id),
             }
@@ -614,6 +644,19 @@ def _safe_plugin_path(raw: str) -> tuple[Optional[Path], Optional[str]]:
     return path, None
 
 
+def _manifest_preview(m) -> dict:
+    return {
+        "id": m.id,
+        "name": m.name,
+        "type": m.type.value,
+        "version": m.version,
+        "entry": m.entry,
+        "description": m.description or "",
+        "timeout_sec": m.timeout_sec,
+        "root": str(m.root),
+    }
+
+
 def _validate_plugin_path(body: dict) -> tuple[int, dict]:
     """预览校验：不安装，仅返回 manifest 预览与错误。"""
     from zentray.plugins.manifest import validate_plugin_dir
@@ -624,17 +667,7 @@ def _validate_plugin_path(body: dict) -> tuple[int, dict]:
     result = validate_plugin_dir(path)
     preview = None
     if result.manifest is not None:
-        m = result.manifest
-        preview = {
-            "id": m.id,
-            "name": m.name,
-            "type": m.type.value,
-            "version": m.version,
-            "entry": m.entry,
-            "description": m.description or "",
-            "timeout_sec": m.timeout_sec,
-            "root": str(m.root),
-        }
+        preview = _manifest_preview(result.manifest)
     return 200, {
         "ok": result.ok,
         "errors": list(result.errors),
@@ -680,6 +713,11 @@ def _install_validated_dir(src: Path, manifest, overwrite: bool) -> tuple[int, d
             sh.chmod(sh.stat().st_mode | 0o111)
         except OSError:
             pass
+    # v2.1：记录安装/更新时间（列表排序用）
+    import datetime as _dt
+
+    sm.ops.installed_at[manifest.id] = _dt.datetime.now().isoformat(timespec="seconds")
+    sm.save()
     return 200, {
         "ok": True,
         "message": f"已安装到 {dest}",
@@ -705,72 +743,112 @@ def _install_plugin_path(body: dict) -> tuple[int, dict]:
     return _install_validated_dir(path, result.manifest, bool(body.get("overwrite")))
 
 
-def _install_plugin_zip(body: dict) -> tuple[int, dict]:
-    """zip 包安装：解压临时目录（防 zip-slip）→ manifest 校验 → 落用户插件目录。"""
+def _extract_plugin_zip(body: dict) -> tuple[Optional[Path], Optional[Path], Optional[dict]]:
+    """安全解压 zip 到临时目录并定位 plugin.yaml 根。
+
+    返回 (tmp_base, root_dir, err)：成功 err=None（调用方须 finally 清理
+    tmp_base）；失败 err 为 400 语义错误体（root_dir=None）。
+    zip-slip 防护：拒绝对路径/..，resolve 后必须在解压目录内。
+    """
     import shutil
     import time
     import zipfile
 
     from zentray.config import DATA_DIR
-    from zentray.plugins.manifest import validate_plugin_dir
 
     raw = body.get("path") or ""
     if not str(raw).strip():
-        return 400, {"ok": False, "error": "path 必填"}
+        return None, None, {"ok": False, "error": "path 必填"}
     zp = Path(str(raw).strip()).expanduser().resolve()
     if not zp.is_file():
-        return 400, {"ok": False, "error": f"文件不存在: {zp}"}
+        return None, None, {"ok": False, "error": f"文件不存在: {zp}"}
     if zp.suffix.lower() != ".zip":
-        return 400, {"ok": False, "error": "仅支持 .zip 包"}
+        return None, None, {"ok": False, "error": "仅支持 .zip 包"}
     if not _path_in_allowed_roots(zp):
-        return 400, {"ok": False, "error": "路径不在允许范围内（用户主目录 / 数据目录 / 项目或内置插件目录）"}
+        return None, None, {
+            "ok": False,
+            "error": "路径不在允许范围内（用户主目录 / 数据目录 / 项目或内置插件目录）",
+        }
 
     tmp_base = (
         DATA_DIR / "tmp" / f"plugin_install_{zp.stem}_{int(time.time() * 1000)}"
     ).resolve()
     tmp_base.mkdir(parents=True, exist_ok=True)
-    try:
-        # 逐成员解压 + zip-slip 防护：拒绝对路径/..，resolve 后必须在解压目录内
-        with zipfile.ZipFile(zp) as zf:
-            for member in zf.infolist():
-                if member.filename.startswith(("/", "\\")) or ".." in Path(
-                    member.filename
-                ).parts:
-                    return 400, {"ok": False, "error": f"非法 zip 成员: {member.filename}"}
-                dest = (tmp_base / member.filename).resolve()
-                try:
-                    dest.relative_to(tmp_base)
-                except ValueError:
-                    return 400, {"ok": False, "error": f"非法 zip 成员: {member.filename}"}
-                if member.is_dir():
-                    dest.mkdir(parents=True, exist_ok=True)
-                else:
-                    dest.parent.mkdir(parents=True, exist_ok=True)
-                    with zf.open(member) as src, open(dest, "wb") as dst:
-                        shutil.copyfileobj(src, dst)
-                    # 恢复可执行位（open("wb") 按默认 umask 落盘，丢了 +x）
-                    if ((member.external_attr >> 16) & 0o111):
-                        try:
-                            dest.chmod(dest.stat().st_mode | 0o111)
-                        except OSError:
-                            pass
-
-        # 定位 plugin.yaml：根目录或唯一一级子目录
-        root_dir = tmp_base
-        if not (root_dir / "plugin.yaml").is_file():
-            subs = [
-                d
-                for d in tmp_base.iterdir()
-                if d.is_dir() and (d / "plugin.yaml").is_file()
-            ]
-            if len(subs) == 1:
-                root_dir = subs[0]
+    # 逐成员解压 + zip-slip 防护
+    with zipfile.ZipFile(zp) as zf:
+        for member in zf.infolist():
+            if member.filename.startswith(("/", "\\")) or ".." in Path(
+                member.filename
+            ).parts:
+                return None, None, {"ok": False, "error": f"非法 zip 成员: {member.filename}"}
+            dest = (tmp_base / member.filename).resolve()
+            try:
+                dest.relative_to(tmp_base)
+            except ValueError:
+                return None, None, {"ok": False, "error": f"非法 zip 成员: {member.filename}"}
+            if member.is_dir():
+                dest.mkdir(parents=True, exist_ok=True)
             else:
-                return 400, {
-                    "ok": False,
-                    "error": "zip 中未找到 plugin.yaml（根目录或唯一一级子目录）",
-                }
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                with zf.open(member) as src, open(dest, "wb") as dst:
+                    shutil.copyfileobj(src, dst)
+                # 恢复可执行位（open("wb") 按默认 umask 落盘，丢了 +x）
+                if ((member.external_attr >> 16) & 0o111):
+                    try:
+                        dest.chmod(dest.stat().st_mode | 0o111)
+                    except OSError:
+                        pass
 
+    # 定位 plugin.yaml：根目录或唯一一级子目录
+    root_dir = tmp_base
+    if not (root_dir / "plugin.yaml").is_file():
+        subs = [
+            d for d in tmp_base.iterdir() if d.is_dir() and (d / "plugin.yaml").is_file()
+        ]
+        if len(subs) == 1:
+            root_dir = subs[0]
+        else:
+            return None, None, {
+                "ok": False,
+                "error": "zip 中未找到 plugin.yaml（根目录或唯一一级子目录）",
+            }
+    return tmp_base, root_dir, None
+
+
+def _preview_plugin_zip(body: dict) -> tuple[int, dict]:
+    """zip 预览校验：解压临时目录 → manifest 校验 → 清理，不安装。"""
+    import shutil
+
+    from zentray.plugins.manifest import validate_plugin_dir
+
+    tmp_base, root_dir, err = _extract_plugin_zip(body)
+    if err is not None:
+        return 400, {"ok": False, "errors": [err.get("error", "")], "preview": None}
+    try:
+        result = validate_plugin_dir(root_dir)
+        preview = None
+        if result.manifest is not None:
+            preview = _manifest_preview(result.manifest)
+        return 200, {
+            "ok": result.ok,
+            "errors": list(result.errors),
+            "preview": preview,
+            "path": str(body.get("path") or ""),
+        }
+    finally:
+        shutil.rmtree(tmp_base, ignore_errors=True)
+
+
+def _install_plugin_zip(body: dict) -> tuple[int, dict]:
+    """zip 包安装：解压临时目录（防 zip-slip）→ manifest 校验 → 落用户插件目录。"""
+    import shutil
+
+    from zentray.plugins.manifest import validate_plugin_dir
+
+    tmp_base, root_dir, err = _extract_plugin_zip(body)
+    if err is not None:
+        return 400, err
+    try:
         result = validate_plugin_dir(root_dir)
         if not result.ok or result.manifest is None:
             return 400, {
@@ -875,7 +953,23 @@ def _run_plugin(plugin_id: str, body: dict) -> tuple[int, dict]:
         task = _ctx.task_service.find_task(task_id)
         if task is None:
             return 404, {"error": f"任务不存在: {task_id}"}
-    started = runtime.run_script(plug, pomodoro_active=False, task=task)
+    # 命名入参：显式传入 > 预设 > default（body.params {name: value}）
+    param_values = None
+    m_params = plug.manifest.params
+    if m_params:
+        raw_params = body.get("params")
+        if raw_params is not None and not isinstance(raw_params, dict):
+            return 400, {"error": "params 必须是对象"}
+        from zentray.plugins.models import resolve_param_values
+
+        try:
+            presets = SettingsManager().ops.param_presets.get(plug.manifest.id)
+        except Exception:
+            presets = None
+        param_values = resolve_param_values(m_params, presets, raw_params)
+    started = runtime.run_script(
+        plug, pomodoro_active=False, task=task, param_values=param_values
+    )
     if not started:
         return 409, {"error": "无法启动脚本"}
     return 200, {"ok": True, "id": plugin_id, "started": True}

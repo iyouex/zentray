@@ -5,6 +5,7 @@ type: script
 api_version: 1
 entry: run.sh
 timeout_sec: 120
+category: 网络
 description: >-
   示例插件：刷新 DNS/解析缓存与路由缓存，并打印当前代理相关环境变量。
   不修改 VPN/代理软件配置，不需要写死公司脚本。

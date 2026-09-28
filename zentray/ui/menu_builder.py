@@ -10,9 +10,9 @@ class MenuBuilder:
         self._last_items = None
 
     def build_ops_submenu(self, plugins: list = None, ops_busy: bool = False) -> Optional[dict]:
-        """构建「🧩 插件」子菜单；v2 顶部常驻「插件中心」入口（Vue 可用时）。
+        """构建「🧩 插件」子菜单（管理入口在 设置 → 🧩 插件）。
 
-        无插件且 Vue 不可用时返回 None（保持极简菜单）。
+        无插件时返回 None（保持极简菜单）。
         """
         plugins = plugins or []
         scripts = []
@@ -36,17 +36,11 @@ class MenuBuilder:
                     ],
                 })
 
-        center = []
-        if self._vue_available():
-            # v2：启用即可进插件中心管理（安装/授权/历史），零插件不再是死胡同
-            center = [{"id": "ops.plugins_page", "label": "🏠 插件中心"}]
-        if not scripts and not services and not center:
+        if not scripts and not services:
             return None
 
-        submenu: List[dict] = list(center)
+        submenu: List[dict] = []
         if scripts:
-            if submenu:
-                submenu.append("separator")
             submenu.append({"id": "ops._hdr_scripts", "label": "📜 脚本", "enabled": False})
             submenu.extend(scripts)
         if services:
@@ -58,15 +52,6 @@ class MenuBuilder:
             submenu.append("separator")
         submenu.append({"id": "ops.open_last_log", "label": "📄 上次运行日志"})
         return {"id": "ops_menu", "label": "🧩 插件", "submenu": submenu}
-
-    @staticmethod
-    def _vue_available() -> bool:
-        try:
-            from zentray.ui.web_host import use_vue_ui
-
-            return use_vue_ui()
-        except Exception:
-            return False
 
     def build_main_menu(
         self,
@@ -81,7 +66,7 @@ class MenuBuilder:
         构建主菜单。
 
         注意：菜单结构不依赖轮播当前标题/当前任务星标，避免轮播时整菜单重建闪动。
-        插件子菜单为动态入口：启用即出现（v2 常驻「插件中心」，未装插件也可进入管理）。
+        插件子菜单为动态入口：启用且装了插件才出现（管理在 设置 → 🧩 插件）。
         """
         if pomodoro_minutes is None or extend_minutes is None:
             try:

@@ -43,7 +43,7 @@ id: sample-script                 # 必填，唯一
 name: 示例脚本                    # 必填，菜单显示名
 version: 0.1.0                    # 必填
 type: script                      # 必填：script | service
-api_version: 2                    # 必填：1 | 2（triggers/write_back 需 2）
+api_version: 2                    # 必填：1 | 2（triggers/write_back/params 需 2）
 entry: run.sh                     # 必填，相对路径，可执行
 args: []                          # 可选，追加参数（字符串数组）
 workdir: .                        # 可选，相对工作目录，默认插件根
@@ -51,6 +51,7 @@ timeout_sec: 300                  # 可选，仅 script；默认 300；0=不限�
 env:                              # 可选，额外环境变量
   FOO: bar
 description: 一句话说明           # 可选
+category: 网络                    # 可选，分类标签（设置页插件列表排序用）
 write_back: false                 # 可选，v2：RESULT 文本写回任务备注，默认 false
 triggers:                         # 可选，v2：自动触发（仅 script，见 3.3）
   - type: daily                   #   每日 HH:MM（含错过补跑）
@@ -61,6 +62,10 @@ triggers:                         # 可选，v2：自动触发（仅 script，�
     expr: "*/15 9-17 * * 1-5"
   - type: event                   #   事件：task_done | pomodoro_end | startup
     event: task_done
+params:                           # 可选，v2.1：命名入参（仅 script，见 3.5）
+  - name: target
+    default: "all"
+    description: 作用目标
 ```
 
 ### 3.1 字段规则
@@ -69,7 +74,7 @@ triggers:                         # 可选，v2：自动触发（仅 script，�
 |------|------|
 | `id` | 正则 `^[a-z0-9]+(-[a-z0-9]+)*$` |
 | `type` | 仅 `script` 或 `service` |
-| `api_version` | 整数；接受 `1` 或 `2`；声明 `triggers`/`write_back` 必须为 `2` |
+| `api_version` | 整数；接受 `1` 或 `2`；声明 `triggers`/`write_back`/`params` 必须为 `2` |
 | `entry` | 相对路径；存在；Unix 上须可执行（`chmod +x`） |
 | `args` | 字符串数组；**不以 shell 拼接**，argv 直传 |
 | `workdir` | 相对插件根；不得 `..` |
@@ -94,14 +99,41 @@ triggers:                         # 可选，v2：自动触发（仅 script，�
 | `event` | `event: task_done \| pomodoro_end \| startup` | 事件触发；`task_done` 注入完成任务上下文 |
 
 **授权（一次性）**：带触发器的插件首次自动触发前弹「允许此插件自动运行」；
-允许后静默运行，拒绝则持久不再询问（插件中心可重新打开）。手动运行不受影响。
+允许后静默运行，拒绝则持久不再询问（设置页插件列表的授权开关可重新打开）。手动运行不受影响。
 
 **触发跳过**：番茄钟进行中或已有脚本运行时静默跳过并记录，不产生通知。
+
+**调度规则覆盖层（v2.1）**：设置页（🧩 插件 → 插件列表 → 展开某插件）可编辑
+调度规则，保存到 `settings.json` 的 `ops.trigger_overrides`，**不改动插件文件**——
+zip 重装/升级不丢自定义。优先级：覆盖层 > manifest.triggers；「恢复默认」即删除
+该插件的覆盖层。覆盖层非法条目会被静默丢弃并记日志（坏数据不打断轮询）。
 
 ### 3.4 结果写回（v2，`write_back: true`）
 
 script 插件运行结束且有任务上下文时，把 `RESULT` 文本追加写回：
 任务仍在列表 → 任务备注；任务已归档 → 当日归档日志一行。
+
+### 3.5 命名入参（v2.1，`api_version: 2`）
+
+`params` 为列表，**仅 `script` 类型允许**（service + params 校验拒绝）。
+声明顺序即 argv 顺序：
+
+```yaml
+params:
+  - name: target          # 必填，同一插件内唯一
+    default: "all"        # 可选，缺省值（字符串，缺省空串）
+    description: 作用目标  # 可选，弹窗/设置页的输入框标签
+```
+
+实际 argv = `entry + manifest.args + [参数值...]`，参数值优先级：
+
+**显式传入 > 参数预设 > manifest default**
+
+- **托盘**：点击有参脚本 → 参数弹窗（预填 预设→default，可改后运行）；
+  无参脚本仍走「运行前确认」开关。
+- **参数预设（单组）**：设置页（插件列表 → 展开某插件）可保存每个参数的预设值，
+  存 `settings.json` 的 `ops.param_presets`，不改动插件文件。
+- **自动触发**：无显式入参，按 预设 > default 取值。
 
 ---
 
@@ -110,7 +142,7 @@ script 插件运行结束且有任务上下文时，把 `RESULT` 文本追加写
 ### 4.1 调用方式
 
 ```text
-<absolute-entry> [args...]
+<absolute-entry> [args...] [参数值...]   # v2.1：命名入参的值按声明顺序追加在 args 后
 cwd = workdir 或插件根
 env = 用户环境 + manifest.env + 任务上下文（v2）
 ```
@@ -158,8 +190,9 @@ exit 0
 
 1. 启动后停止任务轮播推进，显示进度文案（约 50 字截断）。  
 2. 结束后系统通知 + 恢复任务轮播。  
-3. 完整输出写入 `数据目录/ops_runs/<时间戳>_<pid>.log`，同 stem 的 `.json` 为运行元数据
-   （成败/摘要/触发方式/任务 ID/日志路径），`last.json` 保留；插件中心「运行历史」即读这些文件。  
+3. 完整输出写入 `数据目录/ops_runs/<运行ID>.log`（运行ID=`<时间戳>_<pid>`），同 stem 的
+   `.json` 为运行元数据（成败/摘要/触发方式/任务 ID/`run_id`/起止时间/日志路径），
+   `last.json` 保留；设置页「运行历史」即读这些文件。  
 4. 与番茄钟**互斥**（运行中不可互相启动）。
 
 ---
@@ -203,9 +236,10 @@ python scripts/validate_plugin.py path/to/plugin
 | 用户 | `~/.local/share/ZenTray/plugins/`（Windows/macOS 见用户手册数据目录），目录可改 |
 
 - v2 为**单一总开关**：设置 → 插件 → 启用后，内置与用户目录恒扫描（无分项加载开关）。  
-- 校验失败：不进菜单，在插件中心「校验失败」区展示。  
+- 校验失败：不进菜单，在设置页插件列表「校验失败」区展示。  
 - **同 `id`：用户插件覆盖内置**（并打日志）。
-- 分发：本地 zip 包安装（插件中心「从 zip 包安装」，含 zip-slip 防护与 manifest 校验）。
+- 分发：设置页「导入插件」支持 zip 包 / 目录两种来源（均先预览校验、通过后才能安装；
+  zip 含 zip-slip 防护与 manifest 校验，安装时记录 `installed_at` 供列表按更新时间排序）。
 
 ### 6.3 合入 `bundled_plugins/`
 
@@ -237,11 +271,15 @@ python scripts/validate_plugin.py path/to/plugin
 
 API：
 
-- `GET /api/plugins` → `{ enabled, items: [{id,name,type,triggers,write_back,authorized,...}], busy }`  
-- `POST /api/plugins/{id}/run` → script 启动，body 可带 `{ "task_id": "..." }` 注入任务上下文；service 可 body `{ "action": "start"|"stop"|"status" }`  
-- `GET /api/plugins/runs?limit=50` → 运行历史（时间倒序）  
+- `GET /api/plugins` → `{ enabled, items: [{id,name,type,category,triggers,manifest_triggers,trigger_override,params,updated_at,write_back,authorized,...}], busy }`  
+- `POST /api/plugins/{id}/run` → script 启动，body 可带 `{ "task_id": "..." }` 注入任务上下文、
+  `{ "params": {name: value} }` 传命名入参（显式 > 预设 > default）；service 可 body `{ "action": "start"|"stop"|"status" }`  
+- `GET /api/plugins/runs?limit=50` → 运行历史（时间倒序；v2.1 记录含 `run_id` / `started_at` / `time` 起止）  
 - `GET /api/plugins/runs/log?file=<日志文件名>` → 单次运行日志内容  
 - `POST /api/plugins/{id}/authorize` body `{ "allow": true|false }` → 设置自动运行授权  
+- `POST /api/plugins/validate` body `{ "path": "<目录>" }` → 目录预览校验  
+- `POST /api/plugins/preview-zip` body `{ "path": "<本机zip>" }` → zip 预览校验（不安装）  
+- `POST /api/plugins/install` body `{ "path": "<目录>", "overwrite": false }` → 目录安装  
 - `POST /api/plugins/install-zip` body `{ "path": "<本机zip>", "overwrite": false }` → zip 包安装  
 
 ---
@@ -266,8 +304,8 @@ API：
 | `bundled_plugins/net-cleanup/` | `net-cleanup` | **网络清理**：刷新 DNS/路由缓存、打印代理环境变量（Linux），api_version 1 |
 | `bundled_plugins/task-report/` | `task-report` | **任务报告**：任务完成触发，回显任务上下文并 `write_back` 写回备注，api_version 2 |
 
-启用「插件」后，托盘「🧩 插件」子菜单可见；管理入口在 **插件中心**
-（托盘 🧩 插件 → 🏠 插件中心）。说明见各目录 `README.md`。
+启用「插件」后，托盘「🧩 插件」子菜单可见；管理入口在 **设置 → 🧩 插件**
+（三大折叠块：导入插件 / 插件列表 / 运行历史）。说明见各目录 `README.md`。
 
 ### 10.2 测试夹具（仅供开发/CI）
 
@@ -275,11 +313,13 @@ API：
 - `tests/fixtures/plugins/sample-service`  
 - `tests/fixtures/plugins/bad-escape`（故意非法，用于校验门禁）  
 - v2：`result-fail` / `result-ok-exit1` / `result-ok-text` / `env-echo`（RESULT 判定与上下文注入）
+- v2.1：`param-echo`（命名入参回显，params 优先级测试）
 
 ---
 
 ## 修订记录
 
+- **2026-09-28 插件 v2.1**（feature/plugin-v2）：①`params` 命名入参（仅 script；argv = entry + args + 参数值，优先级 显式 > 预设 > default）；②`category` 分类字段（列表排序用）；③调度规则覆盖层 `ops.trigger_overrides` 与参数预设 `ops.param_presets`（均存 settings.json，不改动插件文件）；④管理回设置页三大折叠块（导入/列表/历史），撤销独立插件中心；⑤导入统一 zip/目录切换 + 预览校验门（zip 新增 preview 端点）；⑥安装记录 `installed_at`；⑦运行元数据增 `run_id`/`started_at`；⑧托盘有参脚本弹参数弹窗（无参仍走确认开关）。
 - **2026-09-28 插件 v2**（feature/plugin-v2）：①`api_version: 2`——manifest 触发器（daily/interval/cron/event）、任务上下文 env 注入、`write_back` 结果写回；②RESULT 参与成败判定（退出码与最后 RESULT fail 双一票否决），`RESULT ok <文案>` 成为运行摘要；③插件级一次性授权；④每运行落 `{时间戳}_{id}.json` 元数据，插件中心可查运行历史与日志；⑤zip 包分发（zip-slip 防护）；⑥设置改单一总开关（目录恒扫描），管理移至独立插件中心。
 - **2026-09 复活适配**（feature/plugins 重上 staging）：①托盘入口改为**动态子菜单**——仅当启用且 ≥1 个插件加载成功时菜单顶部出现「🧩 插件」，未安装时保持极简菜单；②移除从未接线的 `tray_left_click` 配置项；③**服务命令不参与轮播抢占**——`service_cmd` 不再 emit `log_line`，返回 `(ok, detail)` 由调用方弹通知（修复：查询一次服务状态导致轮播永久卡死）。
 

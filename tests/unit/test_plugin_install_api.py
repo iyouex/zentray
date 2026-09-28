@@ -175,3 +175,80 @@ def test_plugin_run_log_reads_content(tmp_data_dir):
     assert code == 200
     assert "hello" in body["content"]
     assert body["truncated"] is False
+
+
+# ==========================================
+# v2.1：installed_at / 列表元数据
+# ==========================================
+
+
+def _zip_plugin(src_root: Path, pid: str = "zip-plug") -> Path:
+    plug = _make_plugin_dir(src_root, pid)
+    zp = src_root / "plug.zip"
+    with zipfile.ZipFile(zp, "w") as zf:
+        for f in plug.rglob("*"):
+            zf.write(f, f.relative_to(plug))
+    return zp
+
+
+def test_install_writes_installed_at(tmp_data_dir):
+    zp = _zip_plugin(tmp_data_dir / "zipsrc6")
+    code, body = _install_plugin_zip({"path": str(zp)})
+    assert code == 200, body
+    from zentray.services.settings_manager import SettingsManager
+
+    assert "zip-plug" in SettingsManager.reload().ops.installed_at
+
+
+def test_plugins_list_v21_metadata(tmp_data_dir, monkeypatch):
+    from zentray.api.handlers import _plugins_list
+    from zentray.plugins import triggers as _triggers
+
+    monkeypatch.setattr(_triggers, "STATE_FILE", tmp_data_dir / "pt.json")
+    body = _plugins_list(scan_always=True)
+    items = {i["id"]: i for i in body["items"]}
+    nc = items["net-cleanup"]
+    # 新字段齐备
+    assert nc["category"] == "网络"  # 阶段 5：内置示例补分类
+    assert nc["params"] == []
+    assert nc["updated_at"]  # mtime 兜底
+    assert nc["trigger_override"] is False
+    assert isinstance(nc["triggers"], list)
+
+    # 覆盖层生效：triggers 展示 effective，trigger_override 置位
+    from zentray.services.settings_manager import SettingsManager
+
+    sm = SettingsManager.reload()
+    sm.ops.trigger_overrides = {"net-cleanup": [{"type": "interval", "minutes": 15}]}
+    body = _plugins_list(scan_always=True)
+    nc = {i["id"]: i for i in body["items"]}["net-cleanup"]
+    assert nc["triggers"] == ["每 15 分钟"]
+    assert nc["trigger_override"] is True
+
+
+def test_preview_zip_validates_without_installing(tmp_data_dir):
+    zp = _zip_plugin(tmp_data_dir / "zipsrc7")
+    from zentray.api.handlers import _preview_plugin_zip
+
+    code, body = _preview_plugin_zip({"path": str(zp)})
+    assert code == 200
+    assert body["ok"] is True
+    assert body["preview"]["id"] == "zip-plug"
+    # 预览不落地：用户目录无插件，临时目录已清理
+    user_dir = tmp_data_dir / "plugins"
+    assert not (user_dir / "zip-plug").exists()
+    assert not list((tmp_data_dir / "tmp").glob("plugin_install_*"))
+
+
+def test_preview_zip_invalid_manifest(tmp_data_dir):
+    src_root = tmp_data_dir / "zipsrc8"
+    src_root.mkdir()
+    zp = src_root / "bad.zip"
+    with zipfile.ZipFile(zp, "w") as zf:
+        zf.writestr("plugin.yaml", "id: bad\nname: 缺字段\n")
+    from zentray.api.handlers import _preview_plugin_zip
+
+    code, body = _preview_plugin_zip({"path": str(zp)})
+    assert code == 200
+    assert body["ok"] is False
+    assert body["errors"]

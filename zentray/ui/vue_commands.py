@@ -50,18 +50,6 @@ def try_vue_settings(controller: "TrayController") -> bool:
     return True
 
 
-def try_vue_plugins(controller: "TrayController") -> bool:
-    """插件中心（v2 独立页：列表 / 安装 / 授权 / 运行历史）。"""
-    if not use_vue_ui():
-        return False
-    # 关窗后插件目录/授权可能已变，重扫一次
-    ok, _ = open_vue_route("/plugins", title="插件中心", width=980, height=700)
-    if ok:
-        controller.reload_ops_plugins()
-        controller.update_display()
-    return True
-
-
 def try_vue_reminders(batch) -> tuple[bool, Optional[dict]]:
     """
     打开聚合提醒窗（一窗多卡，卡片式）。

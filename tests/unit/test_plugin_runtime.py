@@ -185,3 +185,112 @@ def test_task_env_sparse_fields(qapp, tmp_data_dir, monkeypatch):
     assert "TASK_DETAILS=none" in log_text  # 空字段不注入
     assert "TASK_DEADLINE=none" in log_text
     assert "TRIGGER=manual" in log_text
+
+
+# ==========================================
+# v2.1：命名入参（argv = entry + args + 参数值）
+# ==========================================
+
+
+def _read_log(report) -> str:
+    return Path(report["log"]).read_text(encoding="utf-8")
+
+
+def test_param_values_appended_after_args(qapp, tmp_data_dir, monkeypatch):
+    rt, loader = _make_runtime(tmp_data_dir, monkeypatch)
+    report = _run_and_wait(
+        qapp, rt, loader.get("param-echo"), param_values=["web", "2"]
+    )
+    assert report["ok"] is True, report["summary"]
+    assert "--mode=echo web 2" in _read_log(report)
+
+
+def test_param_defaults_when_omitted(qapp, tmp_data_dir, monkeypatch):
+    rt, loader = _make_runtime(tmp_data_dir, monkeypatch)
+    report = _run_and_wait(qapp, rt, loader.get("param-echo"))
+    assert report["ok"] is True, report["summary"]
+    assert "--mode=echo all 1" in _read_log(report)
+
+
+def test_run_plugin_api_passes_params(qapp, tmp_data_dir, monkeypatch):
+    """POST /api/plugins/{id}/run body.params → 按声明顺序展开；缺省回落 default。"""
+    from zentray.api import handlers
+    from zentray.api.handlers import ApiContext
+    from zentray.services.settings_manager import SettingsManager
+
+    rt, loader = _make_runtime(tmp_data_dir, monkeypatch)
+    sm = SettingsManager.reload()
+    sm.ops.enabled = True
+    sm.save()
+    monkeypatch.setattr(
+        handlers,
+        "_ctx",
+        ApiContext(plugin_runtime=rt, plugin_loader=loader),
+    )
+
+    reports = []
+    rt.run_report.connect(lambda r: reports.append(r))
+    code, body = handlers._run_plugin(
+        "param-echo", {"params": {"target": "web"}}
+    )
+    assert code == 200, body
+    assert body["ok"] is True
+    deadline = time.time() + 10
+    while not reports and time.time() < deadline:
+        qapp.processEvents()
+        time.sleep(0.05)
+    assert reports, "run_report 未发出"
+    # target 显式传入；level 未传回落 default "1"
+    assert "--mode=echo web 1" in _read_log(reports[0])
+
+
+def test_param_preset_beats_default_when_omitted(qapp, tmp_data_dir, monkeypatch):
+    """run_script 未传 param_values → 预设 > manifest default（触发器路径同此）。"""
+    from zentray.services.settings_manager import SettingsManager
+
+    rt, loader = _make_runtime(tmp_data_dir, monkeypatch)
+    sm = SettingsManager.reload()
+    sm.ops.param_presets = {"param-echo": {"target": "dns"}}
+    report = _run_and_wait(qapp, rt, loader.get("param-echo"))
+    assert report["ok"] is True, report["summary"]
+    # target 用预设 dns；level 无预设回落 default 1
+    assert "--mode=echo dns 1" in _read_log(report)
+
+
+def test_explicit_values_beat_preset(qapp, tmp_data_dir, monkeypatch):
+    from zentray.services.settings_manager import SettingsManager
+
+    rt, loader = _make_runtime(tmp_data_dir, monkeypatch)
+    sm = SettingsManager.reload()
+    sm.ops.param_presets = {"param-echo": {"target": "dns"}}
+    report = _run_and_wait(
+        qapp, rt, loader.get("param-echo"), param_values=["web", "2"]
+    )
+    assert "--mode=echo web 2" in _read_log(report)
+
+
+def test_report_has_run_id_and_times(qapp, tmp_data_dir, monkeypatch):
+    rt, loader = _make_runtime(tmp_data_dir, monkeypatch)
+    report = _run_and_wait(qapp, rt, loader.get("param-echo"))
+    assert report["run_id"].startswith("20")
+    assert report["run_id"].endswith("_param-echo")
+    assert report["started_at"]  # ISO 起点
+    assert report["time"] >= report["started_at"]  # time=结束时刻
+
+
+def test_resolve_param_values_priority():
+    """显式传入 > 预设 > manifest default（托盘弹窗/API/触发共用）。"""
+    from zentray.plugins.models import PluginParam, resolve_param_values
+
+    params = [
+        PluginParam(name="a", default="da"),
+        PluginParam(name="b", default="db"),
+        PluginParam(name="c", default="dc"),
+    ]
+    presets = {"a": "pa", "b": "pb"}
+    # 全缺省：预设优先，无预设回落 default
+    assert resolve_param_values(params, presets) == ["pa", "pb", "dc"]
+    # 显式覆盖（含空串显式值也算显式）
+    assert resolve_param_values(params, presets, {"a": "x", "b": ""}) == ["x", "", "dc"]
+    # 无预设
+    assert resolve_param_values(params, None) == ["da", "db", "dc"]

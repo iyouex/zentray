@@ -16,7 +16,17 @@ from PySide6.QtCore import QObject, Signal
 from zentray.config import DATA_DIR
 from zentray.core.models import Task
 from zentray.plugins.loader import LoadedPlugin
-from zentray.plugins.models import PluginType
+from zentray.plugins.models import PluginType, resolve_param_values
+
+
+def _read_param_presets(pid: str) -> dict:
+    """读参数预设；设置不可用时静默回落空。"""
+    try:
+        from zentray.services.settings_manager import SettingsManager
+
+        return SettingsManager().ops.param_presets.get(pid) or {}
+    except Exception:
+        return {}
 from zentray.plugins.protocol import ParsedLine, format_tray_text, parse_stdout_line
 
 logger = logging.getLogger(__name__)
@@ -51,8 +61,13 @@ class PluginRuntime(QObject):
         pomodoro_active: bool = False,
         task: Optional[Task] = None,
         trigger: str = "manual",
+        param_values: Optional[List[str]] = None,
     ) -> bool:
-        """异步启动 script。返回 False 表示未启动（调用方自行提示原因）。"""
+        """异步启动 script。返回 False 表示未启动（调用方自行提示原因）。
+
+        param_values: 命名入参的值（按 manifest.params 声明顺序）；
+        None 时回落各参数 default。
+        """
         m = plugin.manifest
         if m.type != PluginType.SCRIPT:
             logger.error("run_script 仅用于 script: %s", m.id)
@@ -67,7 +82,7 @@ class PluginRuntime(QObject):
 
         thread = threading.Thread(
             target=self._run_script_thread,
-            args=(plugin, task, trigger),
+            args=(plugin, task, trigger, param_values),
             name=f"ops-script-{m.id}",
             daemon=True,
         )
@@ -128,20 +143,31 @@ class PluginRuntime(QObject):
         ok = completed.returncode == 0
         return ok, f"{action} " + ("成功" if ok else "失败")
 
+    @staticmethod
+    def _preset_or_default(m, param) -> str:
+        """入参缺省值：预设（settings.ops.param_presets）> manifest default。"""
+        return resolve_param_values([param], _read_param_presets(m.id))[0]
+
     def _run_script_thread(
         self,
         plugin: LoadedPlugin,
         task: Optional[Task],
         trigger: str,
+        param_values: Optional[List[str]] = None,
     ) -> None:
         m = plugin.manifest
         self._runs_dir.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        log_path = self._runs_dir / f"{stamp}_{m.id}.log"
-        meta_json = self._runs_dir / f"{stamp}_{m.id}.json"
+        run_id = f"{stamp}_{m.id}"
+        started_at = datetime.now().isoformat(timespec="seconds")
+        log_path = self._runs_dir / f"{run_id}.log"
+        meta_json = self._runs_dir / f"{run_id}.json"
         last_json = self._runs_dir / "last.json"
 
-        cmd = [str(m.entry_path), *m.args]
+        values = list(param_values) if param_values is not None else [
+            self._preset_or_default(m, p) for p in m.params
+        ]
+        cmd = [str(m.entry_path), *m.args, *values]
         env = os.environ.copy()
         env.update(m.env)
         # 任务上下文最后注入（动态覆盖静态）；触发来源始终注入
@@ -239,6 +265,8 @@ class PluginRuntime(QObject):
             report = {
                 "id": m.id,
                 "name": m.name,
+                "run_id": run_id,
+                "started_at": started_at,
                 "ok": ok,
                 "summary": summary,
                 "result_text": last_result.text if last_result is not None else "",

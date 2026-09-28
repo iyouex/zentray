@@ -5,6 +5,7 @@ type: script
 api_version: 2
 entry: run.sh
 timeout_sec: 30
+category: 示例
 description: >-
   示例插件（api_version 2）：任务完成时自动运行，回显注入的任务上下文
   环境变量，并通过 RESULT 把摘要写回任务备注（write_back 已开启）。

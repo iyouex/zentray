@@ -148,11 +148,6 @@ def _dispatch_ops_action(action_id: str, controller: "TrayController") -> bool:
     if action_id in ("ops._hdr_scripts", "ops._hdr_services", "ops_menu"):
         return True
 
-    if action_id == "ops.plugins_page":
-        from zentray.ui.vue_commands import try_vue_plugins
-
-        return try_vue_plugins(controller)
-
     if action_id == "ops.open_last_log":
         import json
         import subprocess
@@ -199,6 +194,13 @@ def _dispatch_ops_action(action_id: str, controller: "TrayController") -> bool:
             controller.renderer.show_notification(
                 "插件", "番茄钟进行中，请先结束专注。"
             )
+            return True
+        # 有参脚本：参数弹窗（预填 预设→default，可改后运行），恒弹不受确认开关影响
+        if plug.manifest.params:
+            values = _prompt_script_params(plug)
+            if values is None:
+                return True
+            runtime.run_script(plug, pomodoro_active=False, param_values=values)
             return True
         from zentray.services.settings_manager import SettingsManager
 
@@ -247,6 +249,45 @@ def _dispatch_ops_action(action_id: str, controller: "TrayController") -> bool:
 # ==========================================
 # 内部辅助
 # ==========================================
+
+def _prompt_script_params(plug):
+    """有参脚本运行前弹窗：每参一行（预填 预设→default），确定返回值列表，取消返回 None。"""
+    from PySide6.QtWidgets import (
+        QDialog,
+        QDialogButtonBox,
+        QFormLayout,
+        QLineEdit,
+        QVBoxLayout,
+    )
+
+    from zentray.plugins.models import resolve_param_values
+    from zentray.plugins.runtime import _read_param_presets
+
+    m = plug.manifest
+    presets = _read_param_presets(m.id)
+    dialog = QDialog()
+    dialog.setWindowTitle(f"运行「{m.name}」")
+    dialog.setModal(True)
+    form = QFormLayout()
+    edits = []
+    for p in m.params:
+        edit = QLineEdit(resolve_param_values([p], presets)[0])
+        if p.description:
+            edit.setPlaceholderText(p.description)
+        form.addRow(f"{p.description or p.name}（{p.name}）:", edit)
+        edits.append(edit)
+    btns = QDialogButtonBox(
+        QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+    )
+    btns.accepted.connect(dialog.accept)
+    btns.rejected.connect(dialog.reject)
+    lay = QVBoxLayout(dialog)
+    lay.addLayout(form)
+    lay.addWidget(btns)
+    if not run_modal_loop(dialog):
+        return None
+    return [e.text() for e in edits]
+
 
 def _dispatch_task_action(action: str, task, controller: "TrayController") -> None:
     """任务操作对话框的结果分发"""

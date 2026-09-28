@@ -318,3 +318,9 @@ export async function installPluginZip(path, { overwrite = false } = {}) {
   const { data } = await http.post('/api/plugins/install-zip', { path, overwrite })
   return data
 }
+
+/** zip 包预览校验（解压临时目录校验后清理，不安装） */
+export async function previewPluginZip(path) {
+  const { data } = await http.post('/api/plugins/preview-zip', { path })
+  return data
+}
