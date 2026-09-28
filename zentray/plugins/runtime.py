@@ -115,8 +115,7 @@ class PluginRuntime(QObject):
 
         m = plugin.manifest
         cmd = [str(m.entry_path), action, *m.args]
-        env = os.environ.copy()
-        env.update(m.env)
+        env = self._base_env(m)
         try:
             completed = subprocess.run(
                 cmd,
@@ -144,6 +143,20 @@ class PluginRuntime(QObject):
         return ok, f"{action} " + ("成功" if ok else "失败")
 
     @staticmethod
+    def _base_env(m) -> dict:
+        """用户环境 + manifest.env + 每插件数据目录（ZENTRAY_PLUGIN_DATA_DIR）。
+
+        数据目录 = 数据目录/plugin_data/<id>/，运行前自动创建——插件持久化
+        状态写这里，不随 zip 覆盖重装丢失。script/service 共用。
+        """
+        env = os.environ.copy()
+        env.update(m.env)
+        data_dir = DATA_DIR / "plugin_data" / m.id
+        data_dir.mkdir(parents=True, exist_ok=True)
+        env["ZENTRAY_PLUGIN_DATA_DIR"] = str(data_dir)
+        return env
+
+    @staticmethod
     def _preset_or_default(m, param) -> str:
         """入参缺省值：预设（settings.ops.param_presets）> manifest default。"""
         return resolve_param_values([param], _read_param_presets(m.id))[0]
@@ -168,8 +181,7 @@ class PluginRuntime(QObject):
             self._preset_or_default(m, p) for p in m.params
         ]
         cmd = [str(m.entry_path), *m.args, *values]
-        env = os.environ.copy()
-        env.update(m.env)
+        env = self._base_env(m)
         # 任务上下文最后注入（动态覆盖静态）；触发来源始终注入
         if task is not None:
             env["ZENTRAY_TASK_ID"] = task.id
