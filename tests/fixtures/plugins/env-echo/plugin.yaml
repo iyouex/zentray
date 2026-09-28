@@ -1,0 +1,8 @@
+id: env-echo
+name: 环境回显
+version: 0.1.0
+type: script
+api_version: 1
+entry: run.sh
+timeout_sec: 10
+description: 测试任务上下文与触发来源注入

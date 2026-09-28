@@ -1,0 +1,8 @@
+id: result-ok-exit1
+name: RESULT成功但退出1
+version: 0.1.0
+type: script
+api_version: 1
+entry: run.sh
+timeout_sec: 10
+description: 测试退出码一票否决

@@ -1,6 +1,7 @@
 """插件进程执行与进度信号。"""
 from __future__ import annotations
 
+import json
 import logging
 import os
 import subprocess
@@ -13,9 +14,10 @@ from typing import Callable, List, Optional
 from PySide6.QtCore import QObject, Signal
 
 from zentray.config import DATA_DIR
+from zentray.core.models import Task
 from zentray.plugins.loader import LoadedPlugin
 from zentray.plugins.models import PluginType
-from zentray.plugins.protocol import format_tray_text, parse_stdout_line
+from zentray.plugins.protocol import ParsedLine, format_tray_text, parse_stdout_line
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +29,9 @@ class PluginRuntime(QObject):
     progress = Signal(int, int, str)  # current, total, message
     script_finished = Signal(str, bool, str)  # plugin_id, ok, summary
     busy_changed = Signal(bool)
+    # 完整运行报告（主线程做通知/写回/activity log）：
+    # {id, name, ok, summary, result_text, trigger, task_id, log, time}
+    run_report = Signal(dict)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -44,6 +49,8 @@ class PluginRuntime(QObject):
         plugin: LoadedPlugin,
         *,
         pomodoro_active: bool = False,
+        task: Optional[Task] = None,
+        trigger: str = "manual",
     ) -> bool:
         """异步启动 script。返回 False 表示未启动（调用方自行提示原因）。"""
         m = plugin.manifest
@@ -60,7 +67,7 @@ class PluginRuntime(QObject):
 
         thread = threading.Thread(
             target=self._run_script_thread,
-            args=(plugin,),
+            args=(plugin, task, trigger),
             name=f"ops-script-{m.id}",
             daemon=True,
         )
@@ -121,19 +128,39 @@ class PluginRuntime(QObject):
         ok = completed.returncode == 0
         return ok, f"{action} " + ("成功" if ok else "失败")
 
-    def _run_script_thread(self, plugin: LoadedPlugin) -> None:
+    def _run_script_thread(
+        self,
+        plugin: LoadedPlugin,
+        task: Optional[Task],
+        trigger: str,
+    ) -> None:
         m = plugin.manifest
         self._runs_dir.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         log_path = self._runs_dir / f"{stamp}_{m.id}.log"
+        meta_json = self._runs_dir / f"{stamp}_{m.id}.json"
         last_json = self._runs_dir / "last.json"
 
         cmd = [str(m.entry_path), *m.args]
         env = os.environ.copy()
         env.update(m.env)
+        # 任务上下文最后注入（动态覆盖静态）；触发来源始终注入
+        if task is not None:
+            env["ZENTRAY_TASK_ID"] = task.id
+            env["ZENTRAY_TASK_TITLE"] = task.title
+            if task.details:
+                env["ZENTRAY_TASK_DETAILS"] = task.details
+            if task.category:
+                env["ZENTRAY_TASK_CATEGORY"] = task.category
+            if task.priority:
+                env["ZENTRAY_TASK_PRIORITY"] = task.priority
+            if task.deadline:
+                env["ZENTRAY_TASK_DEADLINE"] = task.deadline
+        env["ZENTRAY_TRIGGER"] = trigger
         ok = False
         summary = ""
         lines: List[str] = []
+        last_result: Optional[ParsedLine] = None
 
         try:
             self.log_line.emit(f"⚡ 开始 {m.name}"[:50])
@@ -174,6 +201,8 @@ class PluginRuntime(QObject):
                     logf.write(line)
                     lines.append(line)
                     parsed = parse_stdout_line(line)
+                    if parsed.kind == "result":
+                        last_result = parsed  # 最后一个 RESULT 行生效
                     tray = format_tray_text(m.name, parsed)
                     self.log_line.emit(tray)
                     if parsed.kind == "progress" and parsed.progress:
@@ -184,8 +213,19 @@ class PluginRuntime(QObject):
                 if code is None:
                     code = self._proc.wait()
                 if summary != "超时":
+                    # 成败判定（v2）：退出码非 0 一票否决；RESULT fail 一票
+                    # 否决（即使 exit 0）；无 RESULT 行退化为纯退出码。
                     ok = code == 0
-                    summary = "成功" if ok else f"失败(code={code})"
+                    if last_result is not None and last_result.result_ok is False:
+                        ok = False
+                        summary = f"失败(RESULT: {last_result.text})"
+                    elif ok:
+                        if last_result is not None and last_result.text != "成功":
+                            summary = last_result.text
+                        else:
+                            summary = "成功"
+                    else:
+                        summary = f"失败(code={code})"
         except Exception as e:
             logger.exception("脚本执行异常 %s", m.id)
             ok = False
@@ -196,24 +236,24 @@ class PluginRuntime(QObject):
             with self._lock:
                 self._busy = False
             self.busy_changed.emit(False)
-            try:
-                import json
-
-                last_json.write_text(
-                    json.dumps(
-                        {
-                            "id": m.id,
-                            "name": m.name,
-                            "ok": ok,
-                            "summary": summary,
-                            "log": str(log_path),
-                            "time": datetime.now().isoformat(timespec="seconds"),
-                        },
-                        ensure_ascii=False,
-                        indent=2,
-                    ),
-                    encoding="utf-8",
-                )
-            except Exception:
-                pass
+            report = {
+                "id": m.id,
+                "name": m.name,
+                "ok": ok,
+                "summary": summary,
+                "result_text": last_result.text if last_result is not None else "",
+                "trigger": trigger,
+                "task_id": task.id if task is not None else "",
+                "log": str(log_path),
+                "time": datetime.now().isoformat(timespec="seconds"),
+            }
+            for target in (last_json, meta_json):
+                try:
+                    target.write_text(
+                        json.dumps(report, ensure_ascii=False, indent=2),
+                        encoding="utf-8",
+                    )
+                except Exception:
+                    pass
             self.script_finished.emit(m.id, ok, summary)
+            self.run_report.emit(report)
