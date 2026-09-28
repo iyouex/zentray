@@ -42,15 +42,14 @@ class PluginLoader:
         *,
         bundled_dir: Optional[Path] = None,
         user_dir: Optional[Path] = None,
-        load_bundled: bool = True,
-        load_user: bool = True,
     ) -> List[LoadedPlugin]:
+        """扫描插件目录（v2：给定的目录恒扫描，无加载开关）。"""
         self._plugins.clear()
         self._failures.clear()
 
-        if load_bundled and bundled_dir:
+        if bundled_dir:
             self._scan_root(Path(bundled_dir), source="bundled")
-        if load_user and user_dir:
+        if user_dir:
             self._scan_root(Path(user_dir), source="user")
 
         return self.plugins

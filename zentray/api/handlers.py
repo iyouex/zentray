@@ -205,7 +205,22 @@ def handle_request(
         if method == "POST" and path == "/api/reminders/check-conflicts":
             return _check_reminder_conflicts(body)
 
-        # —— 插件：列表 / 校验 / 安装 / 运行 ——
+        # —— 插件：列表 / 校验 / 安装 / 运行 / 运行历史 / 授权 ——
+        # 精确路由必须置于下方 /api/plugins/ 前缀匹配之前，避免被吞
+        if method == "GET" and path == "/api/plugins/runs":
+            return _plugin_runs(query or {})
+        if method == "GET" and path == "/api/plugins/runs/log":
+            return _plugin_run_log(query or {})
+        if method == "POST" and path == "/api/plugins/install-zip":
+            return _install_plugin_zip(body or {})
+        if (
+            method == "POST"
+            and path.startswith("/api/plugins/")
+            and path.endswith("/authorize")
+        ):
+            return _authorize_plugin(
+                path[len("/api/plugins/") : -len("/authorize")], body or {}
+            )
         if method == "GET" and path == "/api/plugins":
             return 200, _plugins_list()
         if method == "POST" and path == "/api/plugins/validate":
@@ -510,19 +525,13 @@ def _plugins_list(*, scan_always: bool = False) -> dict:
 
         loader = PluginLoader()
 
-    # 设置页总是按开关扫描对应来源；未启用时仍扫两边便于预览
-    load_bundled = sm.ops.load_bundled if sm.ops.enabled else True
-    load_user = sm.ops.load_user if sm.ops.enabled else True
-    if scan_always and not sm.ops.enabled:
-        load_bundled = True
-        load_user = True
-
+    # v2：单一总开关，给定的目录恒扫描
     loader.scan(
         bundled_dir=bundled if bundled.is_dir() else None,
         user_dir=user_dir,
-        load_bundled=load_bundled,
-        load_user=load_user,
     )
+    from zentray.plugins import triggers as _triggers
+
     items = []
     for p in loader.plugins:
         m = p.manifest
@@ -537,6 +546,9 @@ def _plugins_list(*, scan_always: bool = False) -> dict:
                 "entry": m.entry,
                 "root": str(m.root),
                 "status": "ok",
+                "triggers": [t.describe() for t in m.triggers],
+                "write_back": bool(m.write_back),
+                "authorized": _triggers.is_authorized(m.id),
             }
         )
     failures = []
@@ -554,19 +566,12 @@ def _plugins_list(*, scan_always: bool = False) -> dict:
     return base
 
 
-def _safe_plugin_path(raw: str) -> tuple[Optional[Path], Optional[str]]:
-    """解析并限制插件路径范围（用户家目录 / 数据目录 / 内置目录）。"""
+def _allowed_roots() -> list:
+    """插件相关路径的允许根（用户家目录 / 数据目录 / 用户插件目录 / 内置目录 / 项目根）。"""
     from zentray.config import DATA_DIR
     from zentray.resources import get_resource_path
     from zentray.services.settings_manager import SettingsManager
 
-    if not raw or not str(raw).strip():
-        return None, "path 必填"
-    path = Path(str(raw).strip()).expanduser().resolve()
-    if not path.exists():
-        return None, f"路径不存在: {path}"
-    if not path.is_dir():
-        return None, "path 必须是插件目录"
     allowed = [
         Path.home().resolve(),
         Path(DATA_DIR).resolve(),
@@ -582,15 +587,29 @@ def _safe_plugin_path(raw: str) -> tuple[Optional[Path], Optional[str]]:
         allowed.append(Path(_PROJECT_ROOT).resolve())
     except Exception:
         pass
-    ok = False
-    for root in allowed:
+    return allowed
+
+
+def _path_in_allowed_roots(path: Path) -> bool:
+    for root in _allowed_roots():
         try:
             path.relative_to(root)
-            ok = True
-            break
+            return True
         except ValueError:
             continue
-    if not ok:
+    return False
+
+
+def _safe_plugin_path(raw: str) -> tuple[Optional[Path], Optional[str]]:
+    """解析并限制插件路径范围（用户家目录 / 数据目录 / 内置目录）。"""
+    if not raw or not str(raw).strip():
+        return None, "path 必填"
+    path = Path(str(raw).strip()).expanduser().resolve()
+    if not path.exists():
+        return None, f"路径不存在: {path}"
+    if not path.is_dir():
+        return None, "path 必须是插件目录"
+    if not _path_in_allowed_roots(path):
         return None, "路径不在允许范围内（用户主目录 / 数据目录 / 项目或内置插件目录）"
     return path, None
 
@@ -624,30 +643,18 @@ def _validate_plugin_path(body: dict) -> tuple[int, dict]:
     }
 
 
-def _install_plugin_path(body: dict) -> tuple[int, dict]:
-    """校验通过后复制到用户插件目录。"""
+def _install_validated_dir(src: Path, manifest, overwrite: bool) -> tuple[int, dict]:
+    """安装尾巴：复制已校验的插件目录到用户插件目录（目录/zip 安装共用）。"""
     import shutil
 
-    from zentray.plugins.manifest import validate_plugin_dir
     from zentray.services.settings_manager import SettingsManager
 
-    path, err = _safe_plugin_path(body.get("path") or "")
-    if err:
-        return 400, {"ok": False, "error": err}
-    result = validate_plugin_dir(path)
-    if not result.ok or result.manifest is None:
-        return 400, {
-            "ok": False,
-            "error": "校验未通过",
-            "errors": list(result.errors),
-        }
     sm = SettingsManager()
     user_dir = sm.get_ops_user_plugins_dir()
     user_dir.mkdir(parents=True, exist_ok=True)
-    dest_name = result.manifest.id
-    dest = (user_dir / dest_name).resolve()
+    dest = (user_dir / manifest.id).resolve()
     # 禁止安装到自身
-    if dest == path.resolve():
+    if dest == src.resolve():
         return 200, {
             "ok": True,
             "message": "插件已在用户目录中",
@@ -659,15 +666,14 @@ def _install_plugin_path(body: dict) -> tuple[int, dict]:
     except ValueError:
         return 400, {"ok": False, "error": "目标目录非法"}
     if dest.exists():
-        force = bool(body.get("overwrite"))
-        if not force:
+        if not overwrite:
             return 409, {
                 "ok": False,
                 "error": f"目标已存在: {dest.name}，可传 overwrite=true 覆盖",
                 "dest": str(dest),
             }
         shutil.rmtree(dest)
-    shutil.copytree(path, dest)
+    shutil.copytree(src, dest)
     # 确保 sh 可执行
     for sh in dest.rglob("*.sh"):
         try:
@@ -680,6 +686,157 @@ def _install_plugin_path(body: dict) -> tuple[int, dict]:
         "dest": str(dest),
         "plugins": _plugins_list(scan_always=True),
     }
+
+
+def _install_plugin_path(body: dict) -> tuple[int, dict]:
+    """校验通过后复制到用户插件目录。"""
+    from zentray.plugins.manifest import validate_plugin_dir
+
+    path, err = _safe_plugin_path(body.get("path") or "")
+    if err:
+        return 400, {"ok": False, "error": err}
+    result = validate_plugin_dir(path)
+    if not result.ok or result.manifest is None:
+        return 400, {
+            "ok": False,
+            "error": "校验未通过",
+            "errors": list(result.errors),
+        }
+    return _install_validated_dir(path, result.manifest, bool(body.get("overwrite")))
+
+
+def _install_plugin_zip(body: dict) -> tuple[int, dict]:
+    """zip 包安装：解压临时目录（防 zip-slip）→ manifest 校验 → 落用户插件目录。"""
+    import shutil
+    import time
+    import zipfile
+
+    from zentray.config import DATA_DIR
+    from zentray.plugins.manifest import validate_plugin_dir
+
+    raw = body.get("path") or ""
+    if not str(raw).strip():
+        return 400, {"ok": False, "error": "path 必填"}
+    zp = Path(str(raw).strip()).expanduser().resolve()
+    if not zp.is_file():
+        return 400, {"ok": False, "error": f"文件不存在: {zp}"}
+    if zp.suffix.lower() != ".zip":
+        return 400, {"ok": False, "error": "仅支持 .zip 包"}
+    if not _path_in_allowed_roots(zp):
+        return 400, {"ok": False, "error": "路径不在允许范围内（用户主目录 / 数据目录 / 项目或内置插件目录）"}
+
+    tmp_base = (
+        DATA_DIR / "tmp" / f"plugin_install_{zp.stem}_{int(time.time() * 1000)}"
+    ).resolve()
+    tmp_base.mkdir(parents=True, exist_ok=True)
+    try:
+        # 逐成员解压 + zip-slip 防护：拒绝对路径/..，resolve 后必须在解压目录内
+        with zipfile.ZipFile(zp) as zf:
+            for member in zf.infolist():
+                if member.filename.startswith(("/", "\\")) or ".." in Path(
+                    member.filename
+                ).parts:
+                    return 400, {"ok": False, "error": f"非法 zip 成员: {member.filename}"}
+                dest = (tmp_base / member.filename).resolve()
+                try:
+                    dest.relative_to(tmp_base)
+                except ValueError:
+                    return 400, {"ok": False, "error": f"非法 zip 成员: {member.filename}"}
+                if member.is_dir():
+                    dest.mkdir(parents=True, exist_ok=True)
+                else:
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    with zf.open(member) as src, open(dest, "wb") as dst:
+                        shutil.copyfileobj(src, dst)
+                    # 恢复可执行位（open("wb") 按默认 umask 落盘，丢了 +x）
+                    if ((member.external_attr >> 16) & 0o111):
+                        try:
+                            dest.chmod(dest.stat().st_mode | 0o111)
+                        except OSError:
+                            pass
+
+        # 定位 plugin.yaml：根目录或唯一一级子目录
+        root_dir = tmp_base
+        if not (root_dir / "plugin.yaml").is_file():
+            subs = [
+                d
+                for d in tmp_base.iterdir()
+                if d.is_dir() and (d / "plugin.yaml").is_file()
+            ]
+            if len(subs) == 1:
+                root_dir = subs[0]
+            else:
+                return 400, {
+                    "ok": False,
+                    "error": "zip 中未找到 plugin.yaml（根目录或唯一一级子目录）",
+                }
+
+        result = validate_plugin_dir(root_dir)
+        if not result.ok or result.manifest is None:
+            return 400, {
+                "ok": False,
+                "error": "校验未通过",
+                "errors": list(result.errors),
+            }
+        return _install_validated_dir(
+            root_dir, result.manifest, bool(body.get("overwrite"))
+        )
+    finally:
+        shutil.rmtree(tmp_base, ignore_errors=True)
+
+
+def _plugin_runs(query: dict) -> tuple[int, dict]:
+    """运行历史：ops_runs/*.json 时间戳倒序（无索引，目录扫描够用）。"""
+    from zentray.config import DATA_DIR
+
+    try:
+        limit = max(1, min(200, int(query.get("limit", 50))))
+    except (TypeError, ValueError):
+        limit = 50
+    runs_dir = DATA_DIR / "ops_runs"
+    items = []
+    if runs_dir.is_dir():
+        for p in sorted(runs_dir.glob("*.json"), reverse=True):
+            if p.name == "last.json":
+                continue
+            if len(items) >= limit:
+                break
+            try:
+                items.append(json.loads(p.read_text(encoding="utf-8")))
+            except Exception:
+                continue
+    return 200, {"items": items, "count": len(items)}
+
+
+def _plugin_run_log(query: dict) -> tuple[int, dict]:
+    """读取单次运行日志（文件名白名单：无路径分隔符 + 必须在 ops_runs 内）。"""
+    from zentray.config import DATA_DIR
+
+    name = str(query.get("file") or "").strip()
+    if not name or "/" in name or "\\" in name or Path(name).name != name:
+        return 400, {"error": "非法文件名"}
+    runs_dir = (DATA_DIR / "ops_runs").resolve()
+    path = (runs_dir / name).resolve()
+    if path.parent != runs_dir or not path.is_file():
+        return 404, {"error": "日志不存在"}
+    try:
+        content = path.read_text(encoding="utf-8", errors="replace")
+    except OSError as e:
+        return 500, {"error": f"读取失败: {e}"}
+    return 200, {
+        "file": name,
+        "content": content[:200_000],
+        "truncated": len(content) > 200_000,
+    }
+
+
+def _authorize_plugin(plugin_id: str, body: dict) -> tuple[int, dict]:
+    """设置插件自动运行授权（插件级一次性授权的 UI 开关）。"""
+    from zentray.plugins import triggers
+
+    allow = bool(body.get("allow"))
+    triggers.authorize(plugin_id, allow)
+    return 200, {"ok": True, "id": plugin_id, "authorized": allow}
 
 
 def _run_plugin(plugin_id: str, body: dict) -> tuple[int, dict]:
@@ -712,7 +869,13 @@ def _run_plugin(plugin_id: str, body: dict) -> tuple[int, dict]:
         return 409, {"error": "已有脚本在运行"}
     if pomo_active:
         return 409, {"error": "番茄钟进行中，无法运行脚本"}
-    started = runtime.run_script(plug, pomodoro_active=False)
+    task = None
+    task_id = str(body.get("task_id") or "").strip()
+    if task_id:
+        task = _ctx.task_service.find_task(task_id)
+        if task is None:
+            return 404, {"error": f"任务不存在: {task_id}"}
+    started = runtime.run_script(plug, pomodoro_active=False, task=task)
     if not started:
         return 409, {"error": "无法启动脚本"}
     return 200, {"ok": True, "id": plugin_id, "started": True}

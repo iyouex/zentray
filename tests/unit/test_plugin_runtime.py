@@ -21,7 +21,7 @@ def qapp():
 def test_run_sample_script(qapp, tmp_data_dir, monkeypatch):
     monkeypatch.setattr("zentray.plugins.runtime.DATA_DIR", tmp_data_dir)
     loader = PluginLoader()
-    loader.scan(user_dir=FIXTURES, load_bundled=False, load_user=True)
+    loader.scan(user_dir=FIXTURES)
     plugin = loader.get("sample-script")
     assert plugin is not None
 
@@ -46,7 +46,7 @@ def test_run_sample_script(qapp, tmp_data_dir, monkeypatch):
 def test_reject_when_pomodoro(qapp, tmp_data_dir, monkeypatch):
     monkeypatch.setattr("zentray.plugins.runtime.DATA_DIR", tmp_data_dir)
     loader = PluginLoader()
-    loader.scan(user_dir=FIXTURES, load_bundled=False, load_user=True)
+    loader.scan(user_dir=FIXTURES)
     plugin = loader.get("sample-script")
     rt = PluginRuntime()
     assert rt.run_script(plugin, pomodoro_active=True) is False
@@ -55,7 +55,7 @@ def test_reject_when_pomodoro(qapp, tmp_data_dir, monkeypatch):
 def test_service_status(qapp, tmp_data_dir, monkeypatch):
     monkeypatch.setattr("zentray.plugins.runtime.DATA_DIR", tmp_data_dir)
     loader = PluginLoader()
-    loader.scan(user_dir=FIXTURES, load_bundled=False, load_user=True)
+    loader.scan(user_dir=FIXTURES)
     plugin = loader.get("sample-service")
     rt = PluginRuntime()
     logs = []
@@ -79,7 +79,7 @@ def test_service_status(qapp, tmp_data_dir, monkeypatch):
 def _make_runtime(tmp_data_dir, monkeypatch):
     monkeypatch.setattr("zentray.plugins.runtime.DATA_DIR", tmp_data_dir)
     loader = PluginLoader()
-    loader.scan(user_dir=FIXTURES, load_bundled=False, load_user=True)
+    loader.scan(user_dir=FIXTURES)
     return PluginRuntime(), loader
 
 

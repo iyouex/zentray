@@ -137,8 +137,6 @@ class TrayController(QObject):
         self._ops_plugins = self.plugin_loader.scan(
             bundled_dir=bundled if bundled.is_dir() else None,
             user_dir=user,
-            load_bundled=ops.load_bundled,
-            load_user=ops.load_user,
         )
         logger.info(
             "插件已加载 %s 个（失败 %s）",
