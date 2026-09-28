@@ -60,7 +60,7 @@ class _FakePlugin:
 
 
 def test_ops_menu_without_plugins():
-    """启用但零插件：子菜单隐藏（管理入口在设置页，菜单保持简洁）。"""
+    """启用但零插件：面板入口隐藏（管理入口在设置页，菜单保持简洁）。"""
     mb = MenuBuilder()
     base = mb.build_main_menu(is_pomodoro=False)
     enabled_empty = mb.build_main_menu(
@@ -69,26 +69,25 @@ def test_ops_menu_without_plugins():
     assert base == enabled_empty
 
 
-def test_ops_menu_shown_with_plugins():
-    """≥1 插件且启用：ops_menu 出现在菜单头部。"""
+def test_ops_panel_entry_with_plugins():
+    """≥1 插件且启用：单项 ops_panel（无子菜单，列表在 Vue 面板）。"""
     mb = MenuBuilder()
     items = mb.build_main_menu(
         is_pomodoro=False,
         ops_enabled=True,
-        ops_plugins=[_FakePlugin("demo", "示例脚本", "script")],
+        ops_plugins=[
+            _FakePlugin("demo", "示例脚本", "script"),
+            _FakePlugin("svc", "示例服务", "service"),
+        ],
     )
     item_ids = [item if isinstance(item, str) else item["id"] for item in items]
-    assert item_ids[:3] == ["ops_menu", "separator", "task_list"]
-    ops_menu = items[0]
-    sub_ids = [
-        s if isinstance(s, str) else s["id"] for s in ops_menu["submenu"]
-    ]
-    assert "ops.script.demo" in sub_ids
-    assert "ops.open_last_log" in sub_ids
+    assert item_ids[:3] == ["ops_panel", "separator", "task_list"]
+    assert items[0] == {"id": "ops_panel", "label": "🧩 插件"}
+    assert "submenu" not in items[0]
 
 
-def test_ops_menu_busy_disables_script_and_pomodoro():
-    """脚本运行中：脚本项与专注入口双向禁用。"""
+def test_ops_busy_keeps_panel_enabled_disables_pomodoro():
+    """脚本运行中：专注入口禁用；面板项仍可打开（busy 态在面板内禁按钮）。"""
     mb = MenuBuilder()
     items = mb.build_main_menu(
         is_pomodoro=False,
@@ -96,13 +95,6 @@ def test_ops_menu_busy_disables_script_and_pomodoro():
         ops_plugins=[_FakePlugin("demo", "示例脚本", "script")],
         ops_busy=True,
     )
-    by_id = {}
-    for it in items:
-        if isinstance(it, dict):
-            by_id[it["id"]] = it
-            if "submenu" in it:
-                for s in it["submenu"]:
-                    if isinstance(s, dict):
-                        by_id[s["id"]] = s
-    assert by_id["ops.script.demo"]["enabled"] is False
+    by_id = {it["id"]: it for it in items if isinstance(it, dict)}
+    assert by_id["ops_panel"].get("enabled", True) is True
     assert by_id["pomodoro"]["enabled"] is False

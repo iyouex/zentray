@@ -97,6 +97,15 @@ def try_vue_quick_add(controller: "TrayController") -> bool:
     return True
 
 
+def try_vue_plugin_panel(controller: "TrayController") -> bool:
+    """插件面板（GNOME 托盘无右弹子菜单，列表/运行/启停统一在 Vue 面板）。"""
+    if not use_vue_ui():
+        controller.renderer.show_notification("插件", "面板需要 Web UI（ZENTRAY_UI=web）")
+        return True
+    open_vue_route("/plugins-panel", title="🧩 插件", width=460, height=540)
+    return True
+
+
 def try_vue_setup_wizard() -> bool:
     """首次配置向导。返回 True 表示已由 Vue 处理（无论完成或取消）。"""
     if not use_vue_ui():
