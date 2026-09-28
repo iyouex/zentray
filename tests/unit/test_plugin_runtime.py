@@ -276,3 +276,21 @@ def test_report_has_run_id_and_times(qapp, tmp_data_dir, monkeypatch):
     assert report["run_id"].endswith("_param-echo")
     assert report["started_at"]  # ISO 起点
     assert report["time"] >= report["started_at"]  # time=结束时刻
+
+
+def test_resolve_param_values_priority():
+    """显式传入 > 预设 > manifest default（托盘弹窗/API/触发共用）。"""
+    from zentray.plugins.models import PluginParam, resolve_param_values
+
+    params = [
+        PluginParam(name="a", default="da"),
+        PluginParam(name="b", default="db"),
+        PluginParam(name="c", default="dc"),
+    ]
+    presets = {"a": "pa", "b": "pb"}
+    # 全缺省：预设优先，无预设回落 default
+    assert resolve_param_values(params, presets) == ["pa", "pb", "dc"]
+    # 显式覆盖（含空串显式值也算显式）
+    assert resolve_param_values(params, presets, {"a": "x", "b": ""}) == ["x", "", "dc"]
+    # 无预设
+    assert resolve_param_values(params, None) == ["da", "db", "dc"]

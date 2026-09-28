@@ -953,16 +953,20 @@ def _run_plugin(plugin_id: str, body: dict) -> tuple[int, dict]:
         task = _ctx.task_service.find_task(task_id)
         if task is None:
             return 404, {"error": f"任务不存在: {task_id}"}
-    # 命名入参：body.params {name: value}，按声明顺序展开；未传回落 default
+    # 命名入参：显式传入 > 预设 > default（body.params {name: value}）
     param_values = None
     m_params = plug.manifest.params
     if m_params:
-        raw_params = body.get("params") or {}
-        if not isinstance(raw_params, dict):
+        raw_params = body.get("params")
+        if raw_params is not None and not isinstance(raw_params, dict):
             return 400, {"error": "params 必须是对象"}
-        param_values = [
-            str(raw_params.get(p.name, p.default)) for p in m_params
-        ]
+        from zentray.plugins.models import resolve_param_values
+
+        try:
+            presets = SettingsManager().ops.param_presets.get(plug.manifest.id)
+        except Exception:
+            presets = None
+        param_values = resolve_param_values(m_params, presets, raw_params)
     started = runtime.run_script(
         plug, pomodoro_active=False, task=task, param_values=param_values
     )

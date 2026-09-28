@@ -16,7 +16,17 @@ from PySide6.QtCore import QObject, Signal
 from zentray.config import DATA_DIR
 from zentray.core.models import Task
 from zentray.plugins.loader import LoadedPlugin
-from zentray.plugins.models import PluginType
+from zentray.plugins.models import PluginType, resolve_param_values
+
+
+def _read_param_presets(pid: str) -> dict:
+    """读参数预设；设置不可用时静默回落空。"""
+    try:
+        from zentray.services.settings_manager import SettingsManager
+
+        return SettingsManager().ops.param_presets.get(pid) or {}
+    except Exception:
+        return {}
 from zentray.plugins.protocol import ParsedLine, format_tray_text, parse_stdout_line
 
 logger = logging.getLogger(__name__)
@@ -136,13 +146,7 @@ class PluginRuntime(QObject):
     @staticmethod
     def _preset_or_default(m, param) -> str:
         """入参缺省值：预设（settings.ops.param_presets）> manifest default。"""
-        try:
-            from zentray.services.settings_manager import SettingsManager
-
-            preset = SettingsManager().ops.param_presets.get(m.id) or {}
-            return str(preset.get(param.name, param.default))
-        except Exception:
-            return param.default
+        return resolve_param_values([param], _read_param_presets(m.id))[0]
 
     def _run_script_thread(
         self,
