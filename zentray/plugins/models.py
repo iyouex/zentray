@@ -12,6 +12,45 @@ class PluginType(str, Enum):
     SERVICE = "service"
 
 
+class TriggerType(str, Enum):
+    DAILY = "daily"
+    INTERVAL = "interval"
+    CRON = "cron"
+    EVENT = "event"
+
+
+class TriggerEvent(str, Enum):
+    TASK_DONE = "task_done"
+    POMODORO_END = "pomodoro_end"
+    STARTUP = "startup"
+
+
+@dataclass(frozen=True)
+class PluginTrigger:
+    """manifest 声明的单个触发器（api_version: 2）。"""
+
+    type: TriggerType
+    time: Optional[str] = None       # daily: "HH:MM"
+    minutes: Optional[int] = None    # interval: 每 N 分钟
+    expr: Optional[str] = None       # cron: 5 字段表达式
+    event: Optional[TriggerEvent] = None  # event: 事件名
+
+    def describe(self) -> str:
+        """人读描述（托盘/前端展示用）。"""
+        if self.type == TriggerType.DAILY:
+            return f"每日 {self.time}"
+        if self.type == TriggerType.INTERVAL:
+            return f"每 {self.minutes} 分钟"
+        if self.type == TriggerType.CRON:
+            return f"cron {self.expr}"
+        labels = {
+            TriggerEvent.TASK_DONE: "任务完成",
+            TriggerEvent.POMODORO_END: "番茄结束",
+            TriggerEvent.STARTUP: "启动时",
+        }
+        return f"事件: {labels.get(self.event, self.event)}"
+
+
 @dataclass(frozen=True)
 class PluginManifest:
     """已解析的 plugin.yaml。"""
@@ -28,6 +67,8 @@ class PluginManifest:
     timeout_sec: int = 300
     env: Dict[str, str] = field(default_factory=dict)
     description: str = ""
+    triggers: List[PluginTrigger] = field(default_factory=list)
+    write_back: bool = False
 
     @property
     def entry_path(self) -> Path:
