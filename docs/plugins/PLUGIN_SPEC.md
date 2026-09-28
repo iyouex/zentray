@@ -154,6 +154,7 @@ v2 任务上下文注入（从任务页/任务完成触发运行时自动带入�
 | `ZENTRAY_TASK_ID` / `ZENTRAY_TASK_TITLE` | 任务 ID 与标题（有任务上下文时恒在） |
 | `ZENTRAY_TASK_DETAILS` / `ZENTRAY_TASK_CATEGORY` / `ZENTRAY_TASK_PRIORITY` / `ZENTRAY_TASK_DEADLINE` | 非空才注入 |
 | `ZENTRAY_TRIGGER` | 触发方式：`manual` / `daily` / `interval` / `cron` / `task_done` / `pomodoro_end` / `startup` |
+| `ZENTRAY_PLUGIN_DATA_DIR` | 每插件私有数据目录（`数据目录/plugin_data/<id>/`，运行前自动创建）；持久化状态写这里，**勿写插件自身目录**（zip 覆盖重装会丢）。无需 api_version 门，v1 插件同样注入 |
 
 ### 4.2 stdout 进度协议（UTF-8，按行）
 
@@ -214,6 +215,8 @@ exit 0
 | `status` | stdout **首行**（trim）优先为 `running` \| `stopped` \| `unknown`；否则回退退出码 0=running、非 0=stopped |
 
 菜单结构：服务名 → 启动 / 停止 / 状态。
+
+注入环境同 script（用户环境 + `manifest.env` + `ZENTRAY_PLUGIN_DATA_DIR`，见 4.1）。
 
 ---
 
@@ -319,6 +322,7 @@ API：
 
 ## 修订记录
 
+- **2026-09-28 插件数据目录**（feature/plugin-data-dir）：script/service 运行时注入 `ZENTRAY_PLUGIN_DATA_DIR`（`数据目录/plugin_data/<id>/`，运行前自动创建）——插件持久化状态不随 zip 覆盖重装丢失；无 api_version 门，v1 插件同样注入。
 - **2026-09-28 插件 v2.1**（feature/plugin-v2）：①`params` 命名入参（仅 script；argv = entry + args + 参数值，优先级 显式 > 预设 > default）；②`category` 分类字段（列表排序用）；③调度规则覆盖层 `ops.trigger_overrides` 与参数预设 `ops.param_presets`（均存 settings.json，不改动插件文件）；④管理回设置页三大折叠块（导入/列表/历史），撤销独立插件中心；⑤导入统一 zip/目录切换 + 预览校验门（zip 新增 preview 端点）；⑥安装记录 `installed_at`；⑦运行元数据增 `run_id`/`started_at`；⑧托盘有参脚本弹参数弹窗（无参仍走确认开关）。
 - **2026-09-28 插件 v2**（feature/plugin-v2）：①`api_version: 2`——manifest 触发器（daily/interval/cron/event）、任务上下文 env 注入、`write_back` 结果写回；②RESULT 参与成败判定（退出码与最后 RESULT fail 双一票否决），`RESULT ok <文案>` 成为运行摘要；③插件级一次性授权；④每运行落 `{时间戳}_{id}.json` 元数据，插件中心可查运行历史与日志；⑤zip 包分发（zip-slip 防护）；⑥设置改单一总开关（目录恒扫描），管理移至独立插件中心。
 - **2026-09 复活适配**（feature/plugins 重上 staging）：①托盘入口改为**动态子菜单**——仅当启用且 ≥1 个插件加载成功时菜单顶部出现「🧩 插件」，未安装时保持极简菜单；②移除从未接线的 `tray_left_click` 配置项；③**服务命令不参与轮播抢占**——`service_cmd` 不再 emit `log_line`，返回 `(ok, detail)` 由调用方弹通知（修复：查询一次服务状态导致轮播永久卡死）。

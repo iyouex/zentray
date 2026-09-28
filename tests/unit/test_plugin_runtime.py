@@ -188,6 +188,20 @@ def test_task_env_sparse_fields(qapp, tmp_data_dir, monkeypatch):
 
 
 # ==========================================
+# 插件数据目录：ZENTRAY_PLUGIN_DATA_DIR 注入（_base_env，script/service 共用）
+# ==========================================
+
+
+def test_plugin_data_dir_env(qapp, tmp_data_dir, monkeypatch):
+    rt, loader = _make_runtime(tmp_data_dir, monkeypatch)
+    report = _run_and_wait(qapp, rt, loader.get("env-echo"))
+    assert report["ok"] is True, report["summary"]
+    data_dir = tmp_data_dir / "plugin_data" / "env-echo"
+    assert f"DATA_DIR={data_dir}" in _read_log(report)
+    assert data_dir.is_dir()  # 运行前自动创建
+
+
+# ==========================================
 # v2.1：命名入参（argv = entry + args + 参数值）
 # ==========================================
 
