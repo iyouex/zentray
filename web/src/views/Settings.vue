@@ -319,13 +319,6 @@
                   </div>
                   <a-switch v-model="form.ops.enabled" />
                 </div>
-                <div class="plugin-confirm-row">
-                  <span class="plugin-field-label">运行前确认（托盘手动运行无参脚本时弹窗确认）</span>
-                  <a-switch
-                    v-model="form.ops.confirm_before_run"
-                    :disabled="!form.ops.enabled"
-                  />
-                </div>
               </a-card>
 
               <a-collapse v-model:active-key="opsPanes" class="ops-collapse" :bordered="false">
@@ -1482,7 +1475,6 @@ function emptyForm() {
     ops: {
       enabled: false,
       user_plugins_dir: '',
-      confirm_before_run: true,
       trigger_overrides: {},
       param_presets: {},
     },
@@ -2437,16 +2429,6 @@ body.zt-skin-neo .nav-main {
   font-size: 13px;
   color: var(--color-text-2);
   white-space: nowrap;
-}
-.plugin-confirm-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 32px;
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--color-border-2);
 }
 /* —— 三大折叠块 —— */
 .ops-collapse {

@@ -22,6 +22,24 @@ def test_validate_bundled_net_cleanup():
     assert body["preview"]["id"] == "net-cleanup"
 
 
+def test_validate_bundled_param_demo(tmp_data_dir):
+    """v2.1 内置参数演示：校验通过，列表元数据含 params。"""
+    path = ROOT / "bundled_plugins" / "param-demo"
+    code, body = _validate_plugin_path({"path": str(path)})
+    assert code == 200
+    assert body["ok"] is True
+    assert body["preview"]["id"] == "param-demo"
+
+    from zentray.api.handlers import _plugins_list
+
+    items = {i["id"]: i for i in _plugins_list(scan_always=True)["items"]}
+    pd = items["param-demo"]
+    assert [(p["name"], p["default"]) for p in pd["params"]] == [
+        ("message", "你好"),
+        ("times", "3"),
+    ]
+
+
 def test_reject_outside_home(tmp_path, monkeypatch):
     # /etc 通常不在允许范围
     path, err = _safe_plugin_path("/etc")
