@@ -1,0 +1,18 @@
+id: param-demo
+name: 参数演示（示例）
+version: 0.1.0
+type: script
+api_version: 2
+entry: run.sh
+timeout_sec: 30
+category: 示例
+description: >-
+  演示命名入参（v2.1）：托盘点击弹出参数窗口（预填可改），运行摘要
+  回显所填值，并把每次运行追加到插件数据目录 history.log。
+params:
+  - name: message
+    default: "你好"
+    description: 要记录的文案
+  - name: times
+    default: "3"
+    description: 显示的次数

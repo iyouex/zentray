@@ -195,24 +195,22 @@ def _dispatch_ops_action(action_id: str, controller: "TrayController") -> bool:
                 "插件", "番茄钟进行中，请先结束专注。"
             )
             return True
-        # 有参脚本：参数弹窗（预填 预设→default，可改后运行），恒弹不受确认开关影响
+        # 有参脚本：参数弹窗（预填 预设→default，可改后运行）
         if plug.manifest.params:
             values = _prompt_script_params(plug)
             if values is None:
                 return True
             runtime.run_script(plug, pomodoro_active=False, param_values=values)
             return True
-        from zentray.services.settings_manager import SettingsManager
-
-        if SettingsManager().ops.confirm_before_run:
-            ret = QMessageBox.question(
-                None,
-                "运行脚本",
-                f"确定运行「{plug.manifest.name}」？",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            )
-            if ret != QMessageBox.StandardButton.Yes:
-                return True
+        # 无参脚本：恒弹「确定运行」确认（防误触——脚本会抢占任务轮播）
+        ret = QMessageBox.question(
+            None,
+            "运行脚本",
+            f"确定运行「{plug.manifest.name}」？",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if ret != QMessageBox.StandardButton.Yes:
+            return True
         runtime.run_script(plug, pomodoro_active=False)
         return True
 

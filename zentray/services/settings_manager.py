@@ -164,7 +164,6 @@ class OpsSettings:
     enabled: bool = False
     # 空字符串表示使用默认 DATA_DIR/plugins
     user_plugins_dir: str = ""
-    confirm_before_run: bool = True
     # v2.1 调度规则覆盖层：pid -> trigger dict 列表（缺失=回落 manifest.triggers）
     trigger_overrides: Dict[str, list] = field(default_factory=dict)
     # v2.1 参数预设（单组）：pid -> {param_name: value}
@@ -586,7 +585,6 @@ class SettingsManager:
             self._settings.ops = OpsSettings(
                 enabled=bool(o.get("enabled", False)),
                 user_plugins_dir=str(o.get("user_plugins_dir") or ""),
-                confirm_before_run=bool(o.get("confirm_before_run", True)),
                 trigger_overrides={
                     str(k): [t for t in v if isinstance(t, dict)]
                     for k, v in (ov or {}).items()

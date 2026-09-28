@@ -130,7 +130,7 @@ params:
 **显式传入 > 参数预设 > manifest default**
 
 - **托盘**：点击有参脚本 → 参数弹窗（预填 预设→default，可改后运行）；
-  无参脚本仍走「运行前确认」开关。
+  无参脚本先弹「确定运行」确认（恒弹，取消即中止）。
 - **参数预设（单组）**：设置页（插件列表 → 展开某插件）可保存每个参数的预设值，
   存 `settings.json` 的 `ops.param_presets`，不改动插件文件。
 - **自动触发**：无显式入参，按 预设 > default 取值。
@@ -257,7 +257,7 @@ python scripts/validate_plugin.py path/to/plugin
 
 - 插件以**当前用户**权限运行；需管理员时插件自行 `pkexec`/`sudo`（应用不代填密码）。  
 - 勿在插件中硬编码密钥；用环境变量或本机安全配置。  
-- 默认「执行前确认」可降低误点风险。  
+- 托盘手动运行脚本前恒弹确认/参数弹窗，可降低误点风险。
 - 不信任来源的插件视为任意代码执行，仅安装可信插件。
 
 ---
@@ -306,6 +306,7 @@ API：
 |------|-----|------|
 | `bundled_plugins/net-cleanup/` | `net-cleanup` | **网络清理**：刷新 DNS/路由缓存、打印代理环境变量（Linux），api_version 1 |
 | `bundled_plugins/task-report/` | `task-report` | **任务报告**：任务完成触发，回显任务上下文并 `write_back` 写回备注，api_version 2 |
+| `bundled_plugins/param-demo/` | `param-demo` | **参数演示**：两个命名入参，点击即见参数弹窗；摘要回显所填值并写 `plugin_data` 历史演示数据目录，api_version 2 |
 
 启用「插件」后，托盘「🧩 插件」子菜单可见；管理入口在 **设置 → 🧩 插件**
 （三大折叠块：导入插件 / 插件列表 / 运行历史）。说明见各目录 `README.md`。
@@ -322,6 +323,7 @@ API：
 
 ## 修订记录
 
+- **2026-09-28 托盘脚本恒弹窗**（feature/plugin-tray-confirm）：无参脚本托盘点击改为**恒弹**「确定运行」确认（移除 `ops.confirm_before_run` 开关，旧 settings.json 残键忽略零迁移）；新增内置示例 `param-demo`（两个命名入参，演示参数弹窗 + `plugin_data` 数据目录）。
 - **2026-09-28 插件数据目录**（feature/plugin-data-dir）：script/service 运行时注入 `ZENTRAY_PLUGIN_DATA_DIR`（`数据目录/plugin_data/<id>/`，运行前自动创建）——插件持久化状态不随 zip 覆盖重装丢失；无 api_version 门，v1 插件同样注入。
 - **2026-09-28 插件 v2.1**（feature/plugin-v2）：①`params` 命名入参（仅 script；argv = entry + args + 参数值，优先级 显式 > 预设 > default）；②`category` 分类字段（列表排序用）；③调度规则覆盖层 `ops.trigger_overrides` 与参数预设 `ops.param_presets`（均存 settings.json，不改动插件文件）；④管理回设置页三大折叠块（导入/列表/历史），撤销独立插件中心；⑤导入统一 zip/目录切换 + 预览校验门（zip 新增 preview 端点）；⑥安装记录 `installed_at`；⑦运行元数据增 `run_id`/`started_at`；⑧托盘有参脚本弹参数弹窗（无参仍走确认开关）。
 - **2026-09-28 插件 v2**（feature/plugin-v2）：①`api_version: 2`——manifest 触发器（daily/interval/cron/event）、任务上下文 env 注入、`write_back` 结果写回；②RESULT 参与成败判定（退出码与最后 RESULT fail 双一票否决），`RESULT ok <文案>` 成为运行摘要；③插件级一次性授权；④每运行落 `{时间戳}_{id}.json` 元数据，插件中心可查运行历史与日志；⑤zip 包分发（zip-slip 防护）；⑥设置改单一总开关（目录恒扫描），管理移至独立插件中心。
