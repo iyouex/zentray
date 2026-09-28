@@ -297,6 +297,12 @@ class TrayController(QObject):
         self._carousel_started = True
         self.update_display(update_menu=True)
         self.start_rotation()
+        try:
+            from zentray.plugins import triggers
+
+            triggers.dispatch_event("pomodoro_end")
+        except Exception:
+            logger.exception("pomodoro_end 插件事件分发失败")
 
     # ==========================================
     # 插件脚本生命周期（信号槽，主线程）

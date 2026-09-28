@@ -298,6 +298,17 @@ class TaskService:
                 )
             except Exception:
                 pass
+            self._dispatch_plugin_event("task_done", task)
+
+    @staticmethod
+    def _dispatch_plugin_event(event: str, task) -> None:
+        """插件事件触发挂点（task_done 等）。未配置插件系统时静默。"""
+        try:
+            from zentray.plugins import triggers
+
+            triggers.dispatch_event(event, task)
+        except Exception:
+            pass
 
     def abandon(self, task_id: str) -> None:
         """废弃任务：归档 + 删除"""
@@ -386,6 +397,7 @@ class TaskService:
                 )
             except Exception:
                 pass
+            self._dispatch_plugin_event("task_done", res["t"])
         else:
             self._refresh_scheduler()
         return res["t"], bool(res.get("auto"))
