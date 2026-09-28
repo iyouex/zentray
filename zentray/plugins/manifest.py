@@ -13,6 +13,7 @@ import yaml
 from zentray.plugins import cron as plugin_cron
 from zentray.plugins.models import (
     PluginManifest,
+    PluginParam,
     PluginTrigger,
     PluginType,
     TriggerEvent,
@@ -144,6 +145,7 @@ def _validate_mapping(raw: Dict[str, Any], root: Path) -> ValidationResult:
         errors.append("write_back 需要 api_version: 2")
 
     triggers = _validate_triggers(raw.get("triggers"), ptype, api_version, errors)
+    params = _validate_params(raw.get("params"), ptype, api_version, errors)
 
     if errors:
         return ValidationResult(ok=False, errors=errors)
@@ -188,6 +190,7 @@ def _validate_mapping(raw: Dict[str, Any], root: Path) -> ValidationResult:
         env=env,
         description=description,
         triggers=triggers,
+        params=params,
         write_back=write_back,
     )
     return ValidationResult(ok=True, errors=[], manifest=manifest)
@@ -262,4 +265,44 @@ def _validate_triggers(
                 errors.append(f"triggers[{i}] 仅支持 script 类型插件")
             else:
                 out.append(trig)
+    return out
+
+
+def _validate_params(
+    raw_params: Any, ptype: PluginType, api_version: int, errors: List[str]
+) -> List[PluginParam]:
+    """校验 params 块；命名入参属 v2 能力，仅 script。"""
+    if raw_params is None:
+        return []
+    if not isinstance(raw_params, list):
+        errors.append("params 必须是列表")
+        return []
+    if api_version != 2:
+        errors.append("params 需要 api_version: 2")
+        return []
+    if ptype != PluginType.SCRIPT:
+        errors.append("params 仅支持 script 类型插件")
+        return []
+
+    out: List[PluginParam] = []
+    seen: set[str] = set()
+    for i, item in enumerate(raw_params, start=1):
+        if not isinstance(item, dict):
+            errors.append(f"params[{i}] 必须是 mapping")
+            continue
+        name = str(item.get("name") or "").strip()
+        if not name:
+            errors.append(f"params[{i}].name 必填")
+            continue
+        if name in seen:
+            errors.append(f"params[{i}].name 重复: {name}")
+            continue
+        seen.add(name)
+        out.append(
+            PluginParam(
+                name=name,
+                default=str(item.get("default") or ""),
+                description=str(item.get("description") or "").strip(),
+            )
+        )
     return out

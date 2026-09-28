@@ -51,8 +51,13 @@ class PluginRuntime(QObject):
         pomodoro_active: bool = False,
         task: Optional[Task] = None,
         trigger: str = "manual",
+        param_values: Optional[List[str]] = None,
     ) -> bool:
-        """异步启动 script。返回 False 表示未启动（调用方自行提示原因）。"""
+        """异步启动 script。返回 False 表示未启动（调用方自行提示原因）。
+
+        param_values: 命名入参的值（按 manifest.params 声明顺序）；
+        None 时回落各参数 default。
+        """
         m = plugin.manifest
         if m.type != PluginType.SCRIPT:
             logger.error("run_script 仅用于 script: %s", m.id)
@@ -67,7 +72,7 @@ class PluginRuntime(QObject):
 
         thread = threading.Thread(
             target=self._run_script_thread,
-            args=(plugin, task, trigger),
+            args=(plugin, task, trigger, param_values),
             name=f"ops-script-{m.id}",
             daemon=True,
         )
@@ -133,6 +138,7 @@ class PluginRuntime(QObject):
         plugin: LoadedPlugin,
         task: Optional[Task],
         trigger: str,
+        param_values: Optional[List[str]] = None,
     ) -> None:
         m = plugin.manifest
         self._runs_dir.mkdir(parents=True, exist_ok=True)
@@ -141,7 +147,10 @@ class PluginRuntime(QObject):
         meta_json = self._runs_dir / f"{stamp}_{m.id}.json"
         last_json = self._runs_dir / "last.json"
 
-        cmd = [str(m.entry_path), *m.args]
+        values = list(param_values) if param_values is not None else [
+            p.default for p in m.params
+        ]
+        cmd = [str(m.entry_path), *m.args, *values]
         env = os.environ.copy()
         env.update(m.env)
         # 任务上下文最后注入（动态覆盖静态）；触发来源始终注入

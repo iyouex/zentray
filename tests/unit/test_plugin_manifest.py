@@ -148,6 +148,79 @@ def test_service_with_triggers_rejected(tmp_path):
     assert any("仅支持 script" in e for e in r.errors)
 
 
+# ==========================================
+# v2.1：命名入参 params
+# ==========================================
+
+
+def test_params_valid(tmp_path):
+    d = _write_plugin(
+        tmp_path,
+        _BASE_V2
+        + """\
+params:
+  - name: target
+    default: "all"
+    description: 作用目标
+  - name: level
+""",
+    )
+    r = validate_plugin_dir(d)
+    assert r.ok, r.error_text()
+    ps = r.manifest.params
+    assert [p.name for p in ps] == ["target", "level"]
+    assert ps[0].default == "all"
+    assert ps[0].description == "作用目标"
+    assert ps[1].default == ""
+    assert ps[1].description == ""
+
+
+def test_fixture_param_echo_valid():
+    r = validate_plugin_dir(FIXTURES / "param-echo")
+    assert r.ok, r.error_text()
+    assert [p.name for p in r.manifest.params] == ["target", "level"]
+    assert r.manifest.params[0].default == "all"
+    assert r.manifest.args == ["--mode=echo"]
+
+
+@pytest.mark.parametrize(
+    "yaml_extra,expect_error",
+    [
+        ("params:\n  - name: a\n  - name: a\n", "重复"),
+        ("params:\n  - default: x\n", "name 必填"),
+        ("params:\n  - target\n", "mapping"),
+        ("params: not-a-list\n", "列表"),
+    ],
+)
+def test_params_invalid(tmp_path, yaml_extra, expect_error):
+    d = _write_plugin(tmp_path, _BASE_V2 + yaml_extra)
+    r = validate_plugin_dir(d)
+    assert not r.ok
+    assert any(expect_error in e for e in r.errors), r.errors
+
+
+def test_params_need_v2(tmp_path):
+    d = _write_plugin(
+        tmp_path,
+        _BASE_V2.replace("api_version: 2", "api_version: 1")
+        + 'params:\n  - name: target\n',
+    )
+    r = validate_plugin_dir(d)
+    assert not r.ok
+    assert any("api_version: 2" in e for e in r.errors)
+
+
+def test_service_with_params_rejected(tmp_path):
+    d = _write_plugin(
+        tmp_path,
+        _BASE_V2.replace("type: script", "type: service")
+        + "params:\n  - name: target\n",
+    )
+    r = validate_plugin_dir(d)
+    assert not r.ok
+    assert any("仅支持 script" in e for e in r.errors)
+
+
 def test_trigger_describe():
     from zentray.plugins.models import PluginTrigger
 

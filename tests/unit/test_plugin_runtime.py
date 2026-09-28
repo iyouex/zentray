@@ -185,3 +185,60 @@ def test_task_env_sparse_fields(qapp, tmp_data_dir, monkeypatch):
     assert "TASK_DETAILS=none" in log_text  # 空字段不注入
     assert "TASK_DEADLINE=none" in log_text
     assert "TRIGGER=manual" in log_text
+
+
+# ==========================================
+# v2.1：命名入参（argv = entry + args + 参数值）
+# ==========================================
+
+
+def _read_log(report) -> str:
+    return Path(report["log"]).read_text(encoding="utf-8")
+
+
+def test_param_values_appended_after_args(qapp, tmp_data_dir, monkeypatch):
+    rt, loader = _make_runtime(tmp_data_dir, monkeypatch)
+    report = _run_and_wait(
+        qapp, rt, loader.get("param-echo"), param_values=["web", "2"]
+    )
+    assert report["ok"] is True, report["summary"]
+    assert "--mode=echo web 2" in _read_log(report)
+
+
+def test_param_defaults_when_omitted(qapp, tmp_data_dir, monkeypatch):
+    rt, loader = _make_runtime(tmp_data_dir, monkeypatch)
+    report = _run_and_wait(qapp, rt, loader.get("param-echo"))
+    assert report["ok"] is True, report["summary"]
+    assert "--mode=echo all 1" in _read_log(report)
+
+
+def test_run_plugin_api_passes_params(qapp, tmp_data_dir, monkeypatch):
+    """POST /api/plugins/{id}/run body.params → 按声明顺序展开；缺省回落 default。"""
+    from zentray.api import handlers
+    from zentray.api.handlers import ApiContext
+    from zentray.services.settings_manager import SettingsManager
+
+    rt, loader = _make_runtime(tmp_data_dir, monkeypatch)
+    sm = SettingsManager.reload()
+    sm.ops.enabled = True
+    sm.save()
+    monkeypatch.setattr(
+        handlers,
+        "_ctx",
+        ApiContext(plugin_runtime=rt, plugin_loader=loader),
+    )
+
+    reports = []
+    rt.run_report.connect(lambda r: reports.append(r))
+    code, body = handlers._run_plugin(
+        "param-echo", {"params": {"target": "web"}}
+    )
+    assert code == 200, body
+    assert body["ok"] is True
+    deadline = time.time() + 10
+    while not reports and time.time() < deadline:
+        qapp.processEvents()
+        time.sleep(0.05)
+    assert reports, "run_report 未发出"
+    # target 显式传入；level 未传回落 default "1"
+    assert "--mode=echo web 1" in _read_log(reports[0])

@@ -1,0 +1,16 @@
+id: param-echo
+name: 参数回显
+version: 0.1.0
+type: script
+api_version: 2
+entry: run.sh
+args:
+  - "--mode=echo"
+timeout_sec: 10
+description: 测试命名入参与 args 拼接顺序
+params:
+  - name: target
+    default: "all"
+    description: 作用目标
+  - name: level
+    default: "1"

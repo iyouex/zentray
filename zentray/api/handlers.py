@@ -875,7 +875,19 @@ def _run_plugin(plugin_id: str, body: dict) -> tuple[int, dict]:
         task = _ctx.task_service.find_task(task_id)
         if task is None:
             return 404, {"error": f"任务不存在: {task_id}"}
-    started = runtime.run_script(plug, pomodoro_active=False, task=task)
+    # 命名入参：body.params {name: value}，按声明顺序展开；未传回落 default
+    param_values = None
+    m_params = plug.manifest.params
+    if m_params:
+        raw_params = body.get("params") or {}
+        if not isinstance(raw_params, dict):
+            return 400, {"error": "params 必须是对象"}
+        param_values = [
+            str(raw_params.get(p.name, p.default)) for p in m_params
+        ]
+    started = runtime.run_script(
+        plug, pomodoro_active=False, task=task, param_values=param_values
+    )
     if not started:
         return 409, {"error": "无法启动脚本"}
     return 200, {"ok": True, "id": plugin_id, "started": True}

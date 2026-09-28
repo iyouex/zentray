@@ -52,6 +52,15 @@ class PluginTrigger:
 
 
 @dataclass(frozen=True)
+class PluginParam:
+    """manifest 声明的命名入参（api_version: 2，仅 script；顺序即 argv 顺序）。"""
+
+    name: str
+    default: str = ""
+    description: str = ""
+
+
+@dataclass(frozen=True)
 class PluginManifest:
     """已解析的 plugin.yaml。"""
 
@@ -68,6 +77,7 @@ class PluginManifest:
     env: Dict[str, str] = field(default_factory=dict)
     description: str = ""
     triggers: List[PluginTrigger] = field(default_factory=list)
+    params: List[PluginParam] = field(default_factory=list)
     write_back: bool = False
 
     @property
