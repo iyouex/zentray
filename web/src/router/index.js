@@ -5,6 +5,7 @@ import Settings from '@/views/Settings.vue'
 import Reminder from '@/views/Reminder.vue'
 import QuickAdd from '@/views/QuickAdd.vue'
 import SetupWizard from '@/views/SetupWizard.vue'
+import PluginsPanel from '@/views/PluginsPanel.vue'
 
 const routes = [
   { path: '/', redirect: '/tasks' },
@@ -14,6 +15,7 @@ const routes = [
   { path: '/settings', name: 'settings', component: Settings },
   { path: '/reminder', name: 'reminder', component: Reminder },
   { path: '/quick-add', name: 'quick-add', component: QuickAdd },
+  { path: '/plugins-panel', name: 'plugins-panel', component: PluginsPanel },
   { path: '/setup', name: 'setup', component: SetupWizard },
 ]
 

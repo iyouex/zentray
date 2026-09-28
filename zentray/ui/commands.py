@@ -142,150 +142,17 @@ def dispatch(action_id: str, controller: "TrayController") -> bool:
 
 
 def _dispatch_ops_action(action_id: str, controller: "TrayController") -> bool:
-    """插件菜单。"""
-    from PySide6.QtWidgets import QMessageBox
+    """插件面板入口。运行/启停在 Vue 面板内经 API 完成（含门控），Qt 弹窗路径已移除。"""
+    if action_id == "ops_panel":
+        from zentray.ui.vue_commands import try_vue_plugin_panel
 
-    if action_id in ("ops._hdr_scripts", "ops._hdr_services", "ops_menu"):
-        return True
-
-    if action_id == "ops.open_last_log":
-        import json
-        import subprocess
-        import sys
-        from pathlib import Path
-
-        from zentray.config import DATA_DIR
-
-        last = DATA_DIR / "ops_runs" / "last.json"
-        if not last.is_file():
-            controller.renderer.show_notification("插件", "尚无运行记录")
-            return True
-        try:
-            data = json.loads(last.read_text(encoding="utf-8"))
-            log_path = Path(data.get("log") or "")
-            if log_path.is_file():
-                if sys.platform.startswith("linux"):
-                    subprocess.Popen(["xdg-open", str(log_path)])
-                else:
-                    subprocess.Popen(["open", str(log_path)])
-            else:
-                controller.renderer.show_notification(
-                    "插件", data.get("summary") or "无日志文件"
-                )
-        except Exception as e:
-            controller.renderer.show_notification("打开日志失败", str(e)[:100])
-        return True
-
-    runtime = getattr(controller, "plugin_runtime", None)
-    loader = getattr(controller, "plugin_loader", None)
-    if runtime is None or loader is None:
-        return False
-
-    if action_id.startswith("ops.script."):
-        pid = action_id[len("ops.script.") :]
-        plug = loader.get(pid)
-        if not plug:
-            controller.renderer.show_notification("插件", f"插件不存在: {pid}")
-            return True
-        if runtime.is_busy:
-            controller.renderer.show_notification("插件", "已有脚本在运行，请稍候。")
-            return True
-        if controller.pomodoro_service.is_active:
-            controller.renderer.show_notification(
-                "插件", "番茄钟进行中，请先结束专注。"
-            )
-            return True
-        # 有参脚本：参数弹窗（预填 预设→default，可改后运行）
-        if plug.manifest.params:
-            values = _prompt_script_params(plug)
-            if values is None:
-                return True
-            runtime.run_script(plug, pomodoro_active=False, param_values=values)
-            return True
-        # 无参脚本：恒弹「确定运行」确认（防误触——脚本会抢占任务轮播）
-        ret = QMessageBox.question(
-            None,
-            "运行脚本",
-            f"确定运行「{plug.manifest.name}」？",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-        )
-        if ret != QMessageBox.StandardButton.Yes:
-            return True
-        runtime.run_script(plug, pomodoro_active=False)
-        return True
-
-    if action_id.startswith("ops.service."):
-        rest = action_id[len("ops.service.") :]
-        # id.action
-        if rest.endswith(".start"):
-            pid, act = rest[: -len(".start")], "start"
-        elif rest.endswith(".stop"):
-            pid, act = rest[: -len(".stop")], "stop"
-        elif rest.endswith(".status"):
-            pid, act = rest[: -len(".status")], "status"
-        else:
-            return True
-        plug = loader.get(pid)
-        if not plug:
-            controller.renderer.show_notification("插件", f"插件不存在: {pid}")
-            return True
-        if act in ("start", "stop") and controller.pomodoro_service.is_active:
-            controller.renderer.show_notification(
-                "插件", "番茄钟进行中，请先结束专注。"
-            )
-            return True
-        if runtime.is_busy:
-            controller.renderer.show_notification("插件", "脚本运行中，请稍候。")
-            return True
-        ok, detail = runtime.service_cmd(plug, act, pomodoro_active=False)
-        controller.renderer.show_notification(plug.manifest.name, f"{act}: {detail}")
-        return True
-
+        return try_vue_plugin_panel(controller)
     return False
 
 
 # ==========================================
 # 内部辅助
 # ==========================================
-
-def _prompt_script_params(plug):
-    """有参脚本运行前弹窗：每参一行（预填 预设→default），确定返回值列表，取消返回 None。"""
-    from PySide6.QtWidgets import (
-        QDialog,
-        QDialogButtonBox,
-        QFormLayout,
-        QLineEdit,
-        QVBoxLayout,
-    )
-
-    from zentray.plugins.models import resolve_param_values
-    from zentray.plugins.runtime import _read_param_presets
-
-    m = plug.manifest
-    presets = _read_param_presets(m.id)
-    dialog = QDialog()
-    dialog.setWindowTitle(f"运行「{m.name}」")
-    dialog.setModal(True)
-    form = QFormLayout()
-    edits = []
-    for p in m.params:
-        edit = QLineEdit(resolve_param_values([p], presets)[0])
-        if p.description:
-            edit.setPlaceholderText(p.description)
-        form.addRow(f"{p.description or p.name}（{p.name}）:", edit)
-        edits.append(edit)
-    btns = QDialogButtonBox(
-        QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-    )
-    btns.accepted.connect(dialog.accept)
-    btns.rejected.connect(dialog.reject)
-    lay = QVBoxLayout(dialog)
-    lay.addLayout(form)
-    lay.addWidget(btns)
-    if not run_modal_loop(dialog):
-        return None
-    return [e.text() for e in edits]
-
 
 def _dispatch_task_action(action: str, task, controller: "TrayController") -> None:
     """任务操作对话框的结果分发"""
