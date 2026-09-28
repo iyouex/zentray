@@ -505,7 +505,7 @@ function onRunPlugin() {
         Message.success(
           p?.type === 'service'
             ? '已发送服务命令'
-            : '插件已开始运行，可在插件中心查看历史',
+            : '插件已开始运行，可在 设置 → 🧩 插件 → 运行历史 查看',
         )
         await loadPlugins()
       } catch (e) {

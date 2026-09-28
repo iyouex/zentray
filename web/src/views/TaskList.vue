@@ -661,7 +661,7 @@ async function onRunPlugin() {
           const body = p?.type === 'service' ? { action: 'start' } : { task_id: t.id }
           await runPlugin(t.plugin_id, body)
           Message.success(
-            p?.type === 'service' ? '已发送服务命令' : '插件已开始运行，可在插件中心查看历史',
+            p?.type === 'service' ? '已发送服务命令' : '插件已开始运行，可在 设置 → 🧩 插件 → 运行历史 查看',
           )
         } catch (e) {
           Message.error(e?.response?.data?.error || e?.message || '运行失败')

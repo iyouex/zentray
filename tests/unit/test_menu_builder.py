@@ -59,19 +59,9 @@ class _FakePlugin:
         self.manifest = _FakeManifest(id, name, type_value)
 
 
-def test_ops_menu_without_plugins(monkeypatch):
-    """v2：启用且 Vue 可用 → 常驻「插件中心」入口；Vue 不可用且无插件 → 隐藏。"""
+def test_ops_menu_without_plugins():
+    """启用但零插件：子菜单隐藏（管理入口在设置页，菜单保持简洁）。"""
     mb = MenuBuilder()
-    monkeypatch.setattr(MenuBuilder, "_vue_available", staticmethod(lambda: True))
-    items = mb.build_main_menu(is_pomodoro=False, ops_enabled=True, ops_plugins=[])
-    assert items[0]["id"] == "ops_menu"
-    sub_ids = [
-        s if isinstance(s, str) else s["id"] for s in items[0]["submenu"]
-    ]
-    assert "ops.plugins_page" in sub_ids
-    assert "ops.open_last_log" in sub_ids
-
-    monkeypatch.setattr(MenuBuilder, "_vue_available", staticmethod(lambda: False))
     base = mb.build_main_menu(is_pomodoro=False)
     enabled_empty = mb.build_main_menu(
         is_pomodoro=False, ops_enabled=True, ops_plugins=[]

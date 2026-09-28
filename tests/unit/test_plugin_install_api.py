@@ -224,3 +224,31 @@ def test_plugins_list_v21_metadata(tmp_data_dir, monkeypatch):
     nc = {i["id"]: i for i in body["items"]}["net-cleanup"]
     assert nc["triggers"] == ["每 15 分钟"]
     assert nc["trigger_override"] is True
+
+
+def test_preview_zip_validates_without_installing(tmp_data_dir):
+    zp = _zip_plugin(tmp_data_dir / "zipsrc7")
+    from zentray.api.handlers import _preview_plugin_zip
+
+    code, body = _preview_plugin_zip({"path": str(zp)})
+    assert code == 200
+    assert body["ok"] is True
+    assert body["preview"]["id"] == "zip-plug"
+    # 预览不落地：用户目录无插件，临时目录已清理
+    user_dir = tmp_data_dir / "plugins"
+    assert not (user_dir / "zip-plug").exists()
+    assert not list((tmp_data_dir / "tmp").glob("plugin_install_*"))
+
+
+def test_preview_zip_invalid_manifest(tmp_data_dir):
+    src_root = tmp_data_dir / "zipsrc8"
+    src_root.mkdir()
+    zp = src_root / "bad.zip"
+    with zipfile.ZipFile(zp, "w") as zf:
+        zf.writestr("plugin.yaml", "id: bad\nname: 缺字段\n")
+    from zentray.api.handlers import _preview_plugin_zip
+
+    code, body = _preview_plugin_zip({"path": str(zp)})
+    assert code == 200
+    assert body["ok"] is False
+    assert body["errors"]

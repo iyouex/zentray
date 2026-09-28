@@ -148,11 +148,6 @@ def _dispatch_ops_action(action_id: str, controller: "TrayController") -> bool:
     if action_id in ("ops._hdr_scripts", "ops._hdr_services", "ops_menu"):
         return True
 
-    if action_id == "ops.plugins_page":
-        from zentray.ui.vue_commands import try_vue_plugins
-
-        return try_vue_plugins(controller)
-
     if action_id == "ops.open_last_log":
         import json
         import subprocess

@@ -307,20 +307,20 @@
 
           <template v-else-if="mainKey === 'ops'">
             <div class="plugin-settings">
-              <!-- v2：单一总开关；管理移至独立插件中心 -->
+              <!-- 总开关走页面底部「保存设置」 -->
               <a-card class="plugin-card" :bordered="false" title="总开关">
                 <div class="plugin-switch-row">
                   <div>
                     <div class="plugin-title">启用插件</div>
                     <div class="plugin-desc">
-                      开启后，托盘菜单顶部显示「🧩 插件」子菜单；内置与用户目录恒扫描，
-                      仅加载通过 <code>plugin.yaml</code> 校验的目录。
+                      开启后，托盘菜单顶部显示「🧩 插件」子菜单；目录恒扫描，
+                      仅加载通过 <code>plugin.yaml</code> 校验的插件。
                     </div>
                   </div>
                   <a-switch v-model="form.ops.enabled" />
                 </div>
                 <div class="plugin-confirm-row">
-                  <span class="plugin-field-label">运行前确认（托盘手动运行脚本时弹窗确认）</span>
+                  <span class="plugin-field-label">运行前确认（托盘手动运行无参脚本时弹窗确认）</span>
                   <a-switch
                     v-model="form.ops.confirm_before_run"
                     :disabled="!form.ops.enabled"
@@ -328,10 +328,247 @@
                 </div>
               </a-card>
 
-              <a-alert type="info">
-                插件的管理（列表 / 安装 / 触发器授权 / 运行历史）已移至独立的插件中心：
-                <b>托盘菜单 🧩 插件 → 🏠 插件中心</b>。
-              </a-alert>
+              <a-collapse v-model:active-key="opsPanes" class="ops-collapse" :bordered="false">
+                <!-- ① 导入插件 -->
+                <a-collapse-item key="import" header="📦 导入插件">
+                  <div class="pc-add-row">
+                    <a-radio-group v-model="plugImportMode" type="button" size="small">
+                      <a-radio value="dir">目录</a-radio>
+                      <a-radio value="zip">zip 包</a-radio>
+                    </a-radio-group>
+                    <a-input
+                      v-model="plugImportPath"
+                      :placeholder="plugImportMode === 'zip' ? '本机 zip 包路径，或点右侧选择' : '插件目录路径（含 plugin.yaml），默认为内置插件目录'"
+                      allow-clear
+                      @press-enter="plugOnImportPreview"
+                    />
+                    <a-button @click="plugOnImportPick">
+                      {{ plugImportMode === 'zip' ? '选择文件' : '选择目录' }}
+                    </a-button>
+                    <a-button type="outline" :loading="plugImportPreviewing" @click="plugOnImportPreview">
+                      预览校验
+                    </a-button>
+                    <a-button
+                      type="primary"
+                      :loading="plugImportInstalling"
+                      :disabled="!plugImportPreview?.ok"
+                      @click="plugOnImportInstall"
+                    >
+                      安装
+                    </a-button>
+                  </div>
+
+                  <div v-if="plugImportPreview" class="pc-preview" :class="{ ok: plugImportPreview.ok, bad: !plugImportPreview.ok }">
+                    <div class="pc-preview-head">
+                      <a-tag :color="plugImportPreview.ok ? 'green' : 'red'" size="small">
+                        {{ plugImportPreview.ok ? '校验通过，可以安装' : '校验失败' }}
+                      </a-tag>
+                      <span class="pc-muted">{{ plugImportPreview.path }}</span>
+                    </div>
+                    <a-descriptions v-if="plugImportPreview.ok && plugImportPreview.preview" :column="2" size="small" bordered>
+                      <a-descriptions-item label="名称">{{ plugImportPreview.preview.name }}</a-descriptions-item>
+                      <a-descriptions-item label="ID">{{ plugImportPreview.preview.id }}</a-descriptions-item>
+                      <a-descriptions-item label="类型">{{ plugImportPreview.preview.type }}</a-descriptions-item>
+                      <a-descriptions-item label="版本">{{ plugImportPreview.preview.version }}</a-descriptions-item>
+                      <a-descriptions-item label="说明" :span="2">
+                        {{ plugImportPreview.preview.description || '—' }}
+                      </a-descriptions-item>
+                    </a-descriptions>
+                    <ul v-if="plugImportPreview.errors?.length" class="pc-err-list">
+                      <li v-for="(e, i) in plugImportPreview.errors" :key="i">{{ e }}</li>
+                    </ul>
+                  </div>
+
+                  <a-collapse :bordered="false" class="pc-advanced">
+                    <a-collapse-item key="adv" header="高级：用户插件目录（安装目标）">
+                      <div class="pc-add-row">
+                        <a-input v-model="opsUserDir" :placeholder="opsUserDirHint || '留空 = 数据目录/plugins'" allow-clear />
+                        <a-button :loading="opsDirSaving" @click="onSaveOpsUserDir">保存目录</a-button>
+                      </div>
+                    </a-collapse-item>
+                  </a-collapse>
+                </a-collapse-item>
+
+                <!-- ② 插件列表 -->
+                <a-collapse-item key="list">
+                  <template #header>
+                    <span class="ops-pane-title">📜 插件列表</span>
+                    <a-tag size="small" color="arcoblue">{{ opsItems.length }}</a-tag>
+                    <a-tag v-if="opsBusy" size="small" color="orange">运行中</a-tag>
+                  </template>
+                  <template #extra>
+                    <a-button size="mini" type="text" :loading="opsListLoading" @click.stop="refreshOpsPlugins">刷新</a-button>
+                  </template>
+
+                  <div class="plug-toolbar">
+                    <span class="plug-toolbar-k">排序</span>
+                    <a-radio-group v-model="opsSortKey" type="button" size="small">
+                      <a-radio value="updated_at">更新时间</a-radio>
+                      <a-radio value="name">名称</a-radio>
+                      <a-radio value="category">分类</a-radio>
+                    </a-radio-group>
+                    <a-radio-group v-model="opsSortDir" type="button" size="small">
+                      <a-radio value="asc">正序</a-radio>
+                      <a-radio value="desc">倒序</a-radio>
+                    </a-radio-group>
+                  </div>
+
+                  <div v-if="sortedOpsItems.length" class="plug-scroll">
+                    <div v-for="p in sortedOpsItems" :key="p.id" class="plug-item">
+                      <div class="plug-main">
+                        <div class="plug-head">
+                          <span class="plug-name">{{ p.name }}</span>
+                          <a-tag size="small" :color="p.type === 'service' ? 'orangered' : 'green'">
+                            {{ p.type === 'service' ? '服务' : '脚本' }}
+                          </a-tag>
+                          <a-tag size="small" color="gray">v{{ p.version }}</a-tag>
+                          <a-tag v-if="p.category" size="small" color="cyan">{{ p.category }}</a-tag>
+                          <a-tag v-if="p.write_back" size="small" color="purple">结果写回任务</a-tag>
+                          <a-tag v-if="p.updated_at" size="small" class="plug-time">
+                            {{ p.updated_at?.replace('T', ' ') }}
+                          </a-tag>
+                        </div>
+                        <div v-if="p.description" class="plug-desc">{{ p.description }}</div>
+                        <div v-if="p.triggers?.length" class="plug-triggers">
+                          <span class="plug-trig-k">自动触发：</span>
+                          <a-tag v-for="(t, i) in p.triggers" :key="i" size="small" color="arcoblue">
+                            {{ t }}
+                          </a-tag>
+                          <a-tag v-if="p.trigger_override" size="small" color="orange">已自定义</a-tag>
+                        </div>
+                        <div class="plug-ops">
+                          <div v-if="p.triggers?.length || p.manifest_triggers?.length" class="plug-auth">
+                            <a-switch
+                              size="small"
+                              :model-value="p.authorized === true"
+                              :disabled="!opsListEnabled || opsAuthBusy === p.id"
+                              @change="(v) => onOpsAuthorize(p, v)"
+                            />
+                            <span class="plug-auth-text">
+                              {{ p.authorized === true ? '已授权' : p.authorized === false ? '已拒绝' : '未授权' }}
+                            </span>
+                          </div>
+                          <template v-if="p.type === 'service'">
+                            <a-button size="mini" :disabled="!opsListEnabled || opsBusy" @click="onOpsServiceCmd(p, 'start')">▶ 启动</a-button>
+                            <a-button size="mini" :disabled="!opsListEnabled || opsBusy" @click="onOpsServiceCmd(p, 'stop')">⏹ 停止</a-button>
+                            <a-button size="mini" :disabled="!opsListEnabled" @click="onOpsServiceCmd(p, 'status')">ℹ 状态</a-button>
+                          </template>
+                          <a-button
+                            v-else
+                            size="mini"
+                            type="primary"
+                            :disabled="!opsListEnabled || opsBusy"
+                            :loading="opsRunBusy === p.id"
+                            @click="onOpsRun(p)"
+                          >
+                            ▶ 运行
+                          </a-button>
+                        </div>
+                      </div>
+
+                      <!-- 每插件展开：调度规则 / 参数预设 -->
+                      <a-collapse :bordered="false" class="plug-edit" :key="p.id">
+                        <a-collapse-item key="edit" header="调度规则 / 参数预设">
+                          <div class="plug-edit-sec">
+                            <div class="plug-edit-head">
+                              <b>调度规则</b>
+                              <a-tag v-if="p.trigger_override" size="small" color="orange">自定义中</a-tag>
+                              <span class="pc-muted">（保存后即生效，不改动插件文件）</span>
+                            </div>
+                            <div v-for="(row, i) in triggerDrafts[p.id]" :key="i" class="trig-row">
+                              <a-select v-model="row.type" size="small" style="width: 104px">
+                                <a-option value="daily">每日</a-option>
+                                <a-option value="interval">间隔</a-option>
+                                <a-option value="cron">cron</a-option>
+                                <a-option value="event">事件</a-option>
+                              </a-select>
+                              <a-input v-if="row.type === 'daily'" v-model="row.time" size="small" placeholder="HH:MM" style="width: 110px" />
+                              <a-input-number v-else-if="row.type === 'interval'" v-model="row.minutes" size="small" :min="1" :max="1440" placeholder="分钟" style="width: 130px" />
+                              <a-input v-else-if="row.type === 'cron'" v-model="row.expr" size="small" placeholder="*/15 9-17 * * 1-5" style="width: 220px" />
+                              <a-select v-else v-model="row.event" size="small" style="width: 130px">
+                                <a-option value="task_done">任务完成</a-option>
+                                <a-option value="pomodoro_end">番茄结束</a-option>
+                                <a-option value="startup">启动时</a-option>
+                              </a-select>
+                              <a-button size="mini" type="text" status="danger" @click="triggerDrafts[p.id].splice(i, 1)">删除</a-button>
+                            </div>
+                            <div class="trig-actions">
+                              <a-button size="small" @click="addTriggerRow(p)">＋ 加一条</a-button>
+                              <a-button size="small" type="primary" :loading="opsRuleSaving === p.id" @click="saveTriggerRules(p)">保存规则</a-button>
+                              <a-button v-if="p.trigger_override" size="small" status="warning" @click="resetTriggerRules(p)">恢复默认</a-button>
+                            </div>
+                            <div v-if="p.manifest_triggers?.length" class="pc-muted plug-manifest">
+                              manifest 默认：{{ p.manifest_triggers.map(trigLabel).join('；') }}
+                            </div>
+                          </div>
+
+                          <div v-if="p.params?.length" class="plug-edit-sec">
+                            <div class="plug-edit-head">
+                              <b>参数预设</b>
+                              <span class="pc-muted">（运行时预填，可临时修改）</span>
+                            </div>
+                            <div v-for="prm in p.params" :key="prm.name" class="preset-row">
+                              <span class="preset-k" :title="prm.description || prm.name">
+                                {{ prm.description || prm.name }}
+                              </span>
+                              <a-input v-model="presetDrafts[p.id][prm.name]" size="small" style="width: 260px" :placeholder="`缺省 ${prm.default || '空'}`" />
+                            </div>
+                            <div class="trig-actions">
+                              <a-button size="small" type="primary" :loading="opsPresetSaving === p.id" @click="saveParamPreset(p)">保存预设</a-button>
+                            </div>
+                          </div>
+                        </a-collapse-item>
+                      </a-collapse>
+                    </div>
+                  </div>
+                  <a-empty v-else description="暂无已加载插件，可在上方导入" />
+
+                  <div v-if="opsFailures.length" class="plug-fail-box">
+                    <div class="plug-fail-title">校验失败（未加载）</div>
+                    <div v-for="(f, i) in opsFailures" :key="i" class="plug-fail-item">
+                      <code>{{ f.path }}</code>
+                      <ul>
+                        <li v-for="(e, j) in f.errors" :key="j">{{ e }}</li>
+                      </ul>
+                    </div>
+                  </div>
+                </a-collapse-item>
+
+                <!-- ③ 运行历史 -->
+                <a-collapse-item key="runs">
+                  <template #header>
+                    <span class="ops-pane-title">🗂 运行历史</span>
+                    <a-tag size="small">{{ opsRuns.length }}</a-tag>
+                  </template>
+                  <template #extra>
+                    <a-button size="mini" type="text" :loading="opsRunsLoading" @click.stop="loadOpsRuns">刷新</a-button>
+                  </template>
+                  <a-table
+                    v-if="opsRuns.length"
+                    :data="opsRuns"
+                    :columns="opsRunColumns"
+                    :pagination="opsRuns.length > 10 ? { pageSize: 10 } : false"
+                    size="small"
+                    :row-key="(r) => r.run_id || r.time"
+                    :bordered="{ cell: true }"
+                    @row-click="onOpsRunRow"
+                    class="pc-runs"
+                  >
+                    <template #ok="{ record }">
+                      <a-tag size="small" :color="record.ok ? 'green' : 'red'">
+                        {{ record.ok ? '成功' : '失败' }}
+                      </a-tag>
+                    </template>
+                    <template #trigger="{ record }">
+                      {{ TRIGGER_LABEL[record.trigger] || record.trigger || '—' }}
+                    </template>
+                    <template #runId="{ record }">
+                      <code class="plug-runid">{{ record.run_id || record.time }}</code>
+                    </template>
+                  </a-table>
+                  <a-empty v-else description="暂无运行记录" />
+                </a-collapse-item>
+              </a-collapse>
             </div>
           </template>
 
@@ -671,6 +908,19 @@
       <a-button @click="cancelHost">取消</a-button>
       <a-button v-if="mainKey !== 'history'" type="primary" :loading="saving" @click="onSave">💾 保存设置</a-button>
     </div>
+
+    <a-drawer
+      v-model:visible="opsLogVisible"
+      :title="opsLogTitle"
+      width="560"
+      unmount-on-close
+      :footer="false"
+    >
+      <a-spin :loading="opsLogLoading" style="width: 100%">
+        <pre class="pc-log">{{ opsLogContent }}<template v-if="opsLogTruncated">
+（日志超长已截断）</template></pre>
+      </a-spin>
+    </a-drawer>
   </div>
 </template>
 
@@ -678,18 +928,27 @@
 import { computed, inject, onMounted, reactive, ref } from 'vue'
 import { Message, Modal } from '@arco-design/web-vue'
 import {
+  authorizePlugin,
   cancelHost,
   closeHost,
   deleteBackup,
   exportBackup,
+  getPluginRunLog,
   getSettings,
   getSystemStatus,
   importBackup,
+  installPluginPath,
+  installPluginZip,
   listBackups,
+  listPluginRuns,
+  listPlugins,
   packArchive,
   pickPath,
+  previewPluginZip,
+  runPlugin,
   saveSettings,
   setAutostart,
+  validatePluginPath,
 } from '@/api/client'
 import { applyAppearance, applyTheme } from '@/theme'
 import JobEditor from '@/components/JobEditor.vue'
@@ -728,7 +987,425 @@ const importPassword = ref('')
 const saveAsLoading = ref(false)
 const savedBackupDir = ref('')
 
-// —— 插件：v2 仅保留总开关/运行前确认，管理在独立插件中心 ——
+// —— 插件（v2.1 管理回到设置页：导入 / 列表 / 运行历史 三大块） ——
+const opsPanes = ref(['import', 'list']) // 前两块默认展开
+const opsLoaded = ref(false)
+const opsListLoading = ref(false)
+const opsListEnabled = ref(false)
+const opsBusy = ref(false)
+const opsItems = ref([])
+const opsFailures = ref([])
+const opsRunBusy = ref('')
+const opsAuthBusy = ref('')
+const opsRuleSaving = ref('')
+const opsPresetSaving = ref('')
+
+// 导入块：zip/目录切换 + 预览校验门 + 高级（用户目录）
+const plugImportMode = ref('dir')
+const plugImportPath = ref('')
+const plugImportPreviewing = ref(false)
+const plugImportInstalling = ref(false)
+const plugImportPreview = ref(null)
+const opsUserDir = ref('')
+const opsUserDirHint = ref('')
+const opsDirSaving = ref(false)
+
+// 列表块：排序 + 每插件展开的调度规则/参数预设草稿
+const opsSortKey = ref('updated_at')
+const opsSortDir = ref('desc')
+const triggerDrafts = reactive({})
+const presetDrafts = reactive({})
+
+// 历史块
+const opsRuns = ref([])
+const opsRunsLoading = ref(false)
+const opsLogVisible = ref(false)
+const opsLogLoading = ref(false)
+const opsLogTitle = ref('')
+const opsLogContent = ref('')
+const opsLogTruncated = ref(false)
+
+const TRIGGER_LABEL = {
+  manual: '手动',
+  daily: '每日',
+  interval: '间隔',
+  cron: 'cron',
+  task_done: '任务完成',
+  pomodoro_end: '番茄结束',
+  startup: '启动时',
+}
+
+const opsRunColumns = [
+  { title: '运行ID', slotName: 'runId', width: 150 },
+  { title: '插件', dataIndex: 'name', width: 110 },
+  { title: '触发', slotName: 'trigger', width: 82 },
+  { title: '开始', dataIndex: 'started_at', width: 138 },
+  { title: '结束', dataIndex: 'time', width: 138 },
+  { title: '结果', slotName: 'ok', width: 68 },
+  { title: '摘要', dataIndex: 'summary', ellipsis: true, tooltip: true },
+]
+
+function trigLabel(t) {
+  if (!t) return ''
+  if (t.type === 'daily') return `每日 ${t.time}`
+  if (t.type === 'interval') return `每 ${t.minutes} 分钟`
+  if (t.type === 'cron') return `cron ${t.expr}`
+  return `事件: ${TRIGGER_LABEL[t.event] || t.event}`
+}
+
+const sortedOpsItems = computed(() => {
+  const key = opsSortKey.value
+  const dir = opsSortDir.value === 'asc' ? 1 : -1
+  const val = (p) => {
+    if (key === 'name') return p.name || ''
+    if (key === 'category') return p.category || '未分类'
+    return p.updated_at || ''
+  }
+  return [...opsItems.value].sort((a, b) => {
+    const va = val(a)
+    const vb = val(b)
+    const c = key === 'name' || key === 'category'
+      ? String(va).localeCompare(String(vb), 'zh')
+      : va < vb ? -1 : va > vb ? 1 : 0
+    return c * dir
+  })
+})
+
+function applyOpsList(data) {
+  opsListEnabled.value = !!data.enabled
+  opsBusy.value = !!data.busy
+  opsItems.value = data.items || []
+  opsFailures.value = data.failures || []
+  if (data.user_dir) opsUserDirHint.value = data.user_dir
+  // 草稿基线：覆盖层优先，回落 manifest 声明
+  for (const p of opsItems.value) {
+    syncTriggerDraft(p)
+    syncPresetDraft(p)
+  }
+}
+
+function syncTriggerDraft(p) {
+  const ov = form.ops.trigger_overrides?.[p.id]
+  const base = Array.isArray(ov)
+    ? ov
+    : (p.manifest_triggers || []).map((t) => ({
+        type: t.type,
+        time: t.time ?? '',
+        minutes: t.minutes ?? null,
+        expr: t.expr ?? '',
+        event: t.event ?? undefined,
+      }))
+  triggerDrafts[p.id] = base.map((t) => ({
+    type: t.type,
+    time: t.time ?? '',
+    minutes: t.minutes ?? null,
+    expr: t.expr ?? '',
+    event: t.event ?? undefined,
+  }))
+}
+
+function syncPresetDraft(p) {
+  const saved = form.ops.param_presets?.[p.id] || {}
+  presetDrafts[p.id] = {}
+  for (const prm of p.params || []) {
+    presetDrafts[p.id][prm.name] = saved[prm.name] ?? prm.default ?? ''
+  }
+}
+
+async function refreshOpsPlugins() {
+  opsListLoading.value = true
+  try {
+    applyOpsList(await listPlugins())
+  } catch (e) {
+    Message.warning(e?.response?.data?.error || e?.message || '加载插件列表失败')
+  } finally {
+    opsListLoading.value = false
+  }
+}
+
+async function loadOpsPage() {
+  if (!opsLoaded.value) {
+    opsLoaded.value = true
+    await refreshOpsPlugins()
+    // 导入路径默认 = 内置插件目录
+    if (!plugImportPath.value) {
+      try {
+        const data = await listPlugins()
+        if (data.bundled_dir) plugImportPath.value = data.bundled_dir
+      } catch { /* 忽略：仅默认值 */ }
+    }
+    await loadOpsRuns()
+  }
+}
+
+async function loadOpsRuns() {
+  opsRunsLoading.value = true
+  try {
+    const data = await listPluginRuns(100)
+    opsRuns.value = (data.items || []).map((r) => ({
+      ...r,
+      started_at: r.started_at ? r.started_at.replace('T', ' ') : '',
+      time: r.time ? r.time.replace('T', ' ') : '',
+    }))
+  } catch (e) {
+    opsRuns.value = []
+    Message.warning(e?.response?.data?.error || e?.message || '加载运行历史失败')
+  } finally {
+    opsRunsLoading.value = false
+  }
+}
+
+/** ops 局部保存惯例：getSettings → 合并 → saveSettings（后端 ops 分支整体替换） */
+async function saveOpsPatch(patch) {
+  const s = await getSettings()
+  const ops = { ...(s?.ops || {}), ...patch }
+  await saveSettings({ ops })
+  Object.assign(form.ops, patch)
+}
+
+async function onOpsAuthorize(p, allow) {
+  opsAuthBusy.value = p.id
+  try {
+    await authorizePlugin(p.id, !!allow)
+    p.authorized = !!allow
+    Message.success(allow ? '已授权自动运行' : '已拒绝自动运行（不再询问）')
+  } catch (e) {
+    Message.error(e?.response?.data?.error || e?.message || '设置授权失败')
+  } finally {
+    opsAuthBusy.value = ''
+  }
+}
+
+function onOpsRun(p) {
+  Modal.confirm({
+    draggable: true,
+    title: '运行脚本',
+    content: `确定运行「${p.name}」？进度将显示在托盘顶栏，结果可在运行历史查看。`,
+    okText: '运行',
+    async onOk() {
+      opsRunBusy.value = p.id
+      try {
+        const body = {}
+        if (p.params?.length) {
+          body.params = { ...(presetDrafts[p.id] || {}) }
+        }
+        await runPlugin(p.id, body)
+        Message.success('已开始运行，完成后可在运行历史查看')
+      } catch (e) {
+        Message.error(e?.response?.data?.error || e?.message || '运行失败')
+      } finally {
+        opsRunBusy.value = ''
+      }
+    },
+  })
+}
+
+async function onOpsServiceCmd(p, action) {
+  try {
+    const data = await runPlugin(p.id, { action })
+    Message.info(`${p.name}：${data.detail ?? action}`)
+    if (action === 'status') return
+    await refreshOpsPlugins()
+  } catch (e) {
+    Message.error(e?.response?.data?.error || e?.message || '服务命令失败')
+  }
+}
+
+async function plugOnImportPick() {
+  const kind = plugImportMode.value === 'zip' ? 'file' : 'dir'
+  const r = await pickPath(kind, {
+    title: plugImportMode.value === 'zip' ? '选择插件 zip 包' : '选择插件目录',
+  })
+  if (r.cancelled || !r.path) {
+    if (!r.id) Message.info('仅桌面端支持路径选择')
+    return
+  }
+  plugImportPath.value = r.path
+  plugImportPreview.value = null
+}
+
+async function plugOnImportPreview() {
+  const path = plugImportPath.value.trim()
+  if (!path) {
+    Message.warning(plugImportMode.value === 'zip' ? '请填写 zip 包路径' : '请填写插件目录路径')
+    return
+  }
+  plugImportPreviewing.value = true
+  plugImportPreview.value = null
+  try {
+    const data = plugImportMode.value === 'zip'
+      ? await previewPluginZip(path)
+      : await validatePluginPath(path)
+    plugImportPreview.value = data
+    if (data.ok) Message.success('校验通过，可以安装')
+    else Message.error('校验未通过，见下方错误')
+  } catch (e) {
+    const err = e?.response?.data
+    plugImportPreview.value = {
+      ok: false,
+      errors: err?.errors || [err?.error || e?.message || '校验请求失败'],
+      preview: null,
+      path,
+    }
+  } finally {
+    plugImportPreviewing.value = false
+  }
+}
+
+async function plugOnImportInstall() {
+  const path = plugImportPath.value.trim()
+  if (!path || !plugImportPreview.value?.ok) {
+    Message.warning('请先预览校验并通过')
+    return
+  }
+  const doInstall = async (overwrite = false) => {
+    plugImportInstalling.value = true
+    try {
+      const data = plugImportMode.value === 'zip'
+        ? await installPluginZip(path, { overwrite })
+        : await installPluginPath(path, { overwrite })
+      Message.success(data.message || '安装成功')
+      if (data.plugins) applyOpsList(data.plugins)
+      else await refreshOpsPlugins()
+      plugImportPath.value = ''
+      plugImportPreview.value = null
+    } catch (e) {
+      onOpsInstallConflict(e, () => doInstall(true), '安装失败')
+    } finally {
+      plugImportInstalling.value = false
+    }
+  }
+  await doInstall(false)
+}
+
+/** 409 目标已存在 → 询问覆盖重装 */
+function onOpsInstallConflict(e, onOverwrite, fallback) {
+  const status = e?.response?.status
+  const err = e?.response?.data
+  if (status === 409) {
+    Modal.confirm({
+      draggable: true,
+      title: '目标已存在',
+      content: err?.error || '是否覆盖安装？',
+      okText: '覆盖',
+      onOk,
+    })
+  } else {
+    Message.error(err?.error || e?.message || fallback)
+  }
+}
+
+async function onSaveOpsUserDir() {
+  opsDirSaving.value = true
+  try {
+    await saveOpsPatch({ user_plugins_dir: opsUserDir.value.trim() })
+    Message.success('用户插件目录已保存')
+    await refreshOpsPlugins()
+  } catch (e) {
+    Message.error(e?.response?.data?.error || e?.message || '保存失败')
+  } finally {
+    opsDirSaving.value = false
+  }
+}
+
+function addTriggerRow(p) {
+  if (!triggerDrafts[p.id]) syncTriggerDraft(p)
+  triggerDrafts[p.id].push({ type: 'daily', time: '09:00', minutes: null, expr: '', event: undefined })
+}
+
+/** 草稿行 → 覆盖层 dict（只保留所选类型的字段，值钳制） */
+function draftToOverride(rows) {
+  return rows
+    .filter((r) => r.type)
+    .map((r) => {
+      if (r.type === 'daily') return { type: 'daily', time: (r.time || '').trim() }
+      if (r.type === 'interval') return { type: 'interval', minutes: Number(r.minutes) || 0 }
+      if (r.type === 'cron') return { type: 'cron', expr: (r.expr || '').trim() }
+      return { type: 'event', event: r.event }
+    })
+}
+
+async function saveTriggerRules(p) {
+  const rows = draftToOverride(triggerDrafts[p.id] || [])
+  // 前端简校验；后端解析失败会静默回落 manifest（不中断轮询）
+  for (const r of rows) {
+    if (r.type === 'daily' && !/^\d{1,2}:\d{2}$/.test(r.time)) {
+      Message.warning('每日规则的时间需为 HH:MM（如 09:30）')
+      return
+    }
+    if (r.type === 'interval' && !(r.minutes >= 1 && r.minutes <= 1440)) {
+      Message.warning('间隔规则的分钟需在 1-1440')
+      return
+    }
+    if (r.type === 'cron' && (r.expr.split(/\s+/).filter(Boolean).length !== 5)) {
+      Message.warning('cron 规则需为 5 字段表达式（分 时 日 月 周）')
+      return
+    }
+    if (r.type === 'event' && !r.event) {
+      Message.warning('事件规则需选择事件')
+      return
+    }
+  }
+  opsRuleSaving.value = p.id
+  try {
+    await saveOpsPatch({ trigger_overrides: { ...(form.ops.trigger_overrides || {}), [p.id]: rows } })
+    Message.success('调度规则已保存，即时生效')
+    await refreshOpsPlugins()
+  } catch (e) {
+    Message.error(e?.response?.data?.error || e?.message || '保存失败')
+  } finally {
+    opsRuleSaving.value = ''
+  }
+}
+
+async function resetTriggerRules(p) {
+  const ov = { ...(form.ops.trigger_overrides || {}) }
+  delete ov[p.id]
+  opsRuleSaving.value = p.id
+  try {
+    await saveOpsPatch({ trigger_overrides: ov })
+    Message.success('已恢复 manifest 默认调度规则')
+    await refreshOpsPlugins()
+  } catch (e) {
+    Message.error(e?.response?.data?.error || e?.message || '保存失败')
+  } finally {
+    opsRuleSaving.value = ''
+  }
+}
+
+async function saveParamPreset(p) {
+  opsPresetSaving.value = p.id
+  try {
+    await saveOpsPatch({
+      param_presets: { ...(form.ops.param_presets || {}), [p.id]: { ...(presetDrafts[p.id] || {}) } },
+    })
+    Message.success('参数预设已保存')
+  } catch (e) {
+    Message.error(e?.response?.data?.error || e?.message || '保存失败')
+  } finally {
+    opsPresetSaving.value = ''
+  }
+}
+
+async function onOpsRunRow(record) {
+  const file = (record.log || '').split('/').pop()
+  if (!file) return
+  opsLogVisible.value = true
+  opsLogTitle.value = `${record.name || record.id} · ${record.run_id || record.time || ''}`
+  opsLogLoading.value = true
+  opsLogContent.value = ''
+  opsLogTruncated.value = false
+  try {
+    const data = await getPluginRunLog(file)
+    opsLogContent.value = data.content || ''
+    opsLogTruncated.value = !!data.truncated
+  } catch (e) {
+    opsLogContent.value = e?.response?.data?.error || e?.message || '日志读取失败'
+  } finally {
+    opsLogLoading.value = false
+  }
+}
+
 
 const HOUR_OPTS = Array.from({ length: 24 }, (_, h) => ({
   label: `${String(h).padStart(2, '0')}:00`,
@@ -802,7 +1479,13 @@ function emptyForm() {
     quick_add: { default_category: '工作', default_priority: 'medium' },
     appearance: { theme: 'system', autostart: false, motion: 'full', shape: 'round', skin: 'neo' },
     backup: { dir: '', auto_enabled: false, interval_days: 1, keep: 7, trigger_hour: 9 },
-    ops: { enabled: false, user_plugins_dir: '', confirm_before_run: true },
+    ops: {
+      enabled: false,
+      user_plugins_dir: '',
+      confirm_before_run: true,
+      trigger_overrides: {},
+      param_presets: {},
+    },
   }
 }
 
@@ -930,6 +1613,7 @@ function shortKey(k) {
 function onMainNav(key) {
   mainKey.value = key
   if (key === 'backup') loadBackupPage()
+  if (key === 'ops') loadOpsPage()
 }
 
 function onThemePreview() {
@@ -1082,7 +1766,7 @@ async function onPickBackupFile() {
     if (!r.id) Message.info('仅桌面端支持文件选择')
     return
   }
-  importPath.value = r.path
+  plugImportPath.value = r.path
   importNeedsPassword.value = snapshots.value.some((s) => s.path === r.path && s.encrypted)
 }
 
@@ -1178,7 +1862,7 @@ function loadBackupPage() {
 
 /** 快照行「恢复」：回填路径 + 密码态，走 onImportBackup 的确认流程 */
 function restoreSnapshot(record) {
-  importPath.value = record.path
+  plugImportPath.value = record.path
   importNeedsPassword.value = !!record.encrypted
   importPassword.value = ''
   onImportBackup()
@@ -1287,6 +1971,9 @@ function normalizeLoaded(s) {
   savedBackupDir.value = bk.dir
   // 插件：兜底合并
   form.ops = { ...emptyForm().ops, ...(s.ops || {}) }
+  if (!form.ops.trigger_overrides) form.ops.trigger_overrides = {}
+  if (!form.ops.param_presets) form.ops.param_presets = {}
+  opsUserDir.value = form.ops.user_plugins_dir || ''
   if (!form.polling) form.polling = emptyForm().polling
   if (!form.pomodoro) form.pomodoro = emptyForm().pomodoro
   if (!form.pomodoro.tray_display) form.pomodoro.tray_display = 'countdown'
@@ -1712,7 +2399,7 @@ body.zt-skin-neo .nav-main {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  max-width: 760px;
+  max-width: 880px;
   padding-bottom: 8px;
 }
 .plugin-card {
@@ -1760,6 +2447,249 @@ body.zt-skin-neo .nav-main {
   margin-top: 10px;
   padding-top: 10px;
   border-top: 1px solid var(--color-border-2);
+}
+/* —— 三大折叠块 —— */
+.ops-collapse {
+  background: var(--color-fill-1, #f7f8fa);
+  border-radius: 10px;
+}
+.ops-collapse :deep(.arco-collapse-item) {
+  border: none;
+}
+.ops-collapse :deep(.arco-collapse-item-content-box) {
+  padding-top: 4px;
+}
+.ops-pane-title {
+  font-weight: 600;
+  margin-right: 8px;
+}
+/* —— 导入块 —— */
+.pc-hint {
+  margin: 0 0 10px;
+  font-size: 12.5px;
+  color: var(--color-text-3);
+  line-height: 1.5;
+}
+.pc-muted {
+  color: var(--color-text-3);
+  font-size: 12px;
+}
+.pc-add-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.pc-add-row .arco-input-wrapper {
+  flex: 1;
+  min-width: 220px;
+}
+.pc-preview {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border-2);
+  background: var(--color-bg-2, #fff);
+}
+.pc-preview.ok {
+  border-color: rgb(var(--green-6, 0 180 42));
+}
+.pc-preview.bad {
+  border-color: rgb(var(--red-6, 245 63 63));
+}
+.pc-preview-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.pc-err-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: rgb(var(--red-6, 245 63 63));
+  font-size: 12px;
+}
+.pc-advanced {
+  margin-top: 12px;
+  border-top: 1px dashed var(--color-border-2);
+}
+.pc-advanced :deep(.arco-collapse-item) {
+  border: none;
+}
+.pc-advanced :deep(.arco-collapse-item-header) {
+  padding-left: 0;
+}
+.pc-advanced :deep(.arco-collapse-item-content-box) {
+  padding-left: 0;
+}
+/* —— 列表块 —— */
+.plug-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+.plug-toolbar-k {
+  font-size: 12.5px;
+  color: var(--color-text-3);
+}
+.plug-scroll {
+  max-height: 460px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.plug-item {
+  padding: 12px 2px;
+  border-bottom: 1px solid var(--color-border-2);
+}
+.plug-item:last-child {
+  border-bottom: none;
+}
+.plug-main {
+  min-width: 0;
+}
+.plug-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.plug-name {
+  font-weight: 600;
+  font-size: 14px;
+}
+.plug-time {
+  font-size: 11px;
+  opacity: 0.75;
+}
+.plug-desc {
+  margin-top: 4px;
+  font-size: 12.5px;
+  color: var(--color-text-3);
+  line-height: 1.45;
+}
+.plug-triggers {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.plug-trig-k {
+  font-size: 12px;
+  color: var(--color-text-3);
+}
+.plug-ops {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.plug-auth {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 8px;
+}
+.plug-auth-text {
+  font-size: 12px;
+  color: var(--color-text-3);
+  white-space: nowrap;
+}
+.plug-edit {
+  margin-top: 10px;
+  background: var(--color-fill-1, #f7f8fa);
+  border-radius: 8px;
+}
+.plug-edit :deep(.arco-collapse-item) {
+  border: none;
+}
+.plug-edit :deep(.arco-collapse-item-header) {
+  padding: 6px 12px;
+}
+.plug-edit :deep(.arco-collapse-item-content-box) {
+  padding: 4px 12px 12px;
+}
+.plug-edit-sec {
+  margin-top: 8px;
+}
+.plug-edit-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.trig-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.trig-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+.plug-manifest {
+  margin-top: 8px;
+}
+.preset-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.preset-k {
+  min-width: 120px;
+  font-size: 12.5px;
+  color: var(--color-text-2);
+}
+/* —— 校验失败 —— */
+.plug-fail-box {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--color-danger-light-1, #ffece8);
+  font-size: 12px;
+}
+.plug-fail-title {
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: var(--color-text-1);
+}
+.plug-fail-item {
+  margin-bottom: 8px;
+}
+.plug-fail-item ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  color: var(--color-text-2);
+}
+.plug-fail-item code {
+  font-size: 11px;
+  word-break: break-all;
+}
+/* —— 运行历史 / 日志 —— */
+.pc-runs :deep(.arco-table-tr) {
+  cursor: pointer;
+}
+.plug-runid {
+  font-size: 11px;
+  word-break: break-all;
+}
+.pc-log {
+  margin: 0;
+  padding: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-family: var(--font-family-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
 }
 
 /* —— 备份页 —— */
