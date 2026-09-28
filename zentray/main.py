@@ -44,11 +44,28 @@ class AppRuntime(QObject):
         self.nightly = None
         self.reminder_worker = None
         self.watcher = None
+        self.plugin_trigger_worker = None
         self.overlay = None
         self.hotkey = None
         # 聚合提醒窗状态：模态打开期间新到期排队，关窗后统一处理
         self.reminder_modal_open = False
         self.reminder_queue: list = []
+
+    def on_plugin_authorize(self, plugin_id: str, name: str) -> None:
+        """插件级一次性授权弹窗（triggers.authorize_requested → 主线程）。"""
+        from PySide6.QtWidgets import QMessageBox
+
+        from zentray.plugins import triggers
+
+        ret = QMessageBox.question(
+            None,
+            "允许插件自动运行",
+            f"插件「{name}」声明了自动触发器。\n"
+            f"允许它在触发条件满足时自动运行吗？\n"
+            f"（仅询问这一次；拒绝后可在插件页重新开启）",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        triggers.authorize(plugin_id, ret == QMessageBox.StandardButton.Yes)
 
     def on_quick_add(self) -> None:
         from zentray.ui.vue_commands import try_vue_quick_add
@@ -69,13 +86,46 @@ class AppRuntime(QObject):
 
     def shutdown(self) -> None:
         """退出前停掉所有 worker，避免 QThread 在运行中被析构导致 abort。"""
-        for worker in (self.reminder_worker, self.watcher, self.nightly):
+        for worker in (
+            self.reminder_worker,
+            self.watcher,
+            self.nightly,
+            self.plugin_trigger_worker,
+        ):
             if worker is None:
                 continue
             try:
                 worker.stop()
             except Exception:
                 logger.exception("停止 worker 失败")
+
+
+def _start_plugin_trigger_worker_if_needed(runtime: AppRuntime) -> None:
+    """插件总开关开启时启动定时触发 worker（事件触发不走 worker）。"""
+    from zentray.plugins import triggers
+
+    need = False
+    try:
+        from zentray.services.settings_manager import SettingsManager
+
+        need = bool(SettingsManager().ops.enabled)
+    except Exception:
+        pass
+
+    if need:
+        if runtime.plugin_trigger_worker is None or not (
+            runtime.plugin_trigger_worker.isRunning()
+        ):
+            from zentray.workers.plugin_trigger import PluginTriggerWorker
+
+            runtime.plugin_trigger_worker = PluginTriggerWorker()
+            runtime.plugin_trigger_worker.start()
+            logger.info("插件触发 worker 已启动")
+    else:
+        if runtime.plugin_trigger_worker and runtime.plugin_trigger_worker.isRunning():
+            runtime.plugin_trigger_worker.stop()
+            runtime.plugin_trigger_worker = None
+            logger.info("插件触发 worker 已停止")
 
 
 def _start_nightly_if_needed(runtime: AppRuntime, task_repo: TaskRepository) -> None:
@@ -292,6 +342,19 @@ def main():
     except Exception:
         logger.exception("Vue API 初始化失败，将使用原生对话框")
 
+    # 插件触发系统：依赖注入 + 授权弹窗信号（绑定方法，AutoConnection 回主线程）
+    try:
+        from zentray.plugins import triggers
+
+        triggers.configure(
+            loader=getattr(runtime.controller, "plugin_loader", None),
+            runtime=getattr(runtime.controller, "plugin_runtime", None),
+            pomodoro_service=getattr(runtime.controller, "pomodoro_service", None),
+        )
+        triggers.signals().authorize_requested.connect(runtime.on_plugin_authorize)
+    except Exception:
+        logger.exception("插件触发系统初始化失败")
+
     def _on_activate_existing():
         """再次点击桌面图标：唤醒顶栏显示并打开任务列表界面。"""
         try:
@@ -314,6 +377,7 @@ def main():
         original_apply()
         task_repo = injector.get(TaskRepository)
         _start_nightly_if_needed(runtime, task_repo)
+        _start_plugin_trigger_worker_if_needed(runtime)
 
     runtime.controller.apply_settings = apply_settings_with_workers
 
@@ -338,6 +402,15 @@ def main():
     runtime.watcher.start()
 
     _start_nightly_if_needed(runtime, task_repo)
+    _start_plugin_trigger_worker_if_needed(runtime)
+
+    # 启动事件（startup 触发器）：worker 与插件系统就绪后派发一次
+    try:
+        from zentray.plugins import triggers
+
+        triggers.dispatch_event("startup")
+    except Exception:
+        logger.exception("startup 插件事件分发失败")
 
     runtime.reminder_worker = ReminderWorker(task_repo)
     runtime.reminder_worker.reminder_due.connect(runtime.on_reminder_due)

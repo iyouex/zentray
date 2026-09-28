@@ -155,11 +155,13 @@ class BackupSettings:
 
 @dataclass
 class OpsSettings:
-    """插件运行时设置（settings.json 字段名 ops 保持兼容）。"""
+    """插件运行时设置（settings.json 字段名 ops 保持兼容）。
+
+    v2 起单一总开关：内置/用户目录恒扫描，不再区分（旧 settings.json
+    中的 load_bundled/load_user 残键读取时忽略，零迁移）。
+    """
 
     enabled: bool = False
-    load_bundled: bool = True
-    load_user: bool = True
     # 空字符串表示使用默认 DATA_DIR/plugins
     user_plugins_dir: str = ""
     confirm_before_run: bool = True
@@ -575,8 +577,6 @@ class SettingsManager:
             o = data["ops"] or {}
             self._settings.ops = OpsSettings(
                 enabled=bool(o.get("enabled", False)),
-                load_bundled=bool(o.get("load_bundled", True)),
-                load_user=bool(o.get("load_user", True)),
                 user_plugins_dir=str(o.get("user_plugins_dir") or ""),
                 confirm_before_run=bool(o.get("confirm_before_run", True)),
             )

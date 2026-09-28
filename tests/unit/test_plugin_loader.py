@@ -8,7 +8,7 @@ FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "plugins"
 def test_scan_loads_valid_only(tmp_path):
     # 把 fixtures 当 user 目录的父：扫描 fixtures 本身
     loader = PluginLoader()
-    plugins = loader.scan(user_dir=FIXTURES, load_bundled=False, load_user=True)
+    plugins = loader.scan(user_dir=FIXTURES)
     ids = {p.manifest.id for p in plugins}
     assert "sample-script" in ids
     assert "sample-service" in ids
@@ -38,12 +38,7 @@ entry: run.sh
         run.chmod(0o755)
 
     loader = PluginLoader()
-    loader.scan(
-        bundled_dir=bundled,
-        user_dir=user,
-        load_bundled=True,
-        load_user=True,
-    )
+    loader.scan(bundled_dir=bundled, user_dir=user)
     p = loader.get("sample-script")
     assert p is not None
     assert p.manifest.name == "user-name"

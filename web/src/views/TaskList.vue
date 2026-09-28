@@ -658,10 +658,10 @@ async function onRunPlugin() {
       okText: '运行',
       async onOk() {
         try {
-          const body = p?.type === 'service' ? { action: 'start' } : {}
+          const body = p?.type === 'service' ? { action: 'start' } : { task_id: t.id }
           await runPlugin(t.plugin_id, body)
           Message.success(
-            p?.type === 'service' ? '已发送服务命令' : '插件已开始运行，请看托盘进度',
+            p?.type === 'service' ? '已发送服务命令' : '插件已开始运行，可在插件中心查看历史',
           )
         } catch (e) {
           Message.error(e?.response?.data?.error || e?.message || '运行失败')

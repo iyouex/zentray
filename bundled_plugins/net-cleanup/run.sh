@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ZenTray 示例插件：网络清理（Linux 桌面）
-# 协议：stdout 输出 PROGRESS / LOG / RESULT；退出码 0=成功
+# 协议：stdout 输出 PROGRESS / LOG / RESULT；退出码非 0 或 RESULT fail = 失败
 set -u
 # 不用 set -e：单步失败记日志后继续，最后汇总
 
@@ -87,11 +87,12 @@ log "本示例不自动断开 VPN/Clash；请按需在自定义插件中调用�
 log "扩展：复制本目录，在 run.sh 中增加你的脚本步骤即可。"
 
 if [[ "$FAIL" -gt 0 ]]; then
-  echo "RESULT fail 有 ${FAIL} 步失败或跳过（常见原因：无 root / 工具未装）"
-  # 部分步骤失败仍 exit 0，避免「示例清理」因权限在托盘显示为硬失败；
-  # 若你希望严格失败，改为 exit 1。
+  # v2 成败语义：RESULT fail 一票否决（即使 exit 0）。示例清理的部分
+  # 步骤因无 root 跳过属正常，故报 ok 并在 reason 说明；要严格失败
+  # 改 echo "RESULT fail ..." 即可。
+  echo "RESULT ok 完成，${FAIL} 步跳过（常见原因：无 root / 工具未装）"
   exit 0
 fi
 
-echo "RESULT ok"
+echo "RESULT ok 完成"
 exit 0

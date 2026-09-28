@@ -64,6 +64,7 @@ class TrayController(QObject):
         self.plugin_runtime.log_line.connect(self._on_ops_log)
         self.plugin_runtime.script_finished.connect(self._on_ops_finished)
         self.plugin_runtime.busy_changed.connect(self._on_ops_busy)
+        self.plugin_runtime.run_report.connect(self._on_ops_report)
 
         # 可靠轮播：重复定时器（挂到 self，避免被 GC）
         self.poll_timer = QTimer(self)
@@ -136,8 +137,6 @@ class TrayController(QObject):
         self._ops_plugins = self.plugin_loader.scan(
             bundled_dir=bundled if bundled.is_dir() else None,
             user_dir=user,
-            load_bundled=ops.load_bundled,
-            load_user=ops.load_user,
         )
         logger.info(
             "插件已加载 %s 个（失败 %s）",
@@ -296,6 +295,12 @@ class TrayController(QObject):
         self._carousel_started = True
         self.update_display(update_menu=True)
         self.start_rotation()
+        try:
+            from zentray.plugins import triggers
+
+            triggers.dispatch_event("pomodoro_end")
+        except Exception:
+            logger.exception("pomodoro_end 插件事件分发失败")
 
     # ==========================================
     # 插件脚本生命周期（信号槽，主线程）
@@ -318,11 +323,17 @@ class TrayController(QObject):
     def _on_ops_finished(self, plugin_id: str, success: bool, summary: str) -> None:
         self._ops_active = False
         self._ops_tray_text = ""
-        name = plugin_id
-        plug = self.plugin_loader.get(plugin_id)
-        if plug:
-            name = plug.manifest.name
-        status = "执行成功" if success else f"执行失败: {summary}"
+        self._carousel_started = True
+        self.update_display(update_menu=True)
+        self.start_rotation()
+
+    def _on_ops_report(self, report: dict) -> None:
+        """运行报告（run_report 信号，主线程）：通知 + activity log + 可选写回任务。"""
+        plugin_id = report.get("id", "")
+        ok = bool(report.get("ok"))
+        summary = report.get("summary", "")
+        name = report.get("name") or plugin_id
+        status = "执行成功" if ok else f"执行失败: {summary}"
         self.renderer.show_notification(f"脚本: {name}", status[:120])
         try:
             from zentray.services.activity_log import log_event
@@ -332,13 +343,60 @@ class TrayController(QObject):
                 "plugin_run",
                 title=name,
                 detail=summary,
-                meta={"id": plugin_id, "ok": success},
+                meta={
+                    "id": plugin_id,
+                    "ok": ok,
+                    "log": report.get("log", ""),
+                    "trigger": report.get("trigger", ""),
+                    "task_id": report.get("task_id", ""),
+                },
             )
         except Exception:
             pass
-        self._carousel_started = True
-        self.update_display(update_menu=True)
-        self.start_rotation()
+        self._write_back_result(report, name)
+
+    def _write_back_result(self, report: dict, plugin_name: str) -> None:
+        """manifest write_back 开启且有任务上下文时，把 RESULT 文本写回任务。"""
+        result_text = (report.get("result_text") or "").strip()
+        task_id = report.get("task_id") or ""
+        if not result_text or not task_id:
+            return
+        try:
+            plug = self.plugin_loader.get(report.get("id", ""))
+            if plug is None or not plug.manifest.write_back:
+                return
+
+            from datetime import datetime as _dt
+
+            stamp = _dt.now().strftime("%H:%M")
+            line = f"\n[插件 {plugin_name} {stamp}] {result_text}"
+            task = self.task_service.find_task(task_id)
+            if task is not None:
+                self.task_service.task_repo.mutate_all(
+                    lambda tasks: self._append_task_details(tasks, task_id, line)
+                )
+            else:
+                # 任务已归档（task_done 触发场景）：追加到当日归档日志
+                from zentray.config import ARCHIVE_DIR
+                from zentray.core.file_io import append_text_line
+
+                archive_file = (
+                    ARCHIVE_DIR / f"{_dt.now().strftime('%Y-%m-%d')}.log"
+                )
+                ts = _dt.now().strftime("%Y-%m-%d %H:%M:%S")
+                append_text_line(
+                    archive_file, f"[{ts}] [插件: {plugin_name}] {result_text}\n"
+                )
+        except Exception:
+            logger.exception("插件结果写回失败")
+
+    @staticmethod
+    def _append_task_details(tasks, task_id: str, line: str) -> bool:
+        for t in tasks:
+            if t.id == task_id:
+                t.details = (t.details or "") + line
+                return True
+        return False
 
     def _on_about_to_quit(self) -> None:
         try:

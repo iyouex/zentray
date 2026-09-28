@@ -51,7 +51,8 @@ def parse_stdout_line(line: str) -> ParsedLine:
     if m:
         ok = m.group(1).lower() == "ok"
         reason = (m.group(2) or "").strip()
-        text = "成功" if ok else (reason or "失败")
+        # 保留 reason（v2：RESULT 文本进 summary/写回）；无 reason 时用默认词
+        text = reason or ("成功" if ok else "失败")
         return ParsedLine(kind="result", text=text, result_ok=ok)
 
     m = _LOG_RE.match(s.strip())

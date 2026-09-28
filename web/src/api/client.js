@@ -289,8 +289,32 @@ export async function installPluginPath(path, { overwrite = false } = {}) {
   return data
 }
 
-/** 运行插件：script 传 {}；service 传 { action: 'start'|'stop'|'status' } */
+/** 运行插件：script 可带 { task_id }；service 传 { action: 'start'|'stop'|'status' } */
 export async function runPlugin(id, body = {}) {
   const { data } = await http.post(`/api/plugins/${id}/run`, body)
+  return data
+}
+
+/** 运行历史（时间倒序，limit 上限 200） */
+export async function listPluginRuns(limit = 50) {
+  const { data } = await http.get('/api/plugins/runs', { params: { limit } })
+  return data
+}
+
+/** 单次运行日志内容（file 为日志文件名） */
+export async function getPluginRunLog(file) {
+  const { data } = await http.get('/api/plugins/runs/log', { params: { file } })
+  return data
+}
+
+/** 设置插件自动运行授权（插件级一次性授权的开关） */
+export async function authorizePlugin(id, allow) {
+  const { data } = await http.post(`/api/plugins/${id}/authorize`, { allow })
+  return data
+}
+
+/** 本地 zip 包安装（解压校验后落用户插件目录） */
+export async function installPluginZip(path, { overwrite = false } = {}) {
+  const { data } = await http.post('/api/plugins/install-zip', { path, overwrite })
   return data
 }

@@ -498,12 +498,14 @@ function onRunPlugin() {
     async onOk() {
       runningPlugin.value = true
       try {
-        const body = p?.type === 'service' ? { action: 'start' } : {}
+        const body = p?.type === 'service'
+          ? { action: 'start' }
+          : (form.id ? { task_id: form.id } : {})
         await runPlugin(form.plugin_id, body)
         Message.success(
           p?.type === 'service'
             ? '已发送服务命令'
-            : '插件已开始运行，请看托盘进度',
+            : '插件已开始运行，可在插件中心查看历史',
         )
         await loadPlugins()
       } catch (e) {
