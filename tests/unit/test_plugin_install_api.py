@@ -209,7 +209,7 @@ def test_plugins_list_v21_metadata(tmp_data_dir, monkeypatch):
     items = {i["id"]: i for i in body["items"]}
     nc = items["net-cleanup"]
     # 新字段齐备
-    assert nc["category"] == ""  # category 标签阶段 5 才补
+    assert nc["category"] == "网络"  # 阶段 5：内置示例补分类
     assert nc["params"] == []
     assert nc["updated_at"]  # mtime 兜底
     assert nc["trigger_override"] is False
