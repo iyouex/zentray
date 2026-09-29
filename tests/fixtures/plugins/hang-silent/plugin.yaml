@@ -1,0 +1,8 @@
+id: hang-silent
+name: 静默挂死脚本
+version: 0.1.0
+type: script
+api_version: 1
+entry: run.sh
+timeout_sec: 2
+description: 测试用：零输出挂死，验证超时能落地（_busy 必须复位）

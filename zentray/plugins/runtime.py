@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import queue
 import subprocess
 import threading
 import time
@@ -217,7 +218,24 @@ class PluginRuntime(QObject):
                 if m.timeout_sec and m.timeout_sec > 0:
                     deadline = time.monotonic() + m.timeout_sec
 
-                assert self._proc.stdout is not None
+                # ponytail: 曾经在循环里直接阻塞 readline()——静默挂死（零输出）
+                # 的脚本会让超时永不触发、_busy 永久为真（面板一直“脚本运行中”、
+                # 后续运行全部 409）。读线程只管收行，本循环按剩余超时等队列。
+                out_q: queue.Queue = queue.Queue()
+
+                def _pump_stdout():
+                    try:
+                        for ln in self._proc.stdout:
+                            out_q.put(ln)
+                    except Exception:
+                        pass
+                    finally:
+                        out_q.put(None)  # EOF / 读管道出错
+
+                threading.Thread(
+                    target=_pump_stdout, daemon=True, name=f"ops-stdout-{m.id}"
+                ).start()
+
                 while True:
                     if deadline and time.monotonic() > deadline:
                         self._proc.terminate()
@@ -230,12 +248,16 @@ class PluginRuntime(QObject):
                         ok = False
                         break
 
-                    line = self._proc.stdout.readline()
-                    if line == "" and self._proc.poll() is not None:
-                        break
-                    if not line:
-                        time.sleep(0.05)
+                    if deadline:
+                        wait = max(0.05, min(0.5, deadline - time.monotonic()))
+                    else:
+                        wait = 0.5
+                    try:
+                        line = out_q.get(timeout=wait)
+                    except queue.Empty:
                         continue
+                    if line is None:
+                        break  # 子进程 stdout 关闭
                     logf.write(line)
                     lines.append(line)
                     parsed = parse_stdout_line(line)

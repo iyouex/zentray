@@ -11,9 +11,11 @@ from __future__ import annotations
 
 import json
 import os
+import queue
 import subprocess
 import sys
 import threading
+import time
 import logging
 
 from PySide6.QtCore import QObject, QTimer, Signal
@@ -63,11 +65,15 @@ class TrayImplementation(QObject):
 class LinuxBridgeTray(TrayImplementation):
     """系统顶栏 AppIndicator：文字轮播 + 右键菜单。"""
 
+    # 桥接写队列上限：托盘消息是尽力而为的 UI 状态，宁可丢弃也不堆积
+    _QUEUE_MAX = 200
+
     def __init__(self):
         super().__init__()
         self.bridge_process = None
         self._last_label = ""
         self._last_icon = ""
+        self._drop_warn_at = 0.0
         self._start_bridge()
 
     def _start_bridge(self):
@@ -108,17 +114,43 @@ class LinuxBridgeTray(TrayImplementation):
 
         threading.Thread(target=monitor_stderr, daemon=True).start()
 
+        # 写桥接走独立线程：桥接卡死/管道满时主线程绝不能跟着阻塞
+        # （历史 bug：主线程直接 stdin.write，桥接 wedge 后 64KB 管道写满
+        #   → 整个 UI 连同插件面板冻结，只能杀进程。修复=队列+丢弃。）
+        self._out_queue: queue.Queue = queue.Queue(maxsize=self._QUEUE_MAX)
+        self._writer_stop = threading.Event()
+
+        def write_bridge():
+            while not self._writer_stop.is_set():
+                try:
+                    data = self._out_queue.get(timeout=0.5)
+                except queue.Empty:
+                    continue
+                if data is None:
+                    break
+                try:
+                    self.bridge_process.stdin.write(json.dumps(data, ensure_ascii=False) + "\n")
+                    self.bridge_process.stdin.flush()
+                except Exception as e:
+                    logger.warning("bridge send failed: %s", e)
+
+        threading.Thread(target=write_bridge, daemon=True).start()
+
         # 启动占位：仅应用图标，无标题（等 controller 进入轮播后再 state）
         self._send({"type": "state", "icon": "app_icon", "text": ""})
         logger.info("AppIndicator 桥接已启动 (pid=%s)", self.bridge_process.pid)
 
     def _send(self, data):
-        if self.bridge_process and self.bridge_process.poll() is None:
-            try:
-                self.bridge_process.stdin.write(json.dumps(data, ensure_ascii=False) + "\n")
-                self.bridge_process.stdin.flush()
-            except Exception as e:
-                logger.warning("bridge send failed: %s", e)
+        """入队发给桥接（非阻塞）。桥接异常时丢弃并限频告警，绝不阻塞调用线程。"""
+        if self.bridge_process is None or self.bridge_process.poll() is not None:
+            return
+        try:
+            self._out_queue.put_nowait(data)
+        except queue.Full:
+            now = time.monotonic()
+            if now - self._drop_warn_at > 30:
+                self._drop_warn_at = now
+                logger.warning("桥接写队列已满（桥接无响应？），丢弃托盘消息")
 
     def set_icon(self, name: str):
         icon = (name or "app_icon").strip() or "app_icon"
@@ -172,11 +204,15 @@ class LinuxBridgeTray(TrayImplementation):
 
     def shutdown(self):
         self._send({"type": "quit"})
+        self._writer_stop.set()
         if self.bridge_process and self.bridge_process.poll() is None:
             try:
-                self.bridge_process.terminate()
-            except Exception:
-                pass
+                self.bridge_process.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                try:
+                    self.bridge_process.terminate()
+                except Exception:
+                    pass
 
 
 class QtStandardTray(TrayImplementation):

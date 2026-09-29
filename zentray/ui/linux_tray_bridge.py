@@ -160,9 +160,11 @@ def _set_state_safe(icon: str, text: str):
     return False
 
 
-def _set_menu_safe(menu):
+def _set_menu_safe(items):
+    # Gtk 部件必须在 GTK 主线程创建：历史上在 read_stdin 线程里 build_menu，
+    # 跨线程 Xlib 调用可死锁整个桥接 → 主进程管道写满 → UI 冻结。
     try:
-        indicator.set_menu(menu)
+        indicator.set_menu(build_menu(items or []))
     except Exception:
         pass
     # 换菜单后也巩固一次 label
@@ -211,8 +213,7 @@ def read_stdin():
             elif t == "label":
                 GLib.idle_add(_set_label_safe, data.get("text") or "")
             elif t == "menu":
-                menu = build_menu(data.get("items") or [])
-                GLib.idle_add(_set_menu_safe, menu)
+                GLib.idle_add(_set_menu_safe, data.get("items") or [])
             elif t == "icon":
                 GLib.idle_add(_set_icon_safe, data.get("icon") or "app_icon")
             elif t == "quit":

@@ -308,3 +308,32 @@ def test_resolve_param_values_priority():
     assert resolve_param_values(params, presets, {"a": "x", "b": ""}) == ["x", "", "dc"]
     # 无预设
     assert resolve_param_values(params, None) == ["da", "db", "dc"]
+
+
+# ==========================================
+# 卡死修复：静默挂死脚本的超时必须落地（_busy 复位、报告落盘）
+# ==========================================
+
+
+def test_silent_hang_script_times_out(qapp, tmp_data_dir, monkeypatch):
+    """零输出挂死：超时后 terminate、summary=超时、busy 复位。
+
+    修复前：循环里阻塞 readline() 只在行间检查 deadline，零输出脚本
+    卡住 readline → _busy 永久为真 → 面板一直「脚本运行中」、后续全 409。
+    """
+    rt, loader = _make_runtime(tmp_data_dir, monkeypatch)
+    report = _run_and_wait(qapp, rt, loader.get("hang-silent"))
+    assert report["ok"] is False
+    assert report["summary"] == "超时"
+    assert "[TIMEOUT]" in _read_log(report)
+    assert rt.is_busy is False  # 关键：busy 必须复位，后续可再运行
+
+    # 复位后能立刻再跑（修复前这里会返回 False / 409）
+    assert rt.run_script(loader.get("sample-script")) is True
+    finished = []
+    rt.script_finished.connect(lambda i, ok, s: finished.append((i, ok, s)))
+    deadline = time.time() + 10
+    while not finished and time.time() < deadline:
+        qapp.processEvents()
+        time.sleep(0.05)
+    assert finished and finished[0][1] is True
