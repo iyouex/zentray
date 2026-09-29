@@ -52,6 +52,20 @@ class PluginLoader:
         if user_dir:
             self._scan_root(Path(user_dir), source="user")
 
+        # 已删除的示例插件：包目录不动（重装会复活），扫描期隐藏。
+        # 同 id 的用户副本 source=user，不受影响。
+        try:
+            from zentray.services.settings_manager import SettingsManager
+
+            hidden = set(SettingsManager().ops.hidden_bundled)
+            if hidden:
+                for pid in hidden:
+                    p = self._plugins.get(pid)
+                    if p is not None and p.source == "bundled":
+                        del self._plugins[pid]
+        except Exception:
+            logger.exception("隐藏内置插件失败，忽略过滤")
+
         return self.plugins
 
     def _scan_root(self, root: Path, *, source: str) -> None:
