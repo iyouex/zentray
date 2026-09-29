@@ -456,6 +456,32 @@
                           >
                             ▶ 运行
                           </a-button>
+                          <template v-if="p.source === 'user'">
+                            <a-button size="mini" @click="editPluginMeta(p)">
+                              {{ opsMetaEditing === p.id ? '收起编辑' : '编辑' }}
+                            </a-button>
+                            <a-button size="mini" status="danger" @click="onOpsDelete(p)">删除</a-button>
+                          </template>
+                        </div>
+                      </div>
+
+                      <!-- 名称/描述编辑（仅用户目录插件） -->
+                      <div v-if="opsMetaEditing === p.id" class="plug-meta-edit">
+                        <div class="plug-edit-head">
+                          <b>名称 / 描述</b>
+                          <span class="pc-muted">（保存后改写 plugin.yaml，立即生效）</span>
+                        </div>
+                        <div class="preset-row">
+                          <span class="preset-k">名称</span>
+                          <a-input v-model="metaDrafts[p.id].name" size="small" style="width: 320px" @press-enter="savePluginMeta(p)" />
+                        </div>
+                        <div class="preset-row">
+                          <span class="preset-k">描述</span>
+                          <a-input v-model="metaDrafts[p.id].description" size="small" style="width: 320px" maxlength="200" @press-enter="savePluginMeta(p)" />
+                        </div>
+                        <div class="trig-actions">
+                          <a-button size="small" type="primary" :loading="opsMetaSaving === p.id" @click="savePluginMeta(p)">保存</a-button>
+                          <a-button size="small" @click="opsMetaEditing = ''">取消</a-button>
                         </div>
                       </div>
 
@@ -925,6 +951,7 @@ import {
   cancelHost,
   closeHost,
   deleteBackup,
+  deletePlugin,
   exportBackup,
   getPluginRunLog,
   getSettings,
@@ -941,6 +968,7 @@ import {
   runPlugin,
   saveSettings,
   setAutostart,
+  updatePlugin,
   validatePluginPath,
 } from '@/api/client'
 import { applyAppearance, applyTheme } from '@/theme'
@@ -992,6 +1020,10 @@ const opsRunBusy = ref('')
 const opsAuthBusy = ref('')
 const opsRuleSaving = ref('')
 const opsPresetSaving = ref('')
+// 名称/描述编辑（就地改写 plugin.yaml）
+const opsMetaEditing = ref('')
+const opsMetaSaving = ref('')
+const metaDrafts = reactive({})
 
 // 导入块：zip/目录切换 + 预览校验门 + 高级（用户目录）
 const plugImportMode = ref('dir')
@@ -1202,6 +1234,55 @@ async function onOpsServiceCmd(p, action) {
   } catch (e) {
     Message.error(e?.response?.data?.error || e?.message || '服务命令失败')
   }
+}
+
+function editPluginMeta(p) {
+  opsMetaEditing.value = opsMetaEditing.value === p.id ? '' : p.id
+  if (opsMetaEditing.value) metaDrafts[p.id] = { name: p.name, description: p.description || '' }
+}
+
+async function savePluginMeta(p) {
+  const d = metaDrafts[p.id] || {}
+  if (!(d.name || '').trim()) {
+    Message.warning('名称不能为空')
+    return
+  }
+  opsMetaSaving.value = p.id
+  try {
+    const data = await updatePlugin(p.id, { name: d.name.trim(), description: (d.description || '').trim() })
+    opsMetaEditing.value = ''
+    applyOpsList(data.plugins)
+    Message.success('已保存')
+  } catch (e) {
+    Message.error(e?.response?.data?.error || e?.message || '保存失败')
+  } finally {
+    opsMetaSaving.value = ''
+  }
+}
+
+function onOpsDelete(p) {
+  Modal.confirm({
+    draggable: true,
+    title: '删除插件',
+    content: `确定删除「${p.name}」？将移除插件目录 ${p.root}，不可恢复。`,
+    okText: '删除',
+    status: 'warning',
+    async onOk() {
+      try {
+        const data = await deletePlugin(p.id)
+        applyOpsList(data.plugins)
+        // 本地 ops 覆盖同步清理，避免下次整体保存时复活
+        for (const k of ['trigger_overrides', 'param_presets', 'installed_at']) {
+          if (form.ops[k]) delete form.ops[k][p.id]
+        }
+        delete triggerDrafts[p.id]
+        delete presetDrafts[p.id]
+        Message.success('已删除')
+      } catch (e) {
+        Message.error(e?.response?.data?.error || e?.message || '删除失败')
+      }
+    },
+  })
 }
 
 async function plugOnImportPick() {
@@ -2583,6 +2664,12 @@ body.zt-skin-neo .nav-main {
 }
 .plug-edit {
   margin-top: 10px;
+  background: var(--color-fill-1, #f7f8fa);
+  border-radius: 8px;
+}
+.plug-meta-edit {
+  margin-top: 8px;
+  padding: 8px 12px;
   background: var(--color-fill-1, #f7f8fa);
   border-radius: 8px;
 }

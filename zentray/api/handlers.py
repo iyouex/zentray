@@ -231,6 +231,10 @@ def handle_request(
             return _install_plugin_path(body or {})
         if method == "POST" and path.startswith("/api/plugins/") and path.endswith("/run"):
             return _run_plugin(path[len("/api/plugins/") : -len("/run")], body or {})
+        if method == "PUT" and path.startswith("/api/plugins/"):
+            return _update_plugin(path[len("/api/plugins/") :], body or {})
+        if method == "DELETE" and path.startswith("/api/plugins/"):
+            return _delete_plugin(path[len("/api/plugins/") :])
 
         if method == "GET" and path == "/api/current-task":
             t = _ctx.task_service.get_current_task()
@@ -501,6 +505,87 @@ def _check_reminder_conflicts(body: dict) -> tuple[int, dict]:
     }
 
 
+def _scanned_loader():
+    """扫描内置+用户目录，返回刷新后的 loader（列表 / 编辑 / 删除共用）。"""
+    from zentray.resources import get_resource_path
+    from zentray.services.settings_manager import SettingsManager
+
+    loader = _ctx.plugin_loader
+    if loader is None:
+        from zentray.plugins.loader import PluginLoader
+
+        loader = PluginLoader()
+
+    bundled = get_resource_path("bundled_plugins")
+    loader.scan(
+        bundled_dir=bundled if bundled.is_dir() else None,
+        user_dir=SettingsManager().get_ops_user_plugins_dir(),
+    )
+    return loader
+
+
+def _update_plugin(plugin_id: str, body: dict) -> tuple[int, dict]:
+    """编辑插件名称/描述：就地改写 plugin.yaml（仅用户目录插件）。"""
+    import yaml
+
+    p = _scanned_loader().get(plugin_id)
+    if p is None:
+        return 404, {"ok": False, "error": "插件不存在或校验未通过"}
+    if p.source != "user":
+        return 400, {"ok": False, "error": "内置插件不支持编辑，可先导入到用户目录"}
+    name = str(body.get("name") or "").strip()
+    description = str(body.get("description") or "").strip()
+    if not name:
+        return 400, {"ok": False, "error": "名称不能为空"}
+    yaml_path = p.manifest.root / "plugin.yaml"
+    try:
+        raw = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+        raw["name"] = name
+        raw["description"] = description
+        yaml_path.write_text(
+            yaml.safe_dump(raw, allow_unicode=True, sort_keys=False),
+            encoding="utf-8",
+        )
+    except Exception as e:
+        return 500, {"ok": False, "error": f"plugin.yaml 改写失败: {e}"}
+    return 200, {"ok": True, "plugins": _plugins_list(scan_always=True)}
+
+
+def _delete_plugin(plugin_id: str) -> tuple[int, dict]:
+    """删除用户目录插件（rmtree 目录 + 清理调度/预设/安装时间覆盖）。"""
+    import shutil
+
+    from zentray.services.settings_manager import SettingsManager
+
+    p = _scanned_loader().get(plugin_id)
+    if p is None:
+        return 404, {"ok": False, "error": "插件不存在或校验未通过"}
+    if p.source != "user":
+        return 400, {"ok": False, "error": "内置插件不支持删除"}
+    m = p.manifest
+    sm = SettingsManager()
+    root = m.root.resolve()
+    try:
+        root.relative_to(sm.get_ops_user_plugins_dir().resolve())
+    except ValueError:
+        return 400, {"ok": False, "error": "插件目录不在用户插件目录内"}
+    # service 先尽力停掉，避免删除后守护进程仍占端口
+    if _ctx.plugin_runtime is not None and m.type.value == "service":
+        try:
+            _ctx.plugin_runtime.service_cmd(p, "stop")
+        except Exception:
+            logger.exception("删除前停止服务失败: %s", m.id)
+    try:
+        shutil.rmtree(root)
+    except OSError as e:
+        return 500, {"ok": False, "error": f"删除失败: {e}"}
+    sm.ops.trigger_overrides.pop(plugin_id, None)
+    sm.ops.param_presets.pop(plugin_id, None)
+    sm.ops.installed_at.pop(plugin_id, None)
+    sm.save()
+    return 200, {"ok": True, "plugins": _plugins_list(scan_always=True)}
+
+
 def _plugins_list(*, scan_always: bool = False) -> dict:
     """插件列表（含校验失败项）。scan_always 供设置页在未启用时也扫描展示。"""
     from zentray.resources import get_resource_path
@@ -520,18 +605,8 @@ def _plugins_list(*, scan_always: bool = False) -> dict:
     if not sm.ops.enabled and not scan_always:
         return base
 
-    loader = _ctx.plugin_loader
+    loader = _scanned_loader()
     runtime = _ctx.plugin_runtime
-    if loader is None:
-        from zentray.plugins.loader import PluginLoader
-
-        loader = PluginLoader()
-
-    # v2：单一总开关，给定的目录恒扫描
-    loader.scan(
-        bundled_dir=bundled if bundled.is_dir() else None,
-        user_dir=user_dir,
-    )
     from zentray.plugins import triggers as _triggers
 
     import datetime as _dt

@@ -324,3 +324,15 @@ export async function previewPluginZip(path) {
   const { data } = await http.post('/api/plugins/preview-zip', { path })
   return data
 }
+
+/** 编辑插件名称/描述（就地改写 plugin.yaml，仅用户目录插件） */
+export async function updatePlugin(id, { name, description }) {
+  const { data } = await http.put(`/api/plugins/${id}`, { name, description })
+  return data
+}
+
+/** 删除用户目录插件（含目录与调度/预设覆盖） */
+export async function deletePlugin(id) {
+  const { data } = await http.delete(`/api/plugins/${id}`)
+  return data
+}

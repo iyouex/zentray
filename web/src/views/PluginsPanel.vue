@@ -63,7 +63,6 @@
                       {{ expanded === p.id ? '收起' : (p.params?.length ? '设参数运行' : '运行') }}
                     </span>
                   </div>
-                  <div v-if="p.description" class="pp-desc">{{ p.description }}</div>
 
                   <!-- 服务：三按钮直接放卡片上 -->
                   <div v-if="p.type === 'service'" class="pp-actions">
@@ -198,7 +197,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { Message } from '@arco-design/web-vue'
 import { PhX } from '@phosphor-icons/vue'
 import { cancelHost, getPluginRunLog, getSettings, listPluginRuns, listPlugins, runPlugin } from '@/api/client'
@@ -229,6 +228,11 @@ const filteredItems = computed(() =>
       (!type.value || p.type === type.value),
   ),
 )
+
+// 刷新 / 筛选 / 切标签 → 收起所有展开的插件卡（单 expanded 本身即手风琴）
+watch([category, type], () => {
+  expanded.value = ''
+})
 
 // Tab2 记录
 const runsLoaded = ref(false)
@@ -294,6 +298,7 @@ function applyList(data) {
 }
 
 async function refresh() {
+  expanded.value = ''
   if (tab.value === 'runs') {
     await Promise.all([loadPlugins(), loadRuns()])
   } else {
@@ -336,6 +341,7 @@ async function loadRuns() {
 }
 
 function onTabChange(key) {
+  expanded.value = ''
   if (key === 'runs' && !runsLoaded.value) loadRuns()
 }
 
@@ -451,14 +457,18 @@ onMounted(loadPlugins)
   display: flex;
   flex-direction: column;
 }
-.pp-tabs,
-.pp-tabs :deep(.arco-tabs) {
+/* 纵向滚动：页头/标签导航固定，列表在内容区内部滚 */
+.pp-tabs {
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 .pp-tabs :deep(.arco-tabs-content) {
+  flex: 1;
+  min-height: 0;
   padding-top: 8px;
-  overflow: auto;
+  overflow-y: auto;
 }
 /* —— Tab1 筛选条 —— */
 .pp-filter {
@@ -505,13 +515,6 @@ onMounted(loadPlugins)
 .pp-hint {
   font-size: 12px;
   color: var(--color-text-3);
-}
-.pp-desc {
-  margin: 6px 0 0;
-  font-size: 12.5px;
-  color: var(--color-text-3);
-  line-height: 1.45;
-  cursor: pointer;
 }
 .pp-expand {
   margin-top: 10px;
