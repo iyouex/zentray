@@ -66,7 +66,7 @@
 
                   <!-- 服务：三按钮直接放卡片上 -->
                   <div v-if="p.type === 'service'" class="pp-actions">
-                    <a-button size="mini" :disabled="busy" :loading="acting === p.id" @click="serviceCmd(p, 'start')">▶ 启动</a-button>
+                    <a-button size="mini" type="primary" :disabled="busy" :loading="acting === p.id" @click="serviceCmd(p, 'start')">▶ 启动</a-button>
                     <a-button size="mini" :disabled="busy" :loading="acting === p.id" @click="serviceCmd(p, 'stop')">⏹ 停止</a-button>
                     <a-button size="mini" :loading="acting === p.id" @click="serviceCmd(p, 'status')">ℹ 状态</a-button>
                   </div>
@@ -88,7 +88,7 @@
                     </template>
                     <p v-else class="pp-confirm">确定运行？进度显示在托盘顶栏，结果可在「记录」标签查看。</p>
                     <div class="pp-actions">
-                      <a-button size="small" type="primary" :loading="acting === p.id" @click="runScript(p)">
+                      <a-button type="primary" :loading="acting === p.id" @click="runScript(p)">
                         ▶ 运行
                       </a-button>
                       <a-button size="small" @click="expanded = ''">收起</a-button>
