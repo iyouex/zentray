@@ -57,6 +57,7 @@
                     </a-tag>
                     <a-tag v-if="p.category" size="small" color="cyan">{{ p.category }}</a-tag>
                     <span class="pp-spacer" />
+                    <a-button size="mini" type="text" @click.stop="docPlugin = p">说明</a-button>
                     <a-button size="mini" type="text" @click.stop="onCardReport(p)">报告</a-button>
                     <a-button size="mini" type="text" @click.stop="onCardLog(p)">日志</a-button>
                     <span v-if="p.type !== 'service'" class="pp-hint">
@@ -193,6 +194,9 @@
         </div>
       </a-spin>
     </a-drawer>
+
+    <!-- 使用说明抽屉（详情 + README） -->
+    <PluginDocDrawer v-model:visible="docVisible" :plugin="docPlugin" />
   </div>
 </template>
 
@@ -200,6 +204,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { Message } from '@arco-design/web-vue'
 import { PhX } from '@phosphor-icons/vue'
+import PluginDocDrawer from '@/components/PluginDocDrawer.vue'
 import { cancelHost, getPluginRunLog, getSettings, listPluginRuns, listPlugins, runPlugin } from '@/api/client'
 
 const loading = ref(true)
@@ -433,6 +438,11 @@ async function openReport(record, logOnly = false) {
 }
 
 onMounted(loadPlugins)
+
+// 卡片「说明」→ 使用说明抽屉
+const docVisible = ref(false)
+const docPlugin = ref(null)
+watch(docPlugin, (v) => { if (v) docVisible.value = true })
 </script>
 
 <style scoped>
