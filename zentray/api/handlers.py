@@ -586,6 +586,14 @@ def _delete_plugin(plugin_id: str) -> tuple[int, dict]:
     return 200, {"ok": True, "plugins": _plugins_list(scan_always=True)}
 
 
+def _read_plugin_readme(root: Path) -> str:
+    """插件 README.md 原文（截断 64KB），无则空串。"""
+    try:
+        return (Path(root) / "README.md").read_text(encoding="utf-8")[:65536]
+    except OSError:
+        return ""
+
+
 def _plugins_list(*, scan_always: bool = False) -> dict:
     """插件列表（含校验失败项）。scan_always 供设置页在未启用时也扫描展示。"""
     from zentray.resources import get_resource_path
@@ -654,6 +662,8 @@ def _plugins_list(*, scan_always: bool = False) -> dict:
                 "updated_at": updated_at,
                 "write_back": bool(m.write_back),
                 "authorized": _triggers.is_authorized(m.id),
+                # 使用说明原文（README.md，无则空），供前端「说明」抽屉展示
+                "readme": _read_plugin_readme(m.root),
             }
         )
     failures = []

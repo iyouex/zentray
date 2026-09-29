@@ -462,6 +462,7 @@
                             </a-button>
                             <a-button size="mini" status="danger" @click="onOpsDelete(p)">删除</a-button>
                           </template>
+                          <a-button size="mini" @click.stop="opsDocPlugin = p">说明</a-button>
                         </div>
                       </div>
 
@@ -940,11 +941,14 @@
 （日志超长已截断）</template></pre>
       </a-spin>
     </a-drawer>
+
+    <!-- 插件使用说明抽屉 -->
+    <PluginDocDrawer v-model:visible="opsDocVisible" :plugin="opsDocPlugin" />
   </div>
 </template>
 
 <script setup>
-import { computed, inject, onMounted, reactive, ref } from 'vue'
+import { computed, inject, onMounted, reactive, ref, watch } from 'vue'
 import { Message, Modal } from '@arco-design/web-vue'
 import {
   authorizePlugin,
@@ -975,6 +979,7 @@ import { applyAppearance, applyTheme } from '@/theme'
 import JobEditor from '@/components/JobEditor.vue'
 import HistoryPanel from '@/components/HistoryPanel.vue'
 import NumberSpinner from '@/components/NumberSpinner.vue'
+import PluginDocDrawer from '@/components/PluginDocDrawer.vue'
 
 const setThemeMode = inject('setThemeMode', null)
 const loading = ref(false)
@@ -1020,6 +1025,10 @@ const opsRunBusy = ref('')
 const opsAuthBusy = ref('')
 const opsRuleSaving = ref('')
 const opsPresetSaving = ref('')
+// 使用说明抽屉
+const opsDocVisible = ref(false)
+const opsDocPlugin = ref(null)
+watch(opsDocPlugin, (v) => { if (v) opsDocVisible.value = true })
 // 名称/描述编辑（就地改写 plugin.yaml）
 const opsMetaEditing = ref('')
 const opsMetaSaving = ref('')
