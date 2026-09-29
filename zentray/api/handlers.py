@@ -1087,6 +1087,15 @@ def _plugin_run_open(body: dict) -> tuple[int, dict]:
         report = json.loads(meta.read_text(encoding="utf-8"))
     except Exception:
         return 500, {"error": "运行记录读取失败"}
+    # 结果正文带 .html 报告路径（如 AI 资讯日报）→ 直接用系统浏览器打开
+    import re
+
+    m = re.search(r"[\w./~-]+\.html\b", str(report.get("result_text") or ""))
+    if m:
+        html_path = Path(m.group(0))
+        if html_path.is_file():
+            _open_with_system(html_path)
+            return 200, {"ok": True, "file": str(html_path)}
     log_text = ""
     log_path = runs_dir / f"{run_id}.log"
     if log_path.is_file():

@@ -57,3 +57,33 @@ def test_open_missing_run(tmp_data_dir, monkeypatch):
 def test_build_md_minimal_fields():
     text = _build_run_md({"name": "x", "ok": False}, "")
     assert "❌ 失败" in text and "（无）" in text and "（空日志）" in text
+
+
+def test_open_html_report_directly(tmp_data_dir, monkeypatch):
+    """result_text 带 .html 路径且存在 → 浏览器直开，不生成 md。"""
+    runs, report = _write_run(tmp_data_dir)
+    html = tmp_data_dir / "plugin_data" / "x" / "r.html"
+    html.parent.mkdir(parents=True)
+    html.write_text("<html></html>", encoding="utf-8")
+    report["result_text"] = f"日报已生成：{html}｜12 条"
+    (runs / f"{report['run_id']}.json").write_text(
+        json.dumps(report, ensure_ascii=False), encoding="utf-8"
+    )
+    opened = []
+    monkeypatch.setattr(handlers, "_open_with_system", lambda p: opened.append(p))
+    code, body = _plugin_run_open({"run_id": report["run_id"]})
+    assert code == 200 and body["file"] == str(html)
+    assert opened == [html]
+    assert not (runs / f"{report['run_id']}.md").exists()
+
+
+def test_open_html_path_missing_falls_back_md(tmp_data_dir, monkeypatch):
+    runs, report = _write_run(tmp_data_dir)
+    report["result_text"] = "报告：/nonexistent/none.html 完成"
+    (runs / f"{report['run_id']}.json").write_text(
+        json.dumps(report, ensure_ascii=False), encoding="utf-8"
+    )
+    opened = []
+    monkeypatch.setattr(handlers, "_open_with_system", lambda p: opened.append(p))
+    code, body = _plugin_run_open({"run_id": report["run_id"]})
+    assert code == 200 and body["file"].endswith(".md")

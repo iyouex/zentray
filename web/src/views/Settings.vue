@@ -584,6 +584,9 @@
                     <template #runId="{ record }">
                       <code class="plug-runid">{{ record.run_id || record.time }}</code>
                     </template>
+                    <template #op="{ record }">
+                      <a-button size="mini" type="text" @click.stop="onOpsOpenReport(record)">报告</a-button>
+                    </template>
                   </a-table>
                   <a-empty v-else description="暂无运行记录" />
                 </a-collapse-item>
@@ -965,6 +968,7 @@ import {
   listBackups,
   listPluginRuns,
   listPlugins,
+  openPluginReport,
   packArchive,
   pickPath,
   previewPluginZip,
@@ -1076,6 +1080,7 @@ const opsRunColumns = [
   { title: '结束', dataIndex: 'time', width: 138 },
   { title: '结果', slotName: 'ok', width: 68 },
   { title: '摘要', dataIndex: 'summary', ellipsis: true, tooltip: true },
+  { title: '操作', slotName: 'op', width: 70 },
 ]
 
 function trigLabel(t) {
@@ -1469,6 +1474,15 @@ async function saveParamPreset(p) {
     Message.error(e?.response?.data?.error || e?.message || '保存失败')
   } finally {
     opsPresetSaving.value = ''
+  }
+}
+
+/** 行内「报告」：html 报告（如 AI 日报）浏览器直开，其余生成 md 打开 */
+async function onOpsOpenReport(record) {
+  try {
+    await openPluginReport(record.run_id)
+  } catch (e) {
+    Message.error(e?.response?.data?.error || e?.message || '打开报告失败')
   }
 }
 
