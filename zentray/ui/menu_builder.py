@@ -17,7 +17,8 @@ class MenuBuilder:
         """
         if not plugins:
             return None
-        return {"id": "ops_panel", "label": "🧩 插件"}
+        # id 必须落在 ops.* 命名空间：dispatch() 以 startswith("ops.") 路由
+        return {"id": "ops.panel", "label": "🧩 插件"}
 
     def build_main_menu(
         self,

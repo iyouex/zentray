@@ -143,7 +143,7 @@ def dispatch(action_id: str, controller: "TrayController") -> bool:
 
 def _dispatch_ops_action(action_id: str, controller: "TrayController") -> bool:
     """插件面板入口。运行/启停在 Vue 面板内经 API 完成（含门控），Qt 弹窗路径已移除。"""
-    if action_id == "ops_panel":
+    if action_id == "ops.panel":
         from zentray.ui.vue_commands import try_vue_plugin_panel
 
         return try_vue_plugin_panel(controller)

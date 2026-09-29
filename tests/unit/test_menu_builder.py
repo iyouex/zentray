@@ -70,7 +70,11 @@ def test_ops_menu_without_plugins():
 
 
 def test_ops_panel_entry_with_plugins():
-    """≥1 插件且启用：单项 ops_panel（无子菜单，列表在 Vue 面板）。"""
+    """≥1 插件且启用：单项 ops.panel（无子菜单，列表在 Vue 面板）。
+
+    id 必须落在 ops.* 命名空间：commands.dispatch() 以 startswith("ops.") 路由，
+    曾因下划线命名 ops_panel 静默失联（托盘点击无响应）。
+    """
     mb = MenuBuilder()
     items = mb.build_main_menu(
         is_pomodoro=False,
@@ -81,9 +85,22 @@ def test_ops_panel_entry_with_plugins():
         ],
     )
     item_ids = [item if isinstance(item, str) else item["id"] for item in items]
-    assert item_ids[:3] == ["ops_panel", "separator", "task_list"]
-    assert items[0] == {"id": "ops_panel", "label": "🧩 插件"}
+    assert item_ids[:3] == ["ops.panel", "separator", "task_list"]
+    assert items[0] == {"id": "ops.panel", "label": "🧩 插件"}
     assert "submenu" not in items[0]
+
+
+def test_dispatch_routes_ops_panel_entry(monkeypatch):
+    """托盘 ops.panel 项 → dispatch → 面板打开（回归：id 命名空间断层）。"""
+    import zentray.ui.commands as commands_mod
+    import zentray.ui.vue_commands as vue_commands_mod
+
+    opened = []
+    monkeypatch.setattr(
+        vue_commands_mod, "try_vue_plugin_panel", lambda controller: opened.append(True) or True
+    )
+    assert commands_mod.dispatch("ops.panel", None) is True
+    assert opened == [True]
 
 
 def test_ops_busy_keeps_panel_enabled_disables_pomodoro():
@@ -96,5 +113,5 @@ def test_ops_busy_keeps_panel_enabled_disables_pomodoro():
         ops_busy=True,
     )
     by_id = {it["id"]: it for it in items if isinstance(it, dict)}
-    assert by_id["ops_panel"].get("enabled", True) is True
+    assert by_id["ops.panel"].get("enabled", True) is True
     assert by_id["pomodoro"]["enabled"] is False
