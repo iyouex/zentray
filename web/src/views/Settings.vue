@@ -322,67 +322,7 @@
               </a-card>
 
               <a-collapse v-model:active-key="opsPanes" class="ops-collapse" :bordered="false">
-                <!-- ① 导入插件 -->
-                <a-collapse-item key="import" header="📦 导入插件">
-                  <div class="pc-add-row">
-                    <a-radio-group v-model="plugImportMode" type="button" size="small">
-                      <a-radio value="dir">目录</a-radio>
-                      <a-radio value="zip">zip 包</a-radio>
-                    </a-radio-group>
-                    <a-input
-                      v-model="plugImportPath"
-                      :placeholder="plugImportMode === 'zip' ? '本机 zip 包路径，或点右侧选择' : '插件目录路径（含 plugin.yaml），默认为内置插件目录'"
-                      allow-clear
-                      @press-enter="plugOnImportPreview"
-                    />
-                    <a-button @click="plugOnImportPick">
-                      {{ plugImportMode === 'zip' ? '选择文件' : '选择目录' }}
-                    </a-button>
-                    <a-button type="outline" :loading="plugImportPreviewing" @click="plugOnImportPreview">
-                      预览校验
-                    </a-button>
-                    <a-button
-                      type="primary"
-                      :loading="plugImportInstalling"
-                      :disabled="!plugImportPreview?.ok"
-                      @click="plugOnImportInstall"
-                    >
-                      安装
-                    </a-button>
-                  </div>
-
-                  <div v-if="plugImportPreview" class="pc-preview" :class="{ ok: plugImportPreview.ok, bad: !plugImportPreview.ok }">
-                    <div class="pc-preview-head">
-                      <a-tag :color="plugImportPreview.ok ? 'green' : 'red'" size="small">
-                        {{ plugImportPreview.ok ? '校验通过，可以安装' : '校验失败' }}
-                      </a-tag>
-                      <span class="pc-muted">{{ plugImportPreview.path }}</span>
-                    </div>
-                    <a-descriptions v-if="plugImportPreview.ok && plugImportPreview.preview" :column="2" size="small" bordered>
-                      <a-descriptions-item label="名称">{{ plugImportPreview.preview.name }}</a-descriptions-item>
-                      <a-descriptions-item label="ID">{{ plugImportPreview.preview.id }}</a-descriptions-item>
-                      <a-descriptions-item label="类型">{{ plugImportPreview.preview.type }}</a-descriptions-item>
-                      <a-descriptions-item label="版本">{{ plugImportPreview.preview.version }}</a-descriptions-item>
-                      <a-descriptions-item label="说明" :span="2">
-                        {{ plugImportPreview.preview.description || '—' }}
-                      </a-descriptions-item>
-                    </a-descriptions>
-                    <ul v-if="plugImportPreview.errors?.length" class="pc-err-list">
-                      <li v-for="(e, i) in plugImportPreview.errors" :key="i">{{ e }}</li>
-                    </ul>
-                  </div>
-
-                  <a-collapse :bordered="false" class="pc-advanced">
-                    <a-collapse-item key="adv" header="高级：用户插件目录（安装目标）">
-                      <div class="pc-add-row">
-                        <a-input v-model="opsUserDir" :placeholder="opsUserDirHint || '留空 = 数据目录/plugins'" allow-clear />
-                        <a-button :loading="opsDirSaving" @click="onSaveOpsUserDir">保存目录</a-button>
-                      </div>
-                    </a-collapse-item>
-                  </a-collapse>
-                </a-collapse-item>
-
-                <!-- ② 插件列表 -->
+                <!-- ① 插件列表 -->
                 <a-collapse-item key="list">
                   <template #header>
                     <span class="ops-pane-title">📜 插件列表</span>
@@ -540,7 +480,7 @@
                       </a-collapse>
                     </div>
                   </div>
-                  <a-empty v-else description="暂无已加载插件，可在上方导入" />
+                  <a-empty v-else description="暂无已加载插件，可在下方导入" />
 
                   <div v-if="opsFailures.length" class="plug-fail-box">
                     <div class="plug-fail-title">校验失败（未加载）</div>
@@ -551,6 +491,66 @@
                       </ul>
                     </div>
                   </div>
+                </a-collapse-item>
+
+                <!-- ② 导入插件（列表之后，默认收起） -->
+                <a-collapse-item key="import" header="📦 导入插件">
+                  <div class="pc-add-row">
+                    <a-radio-group v-model="plugImportMode" type="button" size="small">
+                      <a-radio value="dir">目录</a-radio>
+                      <a-radio value="zip">zip 包</a-radio>
+                    </a-radio-group>
+                    <a-input
+                      v-model="plugImportPath"
+                      :placeholder="plugImportMode === 'zip' ? '本机 zip 包路径，或点右侧选择' : '插件目录路径（含 plugin.yaml），默认为内置插件目录'"
+                      allow-clear
+                      @press-enter="plugOnImportPreview"
+                    />
+                    <a-button @click="plugOnImportPick">
+                      {{ plugImportMode === 'zip' ? '选择文件' : '选择目录' }}
+                    </a-button>
+                    <a-button type="outline" :loading="plugImportPreviewing" @click="plugOnImportPreview">
+                      预览校验
+                    </a-button>
+                    <a-button
+                      type="primary"
+                      :loading="plugImportInstalling"
+                      :disabled="!plugImportPreview?.ok"
+                      @click="plugOnImportInstall"
+                    >
+                      安装
+                    </a-button>
+                  </div>
+
+                  <div v-if="plugImportPreview" class="pc-preview" :class="{ ok: plugImportPreview.ok, bad: !plugImportPreview.ok }">
+                    <div class="pc-preview-head">
+                      <a-tag :color="plugImportPreview.ok ? 'green' : 'red'" size="small">
+                        {{ plugImportPreview.ok ? '校验通过，可以安装' : '校验失败' }}
+                      </a-tag>
+                      <span class="pc-muted">{{ plugImportPreview.path }}</span>
+                    </div>
+                    <a-descriptions v-if="plugImportPreview.ok && plugImportPreview.preview" :column="2" size="small" bordered>
+                      <a-descriptions-item label="名称">{{ plugImportPreview.preview.name }}</a-descriptions-item>
+                      <a-descriptions-item label="ID">{{ plugImportPreview.preview.id }}</a-descriptions-item>
+                      <a-descriptions-item label="类型">{{ plugImportPreview.preview.type }}</a-descriptions-item>
+                      <a-descriptions-item label="版本">{{ plugImportPreview.preview.version }}</a-descriptions-item>
+                      <a-descriptions-item label="说明" :span="2">
+                        {{ plugImportPreview.preview.description || '—' }}
+                      </a-descriptions-item>
+                    </a-descriptions>
+                    <ul v-if="plugImportPreview.errors?.length" class="pc-err-list">
+                      <li v-for="(e, i) in plugImportPreview.errors" :key="i">{{ e }}</li>
+                    </ul>
+                  </div>
+
+                  <a-collapse :bordered="false" class="pc-advanced">
+                    <a-collapse-item key="adv" header="高级：用户插件目录（安装目标）">
+                      <div class="pc-add-row">
+                        <a-input v-model="opsUserDir" :placeholder="opsUserDirHint || '留空 = 数据目录/plugins'" allow-clear />
+                        <a-button :loading="opsDirSaving" @click="onSaveOpsUserDir">保存目录</a-button>
+                      </div>
+                    </a-collapse-item>
+                  </a-collapse>
                 </a-collapse-item>
 
                 <!-- ③ 运行历史 -->
@@ -1013,7 +1013,7 @@ const saveAsLoading = ref(false)
 const savedBackupDir = ref('')
 
 // —— 插件（v2.1 管理回到设置页：导入 / 列表 / 运行历史 三大块） ——
-const opsPanes = ref(['import', 'list']) // 前两块默认展开
+const opsPanes = ref(['list']) // 仅插件列表默认展开；导入收起在列表之下
 const opsLoaded = ref(false)
 const opsListLoading = ref(false)
 const opsListEnabled = ref(false)
