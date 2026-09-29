@@ -211,6 +211,8 @@ def handle_request(
             return _plugin_runs(query or {})
         if method == "GET" and path == "/api/plugins/runs/log":
             return _plugin_run_log(query or {})
+        if method == "POST" and path == "/api/plugins/runs/open":
+            return _plugin_run_open(body or {})
         if method == "POST" and path == "/api/plugins/install-zip":
             return _install_plugin_zip(body or {})
         if method == "POST" and path == "/api/plugins/preview-zip":
@@ -1016,6 +1018,86 @@ def _plugin_run_log(query: dict) -> tuple[int, dict]:
         "content": content[:200_000],
         "truncated": len(content) > 200_000,
     }
+
+
+def _build_run_md(report: dict, log_text: str) -> str:
+    """单次运行报告 markdown（报告按钮落盘、系统阅读器打开的文件）。"""
+    r = report or {}
+    dur = ""
+    try:
+        import datetime as _dt
+
+        sec = (
+            _dt.datetime.fromisoformat(r["time"])
+            - _dt.datetime.fromisoformat(r["started_at"])
+        ).total_seconds()
+        if sec >= 0:
+            dur = f"{sec:.0f} 秒" if sec < 60 else f"{int(sec // 60)} 分 {sec % 60:.0f} 秒"
+    except Exception:
+        pass
+    lines = [
+        f"# 执行报告 · {r.get('name') or r.get('id') or ''}",
+        "",
+        f"- 运行ID: `{r.get('run_id', '')}`",
+        f"- 状态: {'✅ 成功' if r.get('ok') else '❌ 失败'}",
+        f"- 触发: {r.get('trigger') or '—'}",
+        f"- 开始: {r.get('started_at') or '—'}",
+        f"- 结束: {r.get('time') or '—'}",
+    ]
+    if dur:
+        lines.append(f"- 耗时: {dur}")
+    if r.get("task_id"):
+        lines.append(f"- 关联任务: `{r['task_id']}`")
+    lines += ["", "## 摘要", "", str(r.get("summary") or "（无）")]
+    if r.get("result_text"):
+        lines += ["", "## 结果正文", "", str(r["result_text"])]
+    lines += ["", "## 完整日志", "", "```log", log_text or "（空日志）", "```", ""]
+    return "\n".join(lines)
+
+
+def _open_with_system(path: Path) -> None:
+    """系统默认应用打开文件（win shell / mac open / linux xdg-open）。"""
+    import os
+    import subprocess
+    import sys
+
+    try:
+        if sys.platform == "win32":
+            os.startfile(str(path))  # noqa: S606
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", str(path)])
+        else:
+            subprocess.Popen(["xdg-open", str(path)])
+    except Exception:
+        logger.exception("系统打开失败: %s", path)
+
+
+def _plugin_run_open(body: dict) -> tuple[int, dict]:
+    """生成运行报告 md 并用系统默认应用打开（run_id 白名单同日志端点）。"""
+    from zentray.config import DATA_DIR
+
+    run_id = str(body.get("run_id") or "").strip()
+    if not run_id or "/" in run_id or "\\" in run_id or Path(run_id).name != run_id:
+        return 400, {"error": "非法运行ID"}
+    runs_dir = (DATA_DIR / "ops_runs").resolve()
+    meta = (runs_dir / f"{run_id}.json").resolve()
+    if meta.parent != runs_dir or not meta.is_file():
+        return 404, {"error": "运行记录不存在"}
+    try:
+        report = json.loads(meta.read_text(encoding="utf-8"))
+    except Exception:
+        return 500, {"error": "运行记录读取失败"}
+    log_text = ""
+    log_path = runs_dir / f"{run_id}.log"
+    if log_path.is_file():
+        log_text = log_path.read_text(encoding="utf-8", errors="replace")[:200_000]
+    md_path = runs_dir / f"{run_id}.md"
+    try:
+        md_path.write_text(_build_run_md(report, log_text), encoding="utf-8")
+    except OSError as e:
+        return 500, {"error": f"报告写入失败: {e}"}
+    _open_with_system(md_path)
+    return 200, {"ok": True, "file": str(md_path)}
 
 
 def _authorize_plugin(plugin_id: str, body: dict) -> tuple[int, dict]:

@@ -205,7 +205,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { Message } from '@arco-design/web-vue'
 import { PhX } from '@phosphor-icons/vue'
 import PluginDocDrawer from '@/components/PluginDocDrawer.vue'
-import { cancelHost, getPluginRunLog, getSettings, listPluginRuns, listPlugins, runPlugin } from '@/api/client'
+import { cancelHost, getPluginRunLog, getSettings, listPluginRuns, listPlugins, openPluginReport, runPlugin } from '@/api/client'
 
 const loading = ref(true)
 const enabled = ref(false)
@@ -391,13 +391,18 @@ async function latestRunOf(pid) {
   return runs.value.find((r) => r.id === pid) || null
 }
 
+/** 卡片「报告」→ 生成 md 报告并用系统默认应用打开 */
 async function onCardReport(p) {
   const r = await latestRunOf(p.id)
   if (!r) {
     Message.info(`「${p.name}」暂无运行记录`)
     return
   }
-  openReport(r, false)
+  try {
+    await openPluginReport(r.run_id)
+  } catch (e) {
+    Message.error(e?.response?.data?.error || e?.message || '打开报告失败')
+  }
 }
 
 async function onCardLog(p) {

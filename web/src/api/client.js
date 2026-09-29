@@ -307,6 +307,12 @@ export async function getPluginRunLog(file) {
   return data
 }
 
+/** 生成运行报告 md 并用系统默认应用打开 */
+export async function openPluginReport(runId) {
+  const { data } = await http.post('/api/plugins/runs/open', { run_id: runId })
+  return data
+}
+
 /** 设置插件自动运行授权（插件级一次性授权的开关） */
 export async function authorizePlugin(id, allow) {
   const { data } = await http.post(`/api/plugins/${id}/authorize`, { allow })
