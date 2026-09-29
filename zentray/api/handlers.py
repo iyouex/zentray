@@ -525,14 +525,32 @@ def _scanned_loader():
 
 
 def _update_plugin(plugin_id: str, body: dict) -> tuple[int, dict]:
-    """编辑插件名称/描述：就地改写 plugin.yaml（仅用户目录插件）。"""
+    """编辑插件名称/描述：就地改写 plugin.yaml；内置（示例）插件先复制到用户目录。"""
+    import shutil
+
     import yaml
 
-    p = _scanned_loader().get(plugin_id)
+    from zentray.services.settings_manager import SettingsManager
+
+    loader = _scanned_loader()
+    p = loader.get(plugin_id)
     if p is None:
         return 404, {"ok": False, "error": "插件不存在或校验未通过"}
-    if p.source != "user":
-        return 400, {"ok": False, "error": "内置插件不支持编辑，可先导入到用户目录"}
+    if p.source == "bundled":
+        # 包目录不可写（重装会还原）：复制到用户目录形成覆盖副本后再编辑
+        dest = SettingsManager().get_ops_user_plugins_dir() / plugin_id
+        if dest.exists():
+            return 400, {
+                "ok": False,
+                "error": f"用户插件目录已存在 {dest.name}，请先处理后再编辑示例插件",
+            }
+        try:
+            shutil.copytree(p.manifest.root, dest)
+        except OSError as e:
+            return 500, {"ok": False, "error": f"复制示例插件到用户目录失败: {e}"}
+        p = _scanned_loader().get(plugin_id)
+        if p is None or p.source != "user":
+            return 500, {"ok": False, "error": "复制后重扫失败，副本未生效"}
     name = str(body.get("name") or "").strip()
     description = str(body.get("description") or "").strip()
     if not name:
@@ -552,7 +570,7 @@ def _update_plugin(plugin_id: str, body: dict) -> tuple[int, dict]:
 
 
 def _delete_plugin(plugin_id: str) -> tuple[int, dict]:
-    """删除用户目录插件（rmtree 目录 + 清理调度/预设/安装时间覆盖）。"""
+    """删除插件：用户目录 rmtree；内置（示例）加入隐藏清单（包文件不动）。"""
     import shutil
 
     from zentray.services.settings_manager import SettingsManager
@@ -560,21 +578,28 @@ def _delete_plugin(plugin_id: str) -> tuple[int, dict]:
     p = _scanned_loader().get(plugin_id)
     if p is None:
         return 404, {"ok": False, "error": "插件不存在或校验未通过"}
-    if p.source != "user":
-        return 400, {"ok": False, "error": "内置插件不支持删除"}
     m = p.manifest
     sm = SettingsManager()
-    root = m.root.resolve()
-    try:
-        root.relative_to(sm.get_ops_user_plugins_dir().resolve())
-    except ValueError:
-        return 400, {"ok": False, "error": "插件目录不在用户插件目录内"}
-    # service 先尽力停掉，避免删除后守护进程仍占端口
+    # service 先尽力停掉，避免删除/隐藏后守护进程仍占端口
     if _ctx.plugin_runtime is not None and m.type.value == "service":
         try:
             _ctx.plugin_runtime.service_cmd(p, "stop")
         except Exception:
             logger.exception("删除前停止服务失败: %s", m.id)
+    if p.source == "bundled":
+        # 包目录不可写且重装/升级会还原文件：删除=记录隐藏（loader 扫描期过滤）
+        if plugin_id not in sm.ops.hidden_bundled:
+            sm.ops.hidden_bundled.append(plugin_id)
+        sm.ops.trigger_overrides.pop(plugin_id, None)
+        sm.ops.param_presets.pop(plugin_id, None)
+        sm.ops.installed_at.pop(plugin_id, None)
+        sm.save()
+        return 200, {"ok": True, "plugins": _plugins_list(scan_always=True)}
+    root = m.root.resolve()
+    try:
+        root.relative_to(sm.get_ops_user_plugins_dir().resolve())
+    except ValueError:
+        return 400, {"ok": False, "error": "插件目录不在用户插件目录内"}
     try:
         shutil.rmtree(root)
     except OSError as e:

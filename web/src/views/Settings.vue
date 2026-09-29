@@ -456,21 +456,20 @@
                           >
                             ▶ 运行
                           </a-button>
-                          <template v-if="p.source === 'user'">
-                            <a-button size="mini" @click="editPluginMeta(p)">
-                              {{ opsMetaEditing === p.id ? '收起编辑' : '编辑' }}
-                            </a-button>
-                            <a-button size="mini" status="danger" @click="onOpsDelete(p)">删除</a-button>
-                          </template>
+                          <a-button size="mini" @click="editPluginMeta(p)">
+                            {{ opsMetaEditing === p.id ? '收起编辑' : '编辑' }}
+                          </a-button>
+                          <a-button size="mini" status="danger" @click="onOpsDelete(p)">删除</a-button>
                           <a-button size="mini" @click.stop="opsDocPlugin = p">说明</a-button>
                         </div>
                       </div>
 
-                      <!-- 名称/描述编辑（仅用户目录插件） -->
+                      <!-- 名称/描述编辑（示例插件保存时复制到用户目录再改写） -->
                       <div v-if="opsMetaEditing === p.id" class="plug-meta-edit">
                         <div class="plug-edit-head">
                           <b>名称 / 描述</b>
                           <span class="pc-muted">（保存后改写 plugin.yaml，立即生效）</span>
+                          <span v-if="p.source === 'bundled'" class="pc-muted">（示例插件：保存时复制到用户插件目录）</span>
                         </div>
                         <div class="preset-row">
                           <span class="preset-k">名称</span>
@@ -1273,7 +1272,10 @@ function onOpsDelete(p) {
   Modal.confirm({
     draggable: true,
     title: '删除插件',
-    content: `确定删除「${p.name}」？将移除插件目录 ${p.root}，不可恢复。`,
+    content:
+      p.source === 'bundled'
+        ? `确定删除示例插件「${p.name}」？安装文件保留，将从列表隐藏（重新导入可恢复）。`
+        : `确定删除「${p.name}」？将移除插件目录 ${p.root}，不可恢复。`,
     okText: '删除',
     status: 'warning',
     async onOk() {

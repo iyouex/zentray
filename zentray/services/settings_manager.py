@@ -170,6 +170,8 @@ class OpsSettings:
     param_presets: Dict[str, dict] = field(default_factory=dict)
     # 安装时间：pid -> ISO（安装 API 写入，列表「更新时间」排序用）
     installed_at: Dict[str, str] = field(default_factory=dict)
+    # 已删除的内置（示例）插件 id：包目录不可写/重装会复活，删除=隐藏
+    hidden_bundled: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -599,6 +601,7 @@ class SettingsManager:
                     str(k): str(v)
                     for k, v in (o.get("installed_at") or {}).items()
                 },
+                hidden_bundled=[str(x) for x in (o.get("hidden_bundled") or [])],
             )
 
         # 用 review 回写 nightly 兼容
