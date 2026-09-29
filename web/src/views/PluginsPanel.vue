@@ -7,6 +7,9 @@
         <a-button size="mini" type="text" :loading="loading || runsLoading" @click="refresh">
           刷新
         </a-button>
+        <a-button size="mini" type="text" @click="cancelHost" aria-label="关闭窗口">
+          <template #icon><PhX :size="16" /></template>
+        </a-button>
       </a-space>
     </div>
 
@@ -197,7 +200,8 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { Message } from '@arco-design/web-vue'
-import { getPluginRunLog, getSettings, listPluginRuns, listPlugins, runPlugin } from '@/api/client'
+import { PhX } from '@phosphor-icons/vue'
+import { cancelHost, getPluginRunLog, getSettings, listPluginRuns, listPlugins, runPlugin } from '@/api/client'
 
 const loading = ref(true)
 const enabled = ref(false)
