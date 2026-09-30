@@ -33,6 +33,7 @@ except Exception as e:
 
 
 icon_dir = sys.argv[1] if len(sys.argv) > 1 else ""
+_START_MONO = time.monotonic()
 _current_label = "ZenTray"
 _current_icon = ""
 # 固定 guide：给顶栏预留稳定宽度，避免 set_label 后被桌面隐藏
@@ -155,7 +156,8 @@ def _apply_label(text: str) -> None:
     _current_label = text
 
     if same:
-        _pulse()
+        # 超窗同值：不仅脉冲，直接强制重建 item（覆盖 shell 侧半死场景）
+        _rebuild_arm()
         return
     try:
         if text:
@@ -211,16 +213,47 @@ def _set_menu_safe(items):
     return False
 
 
-def _repin():
-    """以当前值强制脉冲重贴（不受巩固窗口限制）。"""
+def _rebuild_arm():
+    """强制 shell 侧重建 item：Passive 撤下 → 稍后 Active 重挂。
+
+    实证（v0.6.3+staging.21 部署后仍复现）：解锁后我方 DBus 属性一切正常
+    （XAyatanaLabel/Status/guide 全对、watcher 在册），顶栏仍无字——扩展侧
+    item 半死（label actor 被 dispose），任何 XAyatanaNewLabel 信号都救不活。
+    状态翻转让扩展销毁重建 item，新 item 创建时从属性重读 label。
+    """
+    global _last_pulse
+    _last_pulse = time.monotonic()
+    try:
+        indicator.set_status(AppIndicator.IndicatorStatus.PASSIVE)
+    except Exception:
+        pass
+    GLib.timeout_add(150, _rebuild_fire)
+    return False
+
+
+def _rebuild_fire():
+    try:
+        indicator.set_status(AppIndicator.IndicatorStatus.ACTIVE)
+    except Exception:
+        pass
+    # 重建后新 item 已从属性读到 label；脉冲作双保险（值变化必发信号）
     _pulse()
     return False
 
 
 def _watcher_appeared(_conn, _name, _owner):
-    # 多次延迟脉冲：覆盖 shell 重挂 item 与 libayatana 重注册的时序竞态
+    # 启动宽限：bus_watch_name 对已存在名字会立即回调一次，并非解锁回归，
+    # 重建会带来图标闪烁（v0.6.3+staging.21 实测启动 5 秒内闪 3 次）
+    if time.monotonic() - _START_MONO < 10:
+        return
+    # 多次延迟重建：覆盖 shell 重挂 item 与 libayatana 重注册的时序竞态
+    print(
+        f"[ZenTray Bridge] watcher 回归，{500}~{max(_PULSE_REPEAT_MS)}ms 内 3 次强制重建 item",
+        file=sys.stderr,
+        flush=True,
+    )
     for delay in _PULSE_REPEAT_MS:
-        GLib.timeout_add(delay, _repin)
+        GLib.timeout_add(delay, _rebuild_arm)
 
 
 # 初始：应用图标 + 无标题（启动占位，等主进程发 state）
