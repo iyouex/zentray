@@ -25,7 +25,7 @@ try:
     except ValueError:
         gi.require_version("AppIndicator3", "0.1")
         from gi.repository import AppIndicator3 as AppIndicator
-    from gi.repository import Gtk, GLib
+    from gi.repository import Gtk, GLib, Gio
 except Exception as e:
     print(json.dumps({"error": str(e)}), flush=True)
     sys.exit(1)
@@ -172,6 +172,26 @@ def _set_menu_safe(items):
     return False
 
 
+def _pulse_state():
+    """watcher（GNOME 扩展在锁屏/解锁时会停用再重启）回归后强制重贴标签。
+
+    libayatana 对同值 set_label 不发 XAyatanaNewLabel 信号（实测），而 shell
+    侧重注册后若标签丢失只能靠该信号恢复；轮播常连续重复同一标题，同值重发
+    永远是 no-op → 标题一丢就再也回不来。先清空再贴回，保证必然触发一次信号。
+    """
+    label = _current_label
+    try:
+        indicator.set_label("", "")
+    except Exception:
+        pass
+    _apply_label(label)
+    return False
+
+
+def _watcher_appeared(_conn, _name, _owner):
+    GLib.idle_add(_pulse_state)
+
+
 # 初始：应用图标 + 无标题（启动占位，等主进程发 state）
 _id_name = "app_icon"
 if icon_dir:
@@ -197,6 +217,15 @@ _empty = Gtk.Menu()
 _empty.append(Gtk.MenuItem(label="加载中…"))
 _empty.show_all()
 indicator.set_menu(_empty)
+
+# 监听 StatusNotifierWatcher 回归（解锁/扩展重启）：强制脉冲重贴标签
+Gio.bus_watch_name(
+    Gio.BusType.SESSION,
+    "org.kde.StatusNotifierWatcher",
+    Gio.BusNameWatcherFlags.NONE,
+    _watcher_appeared,
+    None,
+)
 
 
 def read_stdin():
