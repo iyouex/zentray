@@ -15,6 +15,7 @@ import sys
 import os
 import json
 import threading
+import time
 
 try:
     import gi
@@ -108,16 +109,54 @@ def _apply_icon(name: str) -> None:
         _current_icon = candidate
 
 
+# 上次脉冲（清空再贴）的单调时钟时刻
+_last_pulse = 0.0
+# watcher 回归后延迟脉冲序列：解锁时 shell 重挂 item 与 libayatana 重注册的
+# 先后不确定，单次脉冲可能落在 shell 挂载前进虚空（信号发出但无人接收，
+# fork ⑮ 实测教训：只验证了信号发出，未验证 shell 挂载后收到）
+_PULSE_REPEAT_MS = (500, 2000, 5000)
+# 同值巩固间隔：轮播常连续重复同一标题，而 libayatana 同值 set_label 不发
+# 信号 → shell 侧一旦丢失（锁屏销毁/扩展异常）同值重发永远 no-op。
+# 超过该间隔的同值重贴改走脉冲路径，任何原因丢失最迟此时长内自愈。
+_PULSE_MIN_INTERVAL = 60.0
+
+
+def _pulse():
+    """强制重贴当前标签：清空再贴，值必变化 → libayatana 必发信号。
+
+    清空时保留 guide（宽度不塌陷，同帧贴回无可见闪烁）。
+    """
+    global _last_pulse
+    _last_pulse = time.monotonic()
+    text = _current_label
+    guide = _LABEL_GUIDE if text else ""
+    try:
+        indicator.set_label("", guide)
+        indicator.set_label(text, guide)
+    except Exception:
+        pass
+
+
 def _apply_label(text: str) -> None:
-    """设置顶栏文字。text 为空字符串时隐藏标签（启动占位）。"""
+    """设置顶栏文字。text 为空字符串时隐藏标签（启动占位）。
+
+    同值且距上次脉冲不足 _PULSE_MIN_INTERVAL 时跳过（set_label 同值是
+    no-op）；同值但已超间隔时走脉冲（清空再贴，值必变化必发信号）。
+    """
     global _current_label
     if text is None:
         text = ""
     text = str(text).replace("\n", " ").strip()
     if len(text) > 48:
         text = text[:47] + "…"
+    same = text == _current_label
+    if same and _last_pulse and (time.monotonic() - _last_pulse) < _PULSE_MIN_INTERVAL:
+        return
     _current_label = text
 
+    if same:
+        _pulse()
+        return
     try:
         if text:
             # guide 固定宽度，防止桌面因 guide 变化把 label 挤没
@@ -172,24 +211,16 @@ def _set_menu_safe(items):
     return False
 
 
-def _pulse_state():
-    """watcher（GNOME 扩展在锁屏/解锁时会停用再重启）回归后强制重贴标签。
-
-    libayatana 对同值 set_label 不发 XAyatanaNewLabel 信号（实测），而 shell
-    侧重注册后若标签丢失只能靠该信号恢复；轮播常连续重复同一标题，同值重发
-    永远是 no-op → 标题一丢就再也回不来。先清空再贴回，保证必然触发一次信号。
-    """
-    label = _current_label
-    try:
-        indicator.set_label("", "")
-    except Exception:
-        pass
-    _apply_label(label)
+def _repin():
+    """以当前值强制脉冲重贴（不受巩固窗口限制）。"""
+    _pulse()
     return False
 
 
 def _watcher_appeared(_conn, _name, _owner):
-    GLib.idle_add(_pulse_state)
+    # 多次延迟脉冲：覆盖 shell 重挂 item 与 libayatana 重注册的时序竞态
+    for delay in _PULSE_REPEAT_MS:
+        GLib.timeout_add(delay, _repin)
 
 
 # 初始：应用图标 + 无标题（启动占位，等主进程发 state）
