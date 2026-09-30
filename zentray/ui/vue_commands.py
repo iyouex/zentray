@@ -102,7 +102,7 @@ def try_vue_plugin_panel(controller: "TrayController") -> bool:
     if not use_vue_ui():
         controller.renderer.show_notification("插件", "面板需要 Web UI（ZENTRAY_UI=web）")
         return True
-    open_vue_route("/plugins-panel", title="🧩 插件", width=720, height=620)
+    open_vue_route("/plugins-panel", title="🧩 插件", width=600, height=540)
     return True
 
 

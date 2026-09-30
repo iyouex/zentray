@@ -57,17 +57,34 @@
                     </a-tag>
                     <a-tag v-if="p.category" size="small" color="cyan">{{ p.category }}</a-tag>
                     <span class="pp-spacer" />
+                    <a-button
+                      v-if="p.type === 'service'"
+                      size="small"
+                      type="primary"
+                      class="pp-run"
+                      :disabled="busy"
+                      :loading="acting === p.id"
+                      @click.stop="serviceCmd(p, 'start')"
+                    >
+                      ▶ 启动
+                    </a-button>
+                    <a-button
+                      v-else
+                      size="small"
+                      type="primary"
+                      class="pp-run"
+                      :disabled="busy"
+                      @click.stop="onRunClick(p)"
+                    >
+                      ▶ 运行
+                    </a-button>
                     <a-button size="mini" type="text" @click.stop="docPlugin = p">说明</a-button>
                     <a-button size="mini" type="text" @click.stop="onCardReport(p)">报告</a-button>
                     <a-button size="mini" type="text" @click.stop="onCardLog(p)">日志</a-button>
-                    <span v-if="p.type !== 'service'" class="pp-hint">
-                      {{ expanded === p.id ? '收起' : (p.params?.length ? '设参数运行' : '运行') }}
-                    </span>
                   </div>
 
-                  <!-- 服务：三按钮直接放卡片上 -->
+                  <!-- 服务：停止/状态（启动按钮在卡头） -->
                   <div v-if="p.type === 'service'" class="pp-actions">
-                    <a-button size="mini" type="primary" :disabled="busy" :loading="acting === p.id" @click="serviceCmd(p, 'start')">▶ 启动</a-button>
                     <a-button size="mini" :disabled="busy" :loading="acting === p.id" @click="serviceCmd(p, 'stop')">⏹ 停止</a-button>
                     <a-button size="mini" :loading="acting === p.id" @click="serviceCmd(p, 'status')">ℹ 状态</a-button>
                   </div>
@@ -355,6 +372,12 @@ async function onCardClick(p) {
   expanded.value = expanded.value === p.id ? '' : p.id
 }
 
+/** 卡头「▶ 运行」：无参直接跑；带参先展开参数表单 */
+function onRunClick(p) {
+  if (p.params?.length) expanded.value = p.id
+  else runScript(p)
+}
+
 async function runScript(p) {
   acting.value = p.id
   try {
@@ -491,7 +514,7 @@ watch(docPlugin, (v) => { if (v) docVisible.value = true })
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
   flex-wrap: wrap;
 }
 .pp-chip {
@@ -500,10 +523,10 @@ watch(docPlugin, (v) => { if (v) docVisible.value = true })
 .pp-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 .pp-card {
-  padding: 12px 14px;
+  padding: 9px 12px;
   border: 1px solid var(--color-border-2);
   border-radius: var(--zt-radius-card, 12px);
   background: var(--color-fill-1, rgba(148, 163, 184, 0.06));
@@ -527,13 +550,14 @@ watch(docPlugin, (v) => { if (v) docVisible.value = true })
 .pp-spacer {
   flex: 1;
 }
-.pp-hint {
-  font-size: 12px;
-  color: var(--color-text-3);
+/* 卡头独立运行/启动按钮：与说明/报告/日志文字钮拉开层次 */
+.pp-run {
+  margin-right: 4px;
+  box-shadow: 0 2px 6px var(--color-primary-glow, rgba(22, 93, 255, 0.25));
 }
 .pp-expand {
-  margin-top: 10px;
-  padding-top: 10px;
+  margin-top: 8px;
+  padding-top: 8px;
   border-top: 1px dashed var(--color-border-2);
 }
 .pp-param {
