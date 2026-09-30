@@ -61,6 +61,7 @@ class TrayController(QObject):
         self.renderer.backend.action_received.connect(self.handle_action)
         self.pomodoro_service.time_updated.connect(self._on_pomodoro_tick)
         self.pomodoro_service.pomodoro_finished.connect(self._on_pomodoro_end)
+        self.pomodoro_service.break_finished.connect(self._on_break_end)
         self.plugin_runtime.log_line.connect(self._on_ops_log)
         self.plugin_runtime.script_finished.connect(self._on_ops_finished)
         self.plugin_runtime.busy_changed.connect(self._on_ops_busy)
@@ -209,8 +210,8 @@ class TrayController(QObject):
         self.start_rotation()
 
     def update_display(self, update_menu: bool = True) -> None:
-        """更新顶栏：左侧优先级/番茄饼图 + 标题或倒计时。"""
-        from zentray.resources import tray_pie_icon_name, tray_tomato_icon_name
+        """更新顶栏：左侧优先级/番茄/休息饼图 + 标题或倒计时。"""
+        from zentray.resources import tray_break_icon_name, tray_pie_icon_name, tray_tomato_icon_name
 
         # 启动阶段未进入轮播：强制仅应用图标
         if (
@@ -224,6 +225,12 @@ class TrayController(QObject):
         if self._ops_active or self.plugin_runtime.is_busy:
             icon = "app_icon"
             text = (self._ops_tray_text or "⚡ 脚本运行中")[:50]
+        elif self.pomodoro_service.is_break:
+            # 休息段：茶绿饼图 + 倒计时（自定义文案对休息无意义）
+            pct = self.pomodoro_service.get_elapsed_progress_percent()
+            icon = tray_break_icon_name(pct)
+            rem = self.pomodoro_service.get_remaining()
+            text = f"{rem // 60:02d}:{rem % 60:02d}"
         elif self.pomodoro_service.is_active:
             # 左侧：随倒计时填充的番茄饼图；右侧：文案或倒计时
             pct = self.pomodoro_service.get_elapsed_progress_percent()
@@ -264,11 +271,15 @@ class TrayController(QObject):
             self._refresh_menu()
 
     def _refresh_menu(self) -> None:
+        pomo = self.pomodoro_service
         items = self.menu_builder.build_main_menu(
-            is_pomodoro=self.pomodoro_service.is_active,
+            is_pomodoro=pomo.is_active,
             ops_enabled=bool(self._settings.ops.enabled),
             ops_plugins=self._ops_plugins,
             ops_busy=self.plugin_runtime.is_busy or self._ops_active,
+            pomodoro_phase=pomo.phase,
+            pomodoro_today=self._pomodoro_today_stats(),
+            focus_task_title=pomo.task_title if pomo.phase == "focus" else "",
         )
         if self.menu_builder.should_update(items):
             self.renderer.update_menu(items)
@@ -290,9 +301,94 @@ class TrayController(QObject):
             self._carousel_started = True
         self.update_display(update_menu=False)
 
+    # ==========================================
+    # 番茄钟循环（启动/中止/阶段结束）
+    # ==========================================
+
+    def start_pomodoro(self, task_id: str = None) -> bool:
+        """开始专注（可绑定任务）。托盘菜单与任务列表 🍅 按钮共用此入口。"""
+        if getattr(self, "plugin_runtime", None) and (
+            self.plugin_runtime.is_busy or getattr(self, "_ops_active", False)
+        ):
+            self.renderer.show_notification("番茄钟", "脚本运行中，请稍后再开始专注。")
+            return False
+        if self.pomodoro_service.is_active:
+            return False  # 循环进行中（含休息段）不重复启动
+        tid = str(task_id or "")
+        title = ""
+        if tid:
+            task = self.task_service.find_task(tid)
+            if task is None:
+                tid = ""  # 任务已不存在：降级为无绑定
+            else:
+                title = task.title or ""
+        self.pomodoro_service.start(tid, title)
+        self.update_display()
+        return True
+
+    def stop_pomodoro(self) -> None:
+        """中止当前阶段；专注段按已专注时长记日志（≥1 分钟才记）。"""
+        was_focus = self.pomodoro_service.phase == "focus"
+        task_id = self.pomodoro_service.task_id
+        task_title = self.pomodoro_service.task_title
+        elapsed = self.pomodoro_service.stop()
+        if was_focus and elapsed >= 60:
+            self._log_focus(int(round(elapsed / 60.0)), task_id, task_title, aborted=True)
+        self.update_display()
+
+    def _log_focus(self, minutes: int, task_id: str, task_title: str, *, aborted: bool) -> None:
+        try:
+            from zentray.services.activity_log import log_event
+
+            log_event(
+                "pomodoro",
+                "pomodoro_abort" if aborted else "pomodoro_done",
+                title=task_title or "专注",
+                detail=("中止专注" if aborted else "完成专注") + f"，共 {minutes} 分钟",
+                meta={"minutes": minutes, "task_id": task_id, "phase": "focus"},
+            )
+        except Exception:
+            logger.exception("番茄钟日志写入失败")
+
+    def _pomodoro_today_stats(self) -> tuple:
+        """今日 (番茄数, 专注分钟)——建菜单时现算，不引常驻缓存。"""
+        try:
+            from datetime import datetime as _dt
+
+            from zentray.services.activity_log import query_events
+
+            today = _dt.now().strftime("%Y-%m-%d")
+            count = minutes = 0
+            for ev in query_events(category="pomodoro", days=1, limit=500):
+                if (ev.get("time") or "")[:10] != today:
+                    continue
+                if ev.get("action") != "pomodoro_done":
+                    continue
+                count += 1
+                minutes += int((ev.get("meta") or {}).get("minutes") or 0)
+            return count, minutes
+        except Exception:
+            return 0, 0
+
     def _on_pomodoro_end(self) -> None:
-        self.renderer.show_notification("专注结束", "番茄钟已完成，休息一下吧！")
+        """专注段结束（service 已流转到休息或 idle）。"""
+        svc = self.pomodoro_service
+        minutes = max(1, int(round(svc.last_focus_seconds / 60.0)))
+        count_before, _m = self._pomodoro_today_stats()
+        self._log_focus(minutes, svc.task_id, svc.task_title, aborted=False)
         self._carousel_started = True
+        if svc.is_break:
+            kind = "长休" if svc.phase == "long_break" else "短休"
+            rem = svc.get_remaining()
+            self.renderer.show_notification(
+                "专注完成",
+                f"🍅 第 {svc.completed_focus} 个番茄！{kind} {rem // 60} 分钟已开始",
+            )
+        else:
+            self.renderer.show_notification("专注结束", "番茄钟已完成，休息一下吧！")
+        goal = int(getattr(self._settings.pomodoro, "daily_goal_pomodoros", 0) or 0)
+        if goal > 0 and count_before < goal <= count_before + 1:
+            self.renderer.show_notification("今日目标达成 🎉", f"今天已完成 {goal} 个番茄！")
         self.update_display(update_menu=True)
         self.start_rotation()
         try:
@@ -301,6 +397,22 @@ class TrayController(QObject):
             triggers.dispatch_event("pomodoro_end")
         except Exception:
             logger.exception("pomodoro_end 插件事件分发失败")
+
+    def _on_break_end(self) -> None:
+        """休息段结束（自然走完或被跳过）。"""
+        if getattr(self._settings.pomodoro, "auto_start_focus", False):
+            self.renderer.show_notification("休息结束", "新一段专注已开始 🍅")
+        else:
+            self.renderer.show_notification("休息结束", "准备开始下一个番茄吧！")
+        self._carousel_started = True
+        self.update_display(update_menu=True)
+        self.start_rotation()
+        try:
+            from zentray.plugins import triggers
+
+            triggers.dispatch_event("break_end")
+        except Exception:
+            logger.exception("break_end 插件事件分发失败")
 
     # ==========================================
     # 插件脚本生命周期（信号槽，主线程）

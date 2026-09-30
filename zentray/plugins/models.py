@@ -22,6 +22,7 @@ class TriggerType(str, Enum):
 class TriggerEvent(str, Enum):
     TASK_DONE = "task_done"
     POMODORO_END = "pomodoro_end"
+    BREAK_END = "break_end"
     STARTUP = "startup"
 
 

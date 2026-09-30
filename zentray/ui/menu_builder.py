@@ -28,12 +28,18 @@ class MenuBuilder:
         ops_enabled: bool = False,
         ops_plugins: Optional[list] = None,
         ops_busy: bool = False,
+        pomodoro_phase: str = "idle",
+        pomodoro_today: Optional[tuple] = None,
+        focus_task_title: str = "",
     ) -> List[dict]:
         """
         构建主菜单。
 
         注意：菜单结构不依赖轮播当前标题/当前任务星标，避免轮播时整菜单重建闪动。
         插件面板入口为动态项：启用且装了插件才出现（列表/运行在面板，管理在设置页）。
+        pomodoro_phase: idle | focus | short_break | long_break（休息段菜单分叉）
+        pomodoro_today: (今日番茄数, 今日专注分钟) 统计信息行；None=不显示
+        focus_task_title: 专注绑定任务标题（专注中显示信息行，可为空）
         """
         if pomodoro_minutes is None or extend_minutes is None:
             try:
@@ -58,7 +64,20 @@ class MenuBuilder:
 
         items.append("separator")
 
-        if is_pomodoro:
+        if is_pomodoro and pomodoro_phase in ("short_break", "long_break"):
+            # 休息段：可跳过休息，无中止/延长
+            items.append({
+                "id": "skip_break",
+                "label": "⏭ 跳过休息",
+                "enabled": True,
+            })
+        elif is_pomodoro:
+            if focus_task_title:
+                items.append({
+                    "id": "pomodoro_task",
+                    "label": f"🍅 专注中: {str(focus_task_title)[:24]}",
+                    "enabled": False,
+                })
             items.append({
                 "id": "stop_pomodoro",
                 "label": "⏹ 中止专注",
@@ -74,6 +93,14 @@ class MenuBuilder:
                 "id": "pomodoro",
                 "label": f"🍅 专注 {pomodoro_minutes} 分钟",
                 "enabled": not ops_busy,
+            })
+
+        if pomodoro_today is not None:
+            count, minutes = pomodoro_today
+            items.append({
+                "id": "pomodoro_stats",
+                "label": f"今日 🍅 {count} · {minutes} 分钟",
+                "enabled": False,
             })
 
         items.append("separator")
