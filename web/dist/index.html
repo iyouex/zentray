@@ -4,10 +4,37 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ZenTray</title>
-    <script type="module" crossorigin src="./assets/index-B3ysepuF.js"></script>
+    <script type="module" crossorigin src="./assets/index-VQutqhAb.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/index-BknjS6JY.css">
   </head>
   <body>
+    <script>
+      // 外观早启：首帧即带主题/皮肤 class，消除冷开弹窗的白屏闪变。
+      // 值由 theme.js 持久化（localStorage zt:boot），与 App.vue 拉取的权威设置一致；
+      // 逻辑须与 theme.js 的 applyTheme/applyAppearance 保持同义（无缓存→系统主题+默认外观）。
+      ;(function () {
+        try {
+          var b = JSON.parse(localStorage.getItem('zt:boot') || '{}')
+          var t = (b.theme || 'system').toLowerCase()
+          var eff =
+            t === 'light' || t === 'dark' || t === 'oled-dark' || t === 'slate-dark'
+              ? t
+              : window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches
+                ? 'light'
+                : 'slate-dark'
+          var c = document.body.classList
+          if (eff === 'light') c.add('theme-light')
+          else {
+            c.add('theme-dark')
+            c.add(eff === 'oled-dark' ? 'theme-oled-dark' : 'theme-slate-dark')
+            document.body.setAttribute('arco-theme', 'dark')
+          }
+          if (b.motion === 'off') c.add('zt-motion-off')
+          if (b.shape === 'crisp') c.add('zt-shape-crisp')
+          c.add(b.skin === 'aurora' ? 'zt-skin-aurora' : 'zt-skin-neo')
+        } catch (e) {}
+      })()
+    </script>
     <div id="app"></div>
   </body>
 </html>

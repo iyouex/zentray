@@ -21,8 +21,22 @@ const themeEffective = ref('dark')
 // 递增 router-view 的 key 强制重挂当前页面组件（onMounted 重新拉数据），
 // 避免保活面板展示关窗前的陈旧数据。
 const viewKey = ref(0)
+// 重开时重读设置再应用外观：保活复用的 SPA 若不重读，主题/皮肤改动
+// 要等进程重启才跟随（弹窗“不跟随程序设置”的根因之一）。
+const syncAppearance = async () => {
+  try {
+    const s = await getSettings()
+    themeMode.value = s?.appearance?.theme || 'system'
+    applyAppearance(s?.appearance)
+  } catch (_) {
+    themeMode.value = 'system'
+    applyAppearance()
+  }
+  themeEffective.value = applyTheme(themeMode.value)
+}
 const handleReopen = () => {
   viewKey.value++
+  syncAppearance()
 }
 
 // ---- 页面转场（spec §3.1）：CSS 类退役，GSAP timeline 接管 ----
@@ -174,15 +188,7 @@ onMounted(async () => {
   window.addEventListener('mouseup', handleMouseUp)
   window.addEventListener('zentray:reopen', handleReopen)
 
-  try {
-    const s = await getSettings()
-    themeMode.value = s?.appearance?.theme || 'system'
-    applyAppearance(s?.appearance)
-  } catch (_) {
-    themeMode.value = 'system'
-    applyAppearance()
-  }
-  themeEffective.value = applyTheme(themeMode.value)
+  await syncAppearance()
   unwatch = watchSystemTheme(
     () => themeMode.value,
     (eff) => {

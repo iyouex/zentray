@@ -3,6 +3,16 @@
  * mode: light | dark | system
  */
 
+/** 外观早启缓存（index.html boot 脚本读取）：首帧即带 class，冷开弹窗不闪白 */
+const BOOT_KEY = 'zt:boot'
+
+function saveBoot(patch) {
+  try {
+    const b = { ...JSON.parse(localStorage.getItem(BOOT_KEY) || '{}'), ...patch }
+    localStorage.setItem(BOOT_KEY, JSON.stringify(b))
+  } catch (_) {}
+}
+
 import { gsap, EASE, DUR, dur, motionOff, isReduced } from './motion'
 
 export function resolveEffectiveTheme(mode) {
@@ -69,6 +79,7 @@ function tweenClassFlip(root, flip, vars, seconds, ease) {
  */
 export function applyTheme(mode) {
   const effective = resolveEffectiveTheme(mode)
+  saveBoot({ theme: (mode || 'system').toLowerCase() }) // 存原始 mode，boot 时再解析 system
   const root = document.body
   tweenClassFlip(
     root,
@@ -165,5 +176,6 @@ export function applyAppearance(prefs) {
   root.dataset.ztMotion = motion
   root.dataset.ztShape = shape
   root.dataset.ztSkin = skin
+  saveBoot({ motion, shape, skin })
   return { motion, shape, skin }
 }
