@@ -3,6 +3,7 @@
 
 - pie_{high|medium|low|none}_{0..100}: 任务紧急度饼图（无绿叶）
 - tomato_{0..100}: 番茄钟饼图（红果 + 绿萼，随进度填充）
+- break_{0..100}: 休息段饼图（茶绿纯色圆饼）
 """
 from __future__ import annotations
 

@@ -14,7 +14,8 @@ logger = logging.getLogger(__name__)
 
 # 与 scripts/generate_pie_icons.py 保持一致；变更时强制刷新用户目录饼图
 # v4: 任务饼图无绿叶；番茄独立绘制（红果+绿萼，随进度填充）
-PIE_ICON_VERSION = "4"
+# v5: 新增休息饼图 break_*（茶绿纯色圆饼，无萼）
+PIE_ICON_VERSION = "5"
 
 
 def get_resource_path(relative_path: str) -> Path:
@@ -83,6 +84,11 @@ def tray_tomato_icon_name(progress: int | None = 0) -> str:
     return f"tomato_{_snap_progress_10(progress)}"
 
 
+def tray_break_icon_name(progress: int | None = 0) -> str:
+    """休息段饼图：break_{0|10|…|100}.png（茶绿纯色圆饼，与番茄区分）。"""
+    return f"break_{_snap_progress_10(progress)}"
+
+
 def _pie_version_path(icon_dir: Path) -> Path:
     return icon_dir / ".pie_icons_version"
 
@@ -114,6 +120,8 @@ def _generate_pie_icons_into(icon_dir: Path) -> bool:
     # 番茄：偏圆润的果红 + 深绿萼（与 🍅 语义一致；与 high 饼图分开绘制）
     tomato_body = (228, 56, 48)
     tomato_leaf = (34, 160, 70)
+    # 休息：茶绿纯色圆饼（无萼，与专注番茄一眼区分）
+    break_color = (96, 170, 122)
     base_alpha = 72
     outline_alpha = 230
     size = 32
@@ -197,6 +205,10 @@ def _generate_pie_icons_into(icon_dir: Path) -> bool:
         im = _draw_tomato(progress)
         im.save(icon_dir / f"tomato_{progress}.png", "PNG")
 
+    for progress in range(0, 101, 10):
+        im = _draw_priority_pie(break_color, progress)
+        im.save(icon_dir / f"break_{progress}.png", "PNG")
+
     try:
         _pie_version_path(icon_dir).write_text(PIE_ICON_VERSION + "\n", encoding="utf-8")
     except OSError:
@@ -271,12 +283,17 @@ def ensure_app_icons() -> Path:
                 if not (icon_dir / f"tomato_{pct}.png").exists():
                     missing = True
                     break
+        if not missing:
+            for pct in range(0, 101, 10):
+                if not (icon_dir / f"break_{pct}.png").exists():
+                    missing = True
+                    break
         if missing:
             if not _generate_pie_icons_into(icon_dir) and src_dir.is_dir():
                 for fname in os.listdir(src_dir):
                     if not fname.endswith(".png"):
                         continue
-                    if not (fname.startswith("pie_") or fname.startswith("tomato_")):
+                    if not fname.startswith(("pie_", "tomato_", "break_")):
                         continue
                     src = src_dir / fname
                     dst = icon_dir / fname

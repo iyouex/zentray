@@ -44,6 +44,7 @@ class ApiContext:
         plugin_runtime=None,
         plugin_loader=None,
         pomodoro_service=None,
+        start_pomodoro: Optional[Callable[[str], None]] = None,
     ):
         self.task_service = task_service
         self.on_changed = on_changed or (lambda: None)
@@ -51,6 +52,8 @@ class ApiContext:
         self.plugin_runtime = plugin_runtime
         self.plugin_loader = plugin_loader
         self.pomodoro_service = pomodoro_service
+        # 主线程启动番茄钟（HTTP 线程直接 start 会跨线程启 QTimer）
+        self.start_pomodoro = start_pomodoro or (lambda task_id: None)
 
 
 _ctx = ApiContext()
@@ -204,6 +207,9 @@ def handle_request(
 
         if method == "POST" and path == "/api/reminders/check-conflicts":
             return _check_reminder_conflicts(body)
+
+        if method == "POST" and path == "/api/pomodoro/start":
+            return _pomodoro_start(body)
 
         # —— 插件：列表 / 校验 / 安装 / 运行 / 运行历史 / 授权 ——
         # 精确路由必须置于下方 /api/plugins/ 前缀匹配之前，避免被吞
@@ -1174,6 +1180,25 @@ def _run_plugin(plugin_id: str, body: dict) -> tuple[int, dict]:
     if not started:
         return 409, {"error": "无法启动脚本"}
     return 200, {"ok": True, "id": plugin_id, "started": True}
+
+
+def _pomodoro_start(body: dict) -> tuple[int, dict]:
+    """任务列表 🍅 按钮：以任务为对象开始专注（经信号回主线程启动）。"""
+    svc = _ctx.pomodoro_service
+    if svc is None:
+        return 500, {"error": "pomodoro service unavailable"}
+    if bool(getattr(svc, "is_active", False)):
+        return 409, {"error": "番茄钟循环进行中"}
+    runtime = _ctx.plugin_runtime
+    if runtime is not None and bool(getattr(runtime, "is_busy", False)):
+        return 409, {"error": "脚本运行中，请稍后再开始专注"}
+    task_id = str(body.get("task_id") or "")
+    if task_id:
+        task = _ctx.task_service.find_task(task_id) if _ctx.task_service else None
+        if task is None:
+            return 404, {"error": "任务不存在"}
+    _ctx.start_pomodoro(task_id)
+    return 200, {"ok": True, "task_id": task_id}
 
 
 def _save_settings(data: dict) -> None:

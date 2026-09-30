@@ -52,25 +52,24 @@ class TaskListCommand(ActionCommand):
 
 
 class PomodoroStartCommand(ActionCommand):
-    """开始番茄钟"""
+    """开始番茄钟（无绑定任务；以任务为对象启动在任务列表 🍅 按钮）"""
 
     def execute(self, controller: "TrayController") -> None:
-        if getattr(controller, "plugin_runtime", None) and (
-            controller.plugin_runtime.is_busy or getattr(controller, "_ops_active", False)
-        ):
-            controller.renderer.show_notification(
-                "番茄钟", "脚本运行中，请稍后再开始专注。"
-            )
-            return
-        controller.pomodoro_service.start()
-        controller.update_display()
+        controller.start_pomodoro()
 
 
 class PomodoroStopCommand(ActionCommand):
-    """中止番茄钟"""
+    """中止番茄钟（专注段中止记录已专注时长；休息段等同跳过）"""
 
     def execute(self, controller: "TrayController") -> None:
-        controller.pomodoro_service.stop()
+        controller.stop_pomodoro()
+
+
+class SkipBreakCommand(ActionCommand):
+    """跳过休息"""
+
+    def execute(self, controller: "TrayController") -> None:
+        controller.pomodoro_service.skip_break()
         controller.update_display()
 
 
@@ -116,6 +115,7 @@ COMMAND_MAP = {
     "pomodoro": PomodoroStartCommand(),
     "stop_pomodoro": PomodoroStopCommand(),
     "extend_pomodoro": PomodoroExtendCommand(),
+    "skip_break": SkipBreakCommand(),
     "quit": QuitCommand(),
     "settings": SettingsCommand(),
 }

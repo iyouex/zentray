@@ -60,7 +60,7 @@ triggers:                         # 可选，v2：自动触发（仅 script，�
     minutes: 30
   - type: cron                    #   标准 5 字段 cron（错过不补跑）
     expr: "*/15 9-17 * * 1-5"
-  - type: event                   #   事件：task_done | pomodoro_end | startup
+  - type: event                   #   事件：task_done | pomodoro_end | break_end | startup
     event: task_done
 params:                           # 可选，v2.1：命名入参（仅 script，见 3.5）
   - name: target
@@ -96,7 +96,7 @@ params:                           # 可选，v2.1：命名入参（仅 script，
 | `daily` | `time: "HH:MM"` | 每日定时；错过（关机）在下次轮询补跑一次，当日去重 |
 | `interval` | `minutes: 1–1440` | 运行期每 N 分钟循环；不补跑 |
 | `cron` | `expr: "分 时 日 月 周"` | 标准 5 字段；支持 `*`、`*/n`、`a-b`、`a-b/n`、列表；`7=周日`；日/周均受限时取 OR（vixie 语义）；错过不补跑 |
-| `event` | `event: task_done \| pomodoro_end \| startup` | 事件触发；`task_done` 注入完成任务上下文 |
+| `event` | `event: task_done \| pomodoro_end \| break_end \| startup` | 事件触发；`task_done` 注入完成任务上下文 |
 
 **授权（一次性）**：带触发器的插件首次自动触发前弹「允许此插件自动运行」；
 允许后静默运行，拒绝则持久不再询问（设置页插件列表的授权开关可重新打开）。手动运行不受影响。
@@ -153,7 +153,7 @@ v2 任务上下文注入（从任务页/任务完成触发运行时自动带入�
 |------|------|
 | `ZENTRAY_TASK_ID` / `ZENTRAY_TASK_TITLE` | 任务 ID 与标题（有任务上下文时恒在） |
 | `ZENTRAY_TASK_DETAILS` / `ZENTRAY_TASK_CATEGORY` / `ZENTRAY_TASK_PRIORITY` / `ZENTRAY_TASK_DEADLINE` | 非空才注入 |
-| `ZENTRAY_TRIGGER` | 触发方式：`manual` / `daily` / `interval` / `cron` / `task_done` / `pomodoro_end` / `startup` |
+| `ZENTRAY_TRIGGER` | 触发方式：`manual` / `daily` / `interval` / `cron` / `task_done` / `pomodoro_end` / `break_end` / `startup` |
 | `ZENTRAY_PLUGIN_DATA_DIR` | 每插件私有数据目录（`数据目录/plugin_data/<id>/`，运行前自动创建）；持久化状态写这里，**勿写插件自身目录**（zip 覆盖重装会丢）。无需 api_version 门，v1 插件同样注入 |
 
 ### 4.2 stdout 进度协议（UTF-8，按行）

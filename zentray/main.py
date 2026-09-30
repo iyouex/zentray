@@ -327,12 +327,14 @@ def main():
 
             changed_requested = Signal()
             apply_settings_requested = Signal()
+            pomodoro_requested = Signal(str)  # task_id（空=无绑定）
 
             def __init__(self, runtime_ref):
                 super().__init__()
                 self._runtime_ref = runtime_ref
                 self.changed_requested.connect(self._on_changed)
                 self.apply_settings_requested.connect(self._on_apply)
+                self.pomodoro_requested.connect(self._on_pomodoro)
 
             def _on_changed(self):
                 if self._runtime_ref.controller:
@@ -341,6 +343,11 @@ def main():
             def _on_apply(self):
                 if self._runtime_ref.controller:
                     self._runtime_ref.controller.apply_settings()
+
+            def _on_pomodoro(self, task_id):
+                controller = self._runtime_ref.controller
+                if controller:
+                    controller.start_pomodoro(task_id or None)
 
         _api_ui_relay = _ApiUiRelay(runtime)
         set_api_context(
@@ -351,6 +358,7 @@ def main():
                 plugin_runtime=getattr(runtime.controller, "plugin_runtime", None),
                 plugin_loader=getattr(runtime.controller, "plugin_loader", None),
                 pomodoro_service=getattr(runtime.controller, "pomodoro_service", None),
+                start_pomodoro=_api_ui_relay.pomodoro_requested.emit,
             )
         )
         if vue_ui_available():

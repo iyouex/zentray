@@ -83,6 +83,11 @@ export async function selectTask(id) {
   await http.post(`/api/tasks/${id}/select`)
 }
 
+/** 以任务为对象开始番茄钟专注（无 task_id 则等同托盘菜单启动） */
+export async function startPomodoro(taskId = '') {
+  return http.post('/api/pomodoro/start', { task_id: taskId })
+}
+
 export async function listTemplates() {
   const { data } = await http.get('/api/templates')
   return data.items || []

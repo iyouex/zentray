@@ -47,8 +47,8 @@
             @click="selectRow(r)"
           >
             <span class="tl-time">{{ formatClock(r.time) }}</span>
-            <a-tag size="small" :color="r.cat === 'ai' ? 'purple' : 'arcoblue'">
-              {{ r.cat === 'ai' ? 'AI' : '任务' }}
+            <a-tag size="small" :color="r.cat === 'ai' ? 'purple' : r.cat === 'pomodoro' ? 'red' : 'arcoblue'">
+              {{ r.cat === 'ai' ? 'AI' : r.cat === 'pomodoro' ? '🍅' : '任务' }}
             </a-tag>
             <span class="tl-icon">{{ actionIcon(r.action) }}</span>
             <a-tag size="small" :color="actionColor(r.action)">{{ actionLabel(r.action) }}</a-tag>
@@ -108,7 +108,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { Message } from '@arco-design/web-vue'
 import { fetchAiReport, fetchHistory } from '@/api/client'
 
-/** 筛选项：任务 6 操作 + AI 计划/复盘，默认全开 */
+/** 筛选项：任务 6 操作 + 番茄钟专注 + AI 计划/复盘，默认全开 */
 const FILTER_OPTS = [
   { value: 'create', label: '新增', icon: '➕' },
   { value: 'update', label: '编辑', icon: '✏️' },
@@ -116,6 +116,8 @@ const FILTER_OPTS = [
   { value: 'delay', label: '延时', icon: '⏱' },
   { value: 'done', label: '完成', icon: '✅' },
   { value: 'abandon', label: '废弃', icon: '🗑' },
+  { value: 'pomodoro_done', label: '番茄', icon: '🍅' },
+  { value: 'pomodoro_abort', label: '中止', icon: '⏹' },
   { value: 'plan', label: '计划', icon: '📋' },
   { value: 'review', label: '复盘', icon: '📝' },
 ]
@@ -128,6 +130,8 @@ const ACTION_META = {
   done: { label: '完成', icon: '✅', color: 'green' },
   abandon: { label: '废弃', icon: '🗑', color: 'red' },
   select: { label: '切换', icon: '🎯', color: 'gray' },
+  pomodoro_done: { label: '专注完成', icon: '🍅', color: 'red' },
+  pomodoro_abort: { label: '专注中止', icon: '⏹', color: 'orange' },
   plan: { label: '计划', icon: '📋', color: 'orangered' },
   review: { label: '复盘', icon: '📝', color: 'purple' },
 }
@@ -227,15 +231,15 @@ const aiItems = computed(() => {
   return items
 })
 
-/** 统一行集：任务事件 + AI 条目，经筛选后按日期分组倒序 */
+/** 统一行集：任务事件 + 番茄钟专注 + AI 条目，经筛选后按日期分组倒序 */
 const rowsByDate = computed(() => {
   const rows = []
   for (const e of events.value) {
-    if (e.category !== 'task') continue
+    if (e.category !== 'task' && e.category !== 'pomodoro') continue
     if (!filters.value.includes(e.action)) continue
     rows.push({
       key: `t-${e.time}-${e.action}-${e.title}`,
-      cat: 'task',
+      cat: e.category,
       action: e.action,
       time: e.time,
       detail: e.detail,

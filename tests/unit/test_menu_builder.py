@@ -115,3 +115,72 @@ def test_ops_busy_keeps_panel_enabled_disables_pomodoro():
     by_id = {it["id"]: it for it in items if isinstance(it, dict)}
     assert by_id["ops.panel"].get("enabled", True) is True
     assert by_id["pomodoro"]["enabled"] is False
+
+
+# ---- 番茄钟循环菜单（v0.6.5：休息段/统计行/绑定任务） ----
+
+def test_break_phase_menu_has_skip_only():
+    """休息段：跳过休息；无中止专注/延长；任务列表仍禁用。"""
+    mb = MenuBuilder()
+    items = mb.build_main_menu(
+        is_pomodoro=True,
+        pomodoro_minutes=25,
+        extend_minutes=10,
+        pomodoro_phase="short_break",
+    )
+    by_id = {it["id"]: it for it in items if isinstance(it, dict)}
+    assert by_id["skip_break"]["enabled"] is True
+    assert "stop_pomodoro" not in by_id
+    assert "extend_pomodoro" not in by_id
+    assert by_id["task_list"]["enabled"] is False
+
+
+def test_focus_phase_menu_defaults_backward_compatible():
+    """旧调用（只传 is_pomodoro=True）：专注菜单结构不变。"""
+    mb = MenuBuilder()
+    items = mb.build_main_menu(is_pomodoro=True)
+    by_id = {it["id"]: it for it in items if isinstance(it, dict)}
+    assert by_id["stop_pomodoro"]["enabled"] is True
+    assert by_id["extend_pomodoro"]["enabled"] is True
+    assert "skip_break" not in by_id
+    assert "pomodoro_task" not in by_id
+
+
+def test_focus_with_bound_task_shows_info_row():
+    mb = MenuBuilder()
+    items = mb.build_main_menu(
+        is_pomodoro=True,
+        pomodoro_phase="focus",
+        focus_task_title="写周报",
+    )
+    by_id = {it["id"]: it for it in items if isinstance(it, dict)}
+    assert by_id["pomodoro_task"]["label"] == "🍅 专注中: 写周报"
+    assert by_id["pomodoro_task"]["enabled"] is False
+
+
+def test_today_stats_row():
+    mb = MenuBuilder()
+    items = mb.build_main_menu(
+        is_pomodoro=False,
+        pomodoro_minutes=25,
+        extend_minutes=10,
+        pomodoro_today=(3, 75),
+    )
+    by_id = {it["id"]: it for it in items if isinstance(it, dict)}
+    assert by_id["pomodoro_stats"]["label"] == "今日 🍅 3 · 75 分钟"
+    assert by_id["pomodoro_stats"]["enabled"] is False
+    # 不传统计（None）：无该行
+    items2 = mb.build_main_menu(is_pomodoro=False)
+    assert "pomodoro_stats" not in {it["id"] for it in items2 if isinstance(it, dict)}
+
+
+def test_break_icon_generation(tmp_path):
+    """休息饼图进同一生成管线：break_{0..100}.png 与 tomato 同规格。"""
+    from zentray.resources import _generate_pie_icons_into, tray_break_icon_name
+
+    assert tray_break_icon_name(46) == "break_50"
+    out = tmp_path / "icons"
+    assert _generate_pie_icons_into(out) is True
+    for pct in (0, 50, 100):
+        assert (out / f"break_{pct}.png").exists()
+        assert (out / f"tomato_{pct}.png").exists()

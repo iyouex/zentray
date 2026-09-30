@@ -229,6 +229,10 @@
               </div>
 
               <div class="detail-actions">
+                <a-button type="primary" @click="onPomodoro">
+                  <template #icon><PhTimer :size="16" /></template>
+                  🍅 专注
+                </a-button>
                 <a-button type="outline" @click="onSelect">
                   <template #icon><PhArrowsCounterClockwise :size="16" /></template>
                   切换到此任务
@@ -349,7 +353,7 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Message, Modal } from '@arco-design/web-vue'
-import { PhPlus, PhX, PhRepeat, PhArrowsCounterClockwise, PhPencil, PhCheck, PhTrash, PhLightbulb, PhPlay } from '@phosphor-icons/vue'
+import { PhPlus, PhX, PhRepeat, PhArrowsCounterClockwise, PhPencil, PhCheck, PhTrash, PhLightbulb, PhPlay, PhTimer } from '@phosphor-icons/vue'
 import {
   abandonTask,
   addSubtask,
@@ -366,6 +370,7 @@ import {
   runPlugin,
   selectTask,
   setSubtaskStatus,
+  startPomodoro,
   skipTemplate,
   updateTask,
   updateTemplate,
@@ -643,6 +648,19 @@ async function onSelect() {
   await selectTask(t.id)
   Message.success('已切换')
   closeHost({ action: 'select', id: t.id })
+}
+
+/** 以当前任务为对象开始番茄钟专注 */
+async function onPomodoro() {
+  const t = currentTask.value
+  if (!t) return
+  try {
+    await startPomodoro(t.id)
+    Message.success('专注已开始，进度见托盘顶栏')
+    closeHost({ action: 'pomodoro', id: t.id })
+  } catch (e) {
+    Message.error(e?.response?.data?.error || e?.message || '开始专注失败')
+  }
 }
 
 async function onRunPlugin() {
