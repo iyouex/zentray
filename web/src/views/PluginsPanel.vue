@@ -83,14 +83,8 @@
                     <a-button size="mini" type="text" @click.stop="onCardLog(p)">日志</a-button>
                   </div>
 
-                  <!-- 服务：停止/状态（启动按钮在卡头） -->
-                  <div v-if="p.type === 'service'" class="pp-actions">
-                    <a-button size="mini" :disabled="busy" :loading="acting === p.id" @click="serviceCmd(p, 'stop')">⏹ 停止</a-button>
-                    <a-button size="mini" :loading="acting === p.id" @click="serviceCmd(p, 'status')">ℹ 状态</a-button>
-                  </div>
-
-                  <!-- 脚本：同窗展开 确认卡 / 参数表单 -->
-                  <div v-else-if="expanded === p.id" class="pp-expand">
+                  <!-- 脚本：同窗展开 确认卡 / 参数表单（服务无附加操作，卡不展开） -->
+                  <div v-if="expanded === p.id" class="pp-expand">
                     <template v-if="p.params?.length">
                       <div v-for="prm in p.params" :key="prm.name" class="pp-param">
                         <span class="pp-param-k" :title="prm.description || prm.name">

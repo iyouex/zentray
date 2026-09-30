@@ -527,8 +527,6 @@
                           </div>
                           <template v-if="p.type === 'service'">
                             <a-button size="mini" :disabled="!opsListEnabled || opsBusy" @click="onOpsServiceCmd(p, 'start')">▶ 启动</a-button>
-                            <a-button size="mini" :disabled="!opsListEnabled || opsBusy" @click="onOpsServiceCmd(p, 'stop')">⏹ 停止</a-button>
-                            <a-button size="mini" :disabled="!opsListEnabled" @click="onOpsServiceCmd(p, 'status')">ℹ 状态</a-button>
                           </template>
                           <a-button
                             v-else
