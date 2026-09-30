@@ -22,7 +22,7 @@
 
 ## 当前版本
 
-见 `zentray/config.py` → `VERSION`（现为 **0.6.3**）。
+见 `zentray/config.py` → `VERSION`（现为 **0.6.4**）。
 
 ## 安装包命名规范
 
