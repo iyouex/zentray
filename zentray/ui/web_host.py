@@ -154,11 +154,14 @@ else:
 
 # 当前存活的 Vue 面板（单活策略，见 open_vue_route）
 _ACTIVE_VUE_DIALOGS: "weakref.WeakSet[VueDialog]" = weakref.WeakSet()
-# 关窗保活的面板：cancelled 关闭时 destroy 原生窗口但保留页面，再唤起
-# （任意路由，_respawn_page 会重导航）无需 SPA 冷加载（实测 530ms → ~190ms）。
-# 至多保活一个（WebEngine 页面常驻内存可观），新的保活会逐出旧的。
-# ponytail: 只保活最近一个；若交替页签切换卡顿明显，再考虑按 route 扩容
-_PARKED_VUE_DIALOG: Optional["VueDialog"] = None
+# 关窗保活的面板：destroy 原生窗口但保留页面，再唤起（任意路由，
+# _respawn_page 会重导航）无需 SPA 冷加载（实测 530ms → ~190ms）。
+# 所有关闭方式（cancelled/accept/被单活顶替）一律保活；按 chrome 形态分槽：
+# transparent 的 WA_TranslucentBackground 只能在首帧前设置、建后不可改，
+# 透明浮层（quick-add）单独一槽，其余共用 normal 槽并在 respawn 时重设 flags。
+# 每槽至多一个（WebEngine 页面常驻内存可观），新保活逐出同槽旧页。
+# ponytail: 每槽一个；交替打开若仍有冷感，再考虑扩容
+_PARKED_VUE_DIALOGS: "dict[str, VueDialog]" = {}
 
 
 class VueDialog(QDialog):
@@ -185,6 +188,7 @@ class VueDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle(title)
         self.result_payload: Any = None
+        self._vue_transparent = transparent
         self.setModal(modal)
 
         from zentray.ui.dialog_utils import apply_dialog_chrome, schedule_center
@@ -276,24 +280,28 @@ class VueDialog(QDialog):
             self.accept()
 
 
-def _park_or_dispose(dlg: "VueDialog") -> None:
-    """面板结束时：cancelled 关闭的保活复用，其余确定性析构。
+def _park(dlg: "VueDialog") -> None:
+    """面板进保活槽：逐出同槽旧页，destroy 丢弃原生窗口但保留页面。
 
-    deleteLater 让 QDialog/QWebEnginePage 在主线程事件循环里确定性析构，
-    避免 Python 引用环交给 cyclic GC 在任意线程（HTTP 处理线程）析构 Qt 对象。
+    destroy 丢原生句柄 = 零 Wayland 存在，不会与后续面板互相触发合成器
+    configure 拉锯；widget 与页面保留，供再唤起时重导航复用。
+    deleteLater 仅用于逐出的旧页：让 QDialog/QWebEnginePage 在主线程事件
+    循环里确定性析构，避免 Python 引用环交给 cyclic GC 在任意线程（HTTP
+    处理线程）析构 Qt 对象。
     """
-    global _PARKED_VUE_DIALOG
+    key = "overlay" if dlg._vue_transparent else "normal"
+    old = _PARKED_VUE_DIALOGS.get(key)
+    if old is not None and old is not dlg:
+        old.deleteLater()
+    dlg.destroy()
+    _PARKED_VUE_DIALOGS[key] = dlg
+
+
+def _on_dialog_finished(dlg: "VueDialog") -> None:
+    """面板结束（cancelled/accept/被单活顶替）一律保活，供下次免冷加载复用。"""
     dlg._modal_active = False
     _ACTIVE_VUE_DIALOGS.discard(dlg)
-    if isinstance(dlg.result_payload, dict) and dlg.result_payload.get("cancelled"):
-        # destroy 丢弃原生窗口句柄：零 Wayland 存在，不会与后续面板互相触发
-        # 合成器 configure 拉锯；widget 与页面保留，供再唤起时重导航复用。
-        dlg.destroy()
-        if _PARKED_VUE_DIALOG is not None and _PARKED_VUE_DIALOG is not dlg:
-            _PARKED_VUE_DIALOG.deleteLater()
-        _PARKED_VUE_DIALOG = dlg
-    else:
-        dlg.deleteLater()
+    _park(dlg)
 
 
 def _respawn_page(dlg: "VueDialog", route: str, query: dict) -> None:
@@ -368,23 +376,33 @@ def open_vue_route(
             pass
     _ACTIVE_VUE_DIALOGS.clear()
 
-    # 保活命中：cancelled 关过的面板直接复现（页面已加载，无冷启动）。
+    # 保活命中：关过的面板直接复现（页面已加载，无冷启动）。
     # 不要求路由相同：_respawn_page 会把 SPA 重导航到目标路由并触发视图
-    # 重挂载，标题/尺寸也按本次调用修正——否则“开着 action 弹窗→任务栏
-    # 点击要 /tasks”这类路由变化仍要付整程 SPA 冷加载。
-    global _PARKED_VUE_DIALOG
-    parked, _PARKED_VUE_DIALOG = _PARKED_VUE_DIALOG, None
+    # 重挂载，标题/尺寸/windowFlags 也按本次调用修正——否则路由或形态变化
+    # （reminder↔tasks、开着 action 弹窗→任务栏点击要 /tasks）仍要付整程
+    # SPA 冷加载。透明浮层（quick-add）只命中 overlay 槽：透明属性建后不可改。
+    parked = _PARKED_VUE_DIALOGS.pop("overlay" if transparent else "normal", None)
     if parked is not None:
         try:
             parked._vue_route = route
             parked._vue_query = query or {}
             parked._modal_active = True
             _ACTIVE_VUE_DIALOGS.add(parked)
+            parked.result_payload = None  # 清上一轮结果，防跨会话误读
             parked.setWindowTitle(title)
-            parked.resize(width, height)
+            # 原生句柄已随保活 destroy，此处重设 chrome 干净生效
+            from zentray.ui.dialog_utils import apply_dialog_chrome
+
+            apply_dialog_chrome(
+                parked,
+                width=width,
+                height=height,
+                stay_on_top=stay_on_top,
+                tool=frameless,
+            )
             _respawn_page(parked, route, query or {})
             # 重新进入模态循环：run_modal_loop 内 show() 以全新 toplevel
-            # 映射；结束时 _park_or_dispose 继续接管保活/析构。
+            # 映射；结束时 _on_dialog_finished 继续接管保活。
             ok = run_modal_loop(parked)
             return ok, parked.result_payload
         except RuntimeError:
@@ -406,9 +424,31 @@ def open_vue_route(
     dlg._vue_query = query or {}
     dlg._modal_active = True
     _ACTIVE_VUE_DIALOGS.add(dlg)
-    dlg.finished.connect(lambda: _park_or_dispose(dlg))
+    dlg.finished.connect(lambda: _on_dialog_finished(dlg))
     ok = run_modal_loop(dlg)
     return ok, dlg.result_payload
+
+
+def prewarm_vue_page() -> None:
+    """启动后空闲时预载一个隐藏页面：暖起渲染进程与 V8 代码缓存，首次弹窗
+    命中保活槽即可 ~200ms 级唤起（否则 SPA 冷加载约 2s 白窗）。
+
+    只构造不 show()，不抢焦点；normal 槽已暖或已有面板在开时跳过。
+    """
+    if not use_vue_ui():
+        return
+    if _ACTIVE_VUE_DIALOGS or "normal" in _PARKED_VUE_DIALOGS:
+        return
+    try:
+        dlg = VueDialog("/", width=860, height=560)
+    except Exception:
+        logger.exception("Vue 页面预载失败")
+        return
+    dlg._vue_route = "/"
+    dlg._vue_query = {}
+    dlg.finished.connect(lambda: _on_dialog_finished(dlg))
+    _park(dlg)
+    logger.info("Vue 页面已预载，保活槽待命（首次弹窗免冷加载）")
 
 
 def use_vue_ui() -> bool:

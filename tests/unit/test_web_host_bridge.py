@@ -146,9 +146,9 @@ def test_open_vue_route_remap_restores_minimized_dialog(qapp):
 
 
 def test_open_vue_route_parks_cancelled_dialog_and_reuses(qapp):
-    """cancelled 关窗必须保活（destroy 原生窗口但保留面板），再唤起——
-    即使路由不同——复用保活面板（重导航、重新进入模态循环、不新建）；
-    非 cancelled 结束才确定性析构。
+    """关窗（cancelled/accept 一律）必须保活（destroy 原生窗口但保留面板），
+    再唤起——即使路由不同——复用保活面板（重导航、重新进入模态循环、不新建）；
+    透明浮层（quick-add 形态）单独占用 overlay 槽，与 normal 槽互不挤占。
     根因：关窗即销毁会让下次唤起走全新 SPA 冷加载（实测 ~530ms+渲染进程重建，
     用户感知 2 秒+），保活复用降至 ~190ms。"""
     import zentray.ui.web_host as web_host
@@ -161,6 +161,7 @@ def test_open_vue_route_parks_cancelled_dialog_and_reuses(qapp):
         def __init__(self, route, **kw):
             super().__init__()
             self.result_payload = None
+            self._vue_transparent = bool(kw.get("transparent"))
             created.append(self)
 
         def destroy(self, destroyWindow=True, destroySubWindows=True):  # noqa: N803
@@ -179,7 +180,9 @@ def test_open_vue_route_parks_cancelled_dialog_and_reuses(qapp):
         ok, payload = web_host.open_vue_route("/tasks")
         assert (ok, payload) == (False, {"cancelled": True})
         assert calls == ["destroy"], f"cancelled 关窗应 destroy 保活，实际: {calls}"
-        assert web_host._PARKED_VUE_DIALOG is created[0], "cancelled 关窗后面板应保活"
+        assert web_host._PARKED_VUE_DIALOGS.get("normal") is created[0], (
+            "cancelled 关窗后面板应进 normal 保活槽"
+        )
 
         # 跨路由再唤起（保活的是 /tasks，请求 /settings）：仍复用，不新建
         calls.clear()
@@ -195,11 +198,43 @@ def test_open_vue_route_parks_cancelled_dialog_and_reuses(qapp):
             "复用路径的模态循环结束后必须把本次 payload 如实返回给调用方"
         )
         assert len(created) == 1, "再唤起（含跨路由）应复用保活面板，不应新建"
-        assert calls == [], "复用路径无需再 destroy（toplevel 已在关窗时丢弃）"
-        assert web_host._PARKED_VUE_DIALOG is None, "非 cancelled 结束后不再保活"
+        assert calls == ["destroy"], "复用会话结束应再次保活（destroy 丢句柄留页面）"
+        assert web_host._PARKED_VUE_DIALOGS.get("normal") is created[0], (
+            "accept 结束同样保活——这是弹窗延迟修复的核心契约"
+        )
+
+        # 再唤起仍复用同一面板（跨会话复用，而非只保活一轮）
+        QTimer.singleShot(80, close_cancelled)
+        web_host.open_vue_route("/tasks")
+        assert len(created) == 1, "第三次唤起仍应复用，不应新建"
+
+        # 透明浮层（quick-add）：overlay 槽独立，不与 normal 槽互抢
+        def close_overlay():
+            d = created[1]
+            d.result_payload = {"cancelled": True}
+            d.reject()
+
+        QTimer.singleShot(80, close_overlay)
+        web_host.open_vue_route(
+            "/quick-add", frameless=True, stay_on_top=True, transparent=True
+        )
+        assert len(created) == 2, "overlay 槽为空时应新建透明浮层面板"
+        assert web_host._PARKED_VUE_DIALOGS.get("overlay") is created[1], (
+            "透明浮层关闭后应进 overlay 保活槽"
+        )
+        assert web_host._PARKED_VUE_DIALOGS.get("normal") is created[0], (
+            "overlay 新建/保活不应挤占 normal 槽"
+        )
+
+        # overlay 复现：复用的是 overlay 槽面板，而非 normal 槽
+        QTimer.singleShot(80, close_overlay)
+        web_host.open_vue_route(
+            "/quick-add", frameless=True, stay_on_top=True, transparent=True
+        )
+        assert len(created) == 2, "透明浮层再唤起应复用 overlay 槽，不应新建"
     finally:
         web_host.VueDialog = orig
         web_host._ACTIVE_VUE_DIALOGS.clear()
-        web_host._PARKED_VUE_DIALOG = None
+        web_host._PARKED_VUE_DIALOGS.clear()
         for d in created:
             d.deleteLater()

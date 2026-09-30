@@ -117,12 +117,12 @@ def test_drag_filter_no_reference_cycle(qapp):
 
 
 def test_open_vue_route_schedules_delete_later():
-    """WebEngine 弹窗必须走 deleteLater，在主线程确定性析构。"""
+    """被逐出的旧保活页必须走 deleteLater，在主线程确定性析构。"""
     from pathlib import Path
     import zentray.ui.web_host as web_host
 
     src = Path(web_host.__file__).read_text(encoding="utf-8")
-    assert "dlg.deleteLater()" in src
+    assert "old.deleteLater()" in src
 
 
 def test_chrome_dialog_records_fixed_size(qapp):

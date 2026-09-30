@@ -11,7 +11,7 @@ if sys.platform.startswith("linux"):
     os.environ["QT_IM_MODULE"] = "ibus"
     os.environ.setdefault("XMODIFIERS", "@im=fcitx")
 
-from PySide6.QtCore import QObject
+from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import QApplication
 from zentray.dependencies import injector, init_tray_controller
 from zentray.core.repository import TaskRepository, PeriodicTemplateRepository
@@ -316,19 +316,38 @@ def main():
 
         task_service_early = injector.get(TaskService)
 
-        def _on_api_changed():
-            if runtime.controller:
-                runtime.controller.reload_data()
+        class _ApiUiRelay(QObject):
+            """HTTP 线程回调 → 主线程中继。
 
-        def _on_api_apply_settings():
-            if runtime.controller:
-                runtime.controller.apply_settings()
+            回调在 HTTP 处理线程直接调 controller 会跨线程启停 QTimer
+            （journal: Timers cannot be started from another thread）。
+            经信号 + QObject 绑定槽发射，AutoConnection 自动排队回主线程；
+            槽内运行时取属性，后续 monkeypatch 的 apply_settings 也能命中。
+            """
 
+            changed_requested = Signal()
+            apply_settings_requested = Signal()
+
+            def __init__(self, runtime_ref):
+                super().__init__()
+                self._runtime_ref = runtime_ref
+                self.changed_requested.connect(self._on_changed)
+                self.apply_settings_requested.connect(self._on_apply)
+
+            def _on_changed(self):
+                if self._runtime_ref.controller:
+                    self._runtime_ref.controller.reload_data()
+
+            def _on_apply(self):
+                if self._runtime_ref.controller:
+                    self._runtime_ref.controller.apply_settings()
+
+        _api_ui_relay = _ApiUiRelay(runtime)
         set_api_context(
             ApiContext(
                 task_service=task_service_early,
-                on_changed=_on_api_changed,
-                apply_settings=_on_api_apply_settings,
+                on_changed=_api_ui_relay.changed_requested.emit,
+                apply_settings=_api_ui_relay.apply_settings_requested.emit,
                 plugin_runtime=getattr(runtime.controller, "plugin_runtime", None),
                 plugin_loader=getattr(runtime.controller, "plugin_loader", None),
                 pomodoro_service=getattr(runtime.controller, "pomodoro_service", None),
@@ -380,6 +399,18 @@ def main():
         _start_plugin_trigger_worker_if_needed(runtime)
 
     runtime.controller.apply_settings = apply_settings_with_workers
+
+    # 空闲预载 Vue 页面：首次弹窗命中保活槽，免约 2s 的 SPA 冷加载。
+    # 5s 延迟避开启动关键路径；构造在主线程但加载在 WebEngine 渲染进程。
+    try:
+        from zentray.api.server import vue_ui_available
+        from PySide6.QtCore import QTimer
+        from zentray.ui.web_host import prewarm_vue_page
+
+        if vue_ui_available():
+            QTimer.singleShot(5000, prewarm_vue_page)
+    except Exception:
+        logger.exception("Vue 预载挂载失败")
 
     # 静默启动：仅托盘（启动占位 → 随后轮播）
     logger.info("静默启动完成：仅顶栏托盘 + 任务标题轮播")

@@ -307,6 +307,8 @@ def run_modal_loop(dialog: QDialog) -> bool:
 
 def enable_dialog_drag(dialog: QDialog) -> None:
     """为无边框弹窗启用递归鼠标拖拽支持。"""
+    if getattr(dialog, "_drag_filter", None) is not None:
+        return  # 保活复用重设 chrome 时旧过滤器仍挂在窗口上，勿重复叠加
     dialog.create()
     drag_filter = DialogDragFilter(dialog)
     drag_filter.install_recursive(dialog)
@@ -325,7 +327,9 @@ def apply_dialog_chrome(
     统一弹窗 Chrome 形态: 使用 FramelessWindowHint 彻底移除系统标题栏与系统按钮 (最大化/最小化/关闭)。
     控制页面关闭和大小改由页面内部按钮控制。默认屏幕居中，空白区域可拖拽移动。
     """
-    stays_on_top = stay_on_top or bool(dialog.windowFlags() & Qt.WindowStaysOnTopHint)
+    # stay_on_top 以入参为准：保活复用会带着旧 flags 重建，若沿用旧值，
+    # reminder（置顶）关闭后复用的 tasks 面板会被永久置顶。
+    stays_on_top = stay_on_top
     window_type = Qt.Tool if tool else Qt.Dialog
     flags = Qt.FramelessWindowHint | window_type | Qt.CustomizeWindowHint
     if stays_on_top:
