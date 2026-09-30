@@ -17,7 +17,6 @@
           <a-menu-item key="polling">📋 任务</a-menu-item>
           <a-menu-item key="pomodoro">🍅 番茄钟</a-menu-item>
           <a-menu-item key="ops">🧩 插件</a-menu-item>
-          <a-menu-item key="categories">🏷️ 分类</a-menu-item>
           <a-menu-item key="system">🖥️ 系统</a-menu-item>
           <a-menu-item key="backup">💾 备份</a-menu-item>
           <a-menu-item key="history">📜 历史</a-menu-item>
@@ -257,6 +256,108 @@
                     />
                   </div>
                 </div>
+              </section>
+            </div>
+
+            <div class="compact-sep" />
+
+            <div class="cat-page">
+              <section class="poll-block">
+                <h3 class="block-title">标题格式</h3>
+                <a-form layout="vertical" style="max-width: 480px">
+                  <a-form-item label="标题括号（成对选择）">
+                    <a-radio-group
+                      :model-value="wrapPresetKey"
+                      type="button"
+                      @change="onWrapPreset"
+                    >
+                      <a-radio
+                        v-for="w in WRAP_PRESETS"
+                        :key="w.key"
+                        :value="w.key"
+                      >
+                        {{ w.label }} 示例 {{ w.left }}工作-需求{{ w.right }}
+                      </a-radio>
+                    </a-radio-group>
+                  </a-form-item>
+                  <a-form-item label="一二级分隔符">
+                    <a-input v-model="form.categories.level_separator" style="width: 80px" />
+                  </a-form-item>
+                  <a-form-item label="启用二级分类">
+                    <a-switch v-model="form.categories.enabled_secondary" />
+                  </a-form-item>
+                </a-form>
+              </section>
+
+              <a-divider />
+
+              <section class="poll-block">
+                <div class="cat-head">
+                  <h3 class="block-title" style="margin: 0">一级分类</h3>
+                  <a-button type="primary" size="small" @click="addPrimary">➕ 添加一级</a-button>
+                </div>
+                <p class="hint">可编辑名称；开启二级后，可在各级下添加/删除二级分类。</p>
+
+                <a-collapse
+                  v-if="form.categories.primary_list?.length"
+                  :bordered="true"
+                  expand-icon-position="right"
+                >
+                  <a-collapse-item
+                    v-for="p in form.categories.primary_list"
+                    :key="p.id"
+                    :name="p.id"
+                  >
+                    <template #header>
+                      <div class="cat-row-header" @click.stop>
+                        <a-input
+                          v-model="p.name"
+                          size="small"
+                          style="width: 160px"
+                          @click.stop
+                        />
+                        <span class="muted">
+                          {{ form.categories.enabled_secondary
+                            ? `二级 ${(p.secondaries || []).length} 个`
+                            : '仅一级' }}
+                        </span>
+                        <a-button
+                          size="mini"
+                          status="danger"
+                          @click.stop="removePrimary(p.id)"
+                        >
+                          删除
+                        </a-button>
+                      </div>
+                    </template>
+
+                    <div v-if="form.categories.enabled_secondary" class="sec-block">
+                      <a-space style="margin-bottom: 8px">
+                        <a-button size="mini" type="outline" @click="addSecondary(p)">
+                          ➕ 添加二级
+                        </a-button>
+                      </a-space>
+                      <div
+                        v-for="s in p.secondaries || []"
+                        :key="s.id"
+                        class="sec-row"
+                      >
+                        <a-input v-model="s.name" size="small" placeholder="二级名称" />
+                        <a-button size="mini" status="danger" @click="removeSecondary(p, s.id)">
+                          删除
+                        </a-button>
+                      </div>
+                      <a-empty
+                        v-if="!(p.secondaries || []).length"
+                        description="暂无二级分类"
+                      />
+                    </div>
+                    <a-alert v-else type="info">
+                      开启「启用二级分类」后，可在此添加二级。
+                    </a-alert>
+                  </a-collapse-item>
+                </a-collapse>
+                <a-empty v-else description="暂无一级分类，请点击添加" />
               </section>
             </div>
           </template>
@@ -591,108 +692,6 @@
                   <a-empty v-else description="暂无运行记录" />
                 </a-collapse-item>
               </a-collapse>
-            </div>
-          </template>
-
-          <template v-else-if="mainKey === 'categories'">
-            <div class="cat-page">
-              <section class="poll-block">
-                <h3 class="block-title">标题格式</h3>
-                <a-form layout="vertical" style="max-width: 480px">
-                  <a-form-item label="标题括号（成对选择）">
-                    <a-radio-group
-                      :model-value="wrapPresetKey"
-                      type="button"
-                      @change="onWrapPreset"
-                    >
-                      <a-radio
-                        v-for="w in WRAP_PRESETS"
-                        :key="w.key"
-                        :value="w.key"
-                      >
-                        {{ w.label }} 示例 {{ w.left }}工作-需求{{ w.right }}
-                      </a-radio>
-                    </a-radio-group>
-                  </a-form-item>
-                  <a-form-item label="一二级分隔符">
-                    <a-input v-model="form.categories.level_separator" style="width: 80px" />
-                  </a-form-item>
-                  <a-form-item label="启用二级分类">
-                    <a-switch v-model="form.categories.enabled_secondary" />
-                  </a-form-item>
-                </a-form>
-              </section>
-
-              <a-divider />
-
-              <section class="poll-block">
-                <div class="cat-head">
-                  <h3 class="block-title" style="margin: 0">一级分类</h3>
-                  <a-button type="primary" size="small" @click="addPrimary">➕ 添加一级</a-button>
-                </div>
-                <p class="hint">可编辑名称；开启二级后，可在各级下添加/删除二级分类。</p>
-
-                <a-collapse
-                  v-if="form.categories.primary_list?.length"
-                  :bordered="true"
-                  expand-icon-position="right"
-                >
-                  <a-collapse-item
-                    v-for="p in form.categories.primary_list"
-                    :key="p.id"
-                    :name="p.id"
-                  >
-                    <template #header>
-                      <div class="cat-row-header" @click.stop>
-                        <a-input
-                          v-model="p.name"
-                          size="small"
-                          style="width: 160px"
-                          @click.stop
-                        />
-                        <span class="muted">
-                          {{ form.categories.enabled_secondary
-                            ? `二级 ${(p.secondaries || []).length} 个`
-                            : '仅一级' }}
-                        </span>
-                        <a-button
-                          size="mini"
-                          status="danger"
-                          @click.stop="removePrimary(p.id)"
-                        >
-                          删除
-                        </a-button>
-                      </div>
-                    </template>
-
-                    <div v-if="form.categories.enabled_secondary" class="sec-block">
-                      <a-space style="margin-bottom: 8px">
-                        <a-button size="mini" type="outline" @click="addSecondary(p)">
-                          ➕ 添加二级
-                        </a-button>
-                      </a-space>
-                      <div
-                        v-for="s in p.secondaries || []"
-                        :key="s.id"
-                        class="sec-row"
-                      >
-                        <a-input v-model="s.name" size="small" placeholder="二级名称" />
-                        <a-button size="mini" status="danger" @click="removeSecondary(p, s.id)">
-                          删除
-                        </a-button>
-                      </div>
-                      <a-empty
-                        v-if="!(p.secondaries || []).length"
-                        description="暂无二级分类"
-                      />
-                    </div>
-                    <a-alert v-else type="info">
-                      开启「启用二级分类」后，可在此添加二级。
-                    </a-alert>
-                  </a-collapse-item>
-                </a-collapse>
-                <a-empty v-else description="暂无一级分类，请点击添加" />
-              </section>
             </div>
           </template>
 
