@@ -47,6 +47,13 @@ class PomodoroSettings:
     # 托盘文字：countdown=倒计时 mm:ss；text=自定义文案（左侧始终为番茄饼图）
     tray_display: str = "countdown"  # countdown | text
     tray_text: str = "专注中"
+    # 专注-休息循环
+    short_break_minutes: int = 5
+    long_break_minutes: int = 15
+    long_break_every: int = 4        # 每 N 个专注进入长休；0=只用短休
+    auto_start_breaks: bool = True   # 专注结束自动开始休息
+    auto_start_focus: bool = False   # 休息结束自动开始下一段专注
+    daily_goal_pomodoros: int = 0    # 每日目标番茄数（达标通知）；0=不启用
 
 
 @dataclass
@@ -496,6 +503,12 @@ class SettingsManager:
                 extend_minutes=p.get("extend_minutes", 10),
                 tray_display=disp,
                 tray_text=(p.get("tray_text") or "专注中").strip() or "专注中",
+                short_break_minutes=p.get("short_break_minutes", 5),
+                long_break_minutes=p.get("long_break_minutes", 15),
+                long_break_every=p.get("long_break_every", 4),
+                auto_start_breaks=bool(p.get("auto_start_breaks", True)),
+                auto_start_focus=bool(p.get("auto_start_focus", False)),
+                daily_goal_pomodoros=p.get("daily_goal_pomodoros", 0),
             )
         if "nightly" in data:
             n = data["nightly"]
