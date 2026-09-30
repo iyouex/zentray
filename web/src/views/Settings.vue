@@ -369,11 +369,54 @@
                 <div class="field-table">
                   <div class="field-line">
                     <span class="field-k">专注时长</span>
-                    <NumberSpinner v-model="form.pomodoro.duration_minutes" :min="1" :max="120" suffix="分" />
+                    <NumberSpinner v-model="form.pomodoro.duration_minutes" :min="1" :max="180" suffix="分" />
                   </div>
                   <div class="field-line">
                     <span class="field-k">延长步长</span>
                     <NumberSpinner v-model="form.pomodoro.extend_minutes" :min="1" :max="60" suffix="分" />
+                  </div>
+                  <div class="field-line">
+                    <span class="field-k">节奏预设</span>
+                    <a-space size="mini">
+                      <a-tag class="pomo-preset" size="small" @click="applyPomodoroPreset(25, 5, 15)">经典 25/5</a-tag>
+                      <a-tag class="pomo-preset" size="small" @click="applyPomodoroPreset(50, 10, 30)">深度 50/10</a-tag>
+                      <a-tag class="pomo-preset" size="small" @click="applyPomodoroPreset(90, 20, 30)">超长 90/20</a-tag>
+                    </a-space>
+                  </div>
+                </div>
+              </section>
+
+              <div class="compact-sep" />
+
+              <section class="compact-block">
+                <div class="compact-head">专注-休息循环</div>
+                <p class="hint-sm">专注结束自动进入休息；长休在每 N 个专注后替代短休。</p>
+                <div class="field-table">
+                  <div class="field-line">
+                    <span class="field-k">短休时长</span>
+                    <NumberSpinner v-model="form.pomodoro.short_break_minutes" :min="1" :max="60" suffix="分" />
+                  </div>
+                  <div class="field-line">
+                    <span class="field-k">长休时长</span>
+                    <NumberSpinner v-model="form.pomodoro.long_break_minutes" :min="1" :max="60" suffix="分" />
+                  </div>
+                  <div class="field-line">
+                    <span class="field-k">长休间隔</span>
+                    <NumberSpinner v-model="form.pomodoro.long_break_every" :min="0" :max="12" suffix="个" />
+                    <span class="hint-sm">每 N 个专注进长休，0 = 只用短休</span>
+                  </div>
+                  <div class="field-line">
+                    <span class="field-k">专注结束自动休息</span>
+                    <a-switch v-model="form.pomodoro.auto_start_breaks" size="small" />
+                  </div>
+                  <div class="field-line">
+                    <span class="field-k">休息结束自动专注</span>
+                    <a-switch v-model="form.pomodoro.auto_start_focus" size="small" />
+                  </div>
+                  <div class="field-line">
+                    <span class="field-k">每日目标</span>
+                    <NumberSpinner v-model="form.pomodoro.daily_goal_pomodoros" :min="0" :max="50" suffix="个" />
+                    <span class="hint-sm">达标当次通知，0 = 不启用</span>
                   </div>
                 </div>
               </section>
@@ -382,7 +425,7 @@
 
               <section class="compact-block">
                 <div class="compact-head">托盘显示</div>
-                <p class="hint-sm">左侧固定番茄饼图；右侧可选倒计时或文案。</p>
+                <p class="hint-sm">左侧专注为番茄饼图、休息为茶绿饼图；右侧可选倒计时或文案（休息恒为倒计时）。</p>
                 <div class="field-table">
                   <div class="field-line">
                     <span class="field-k">右侧文字</span>
@@ -548,6 +591,7 @@
                               <a-select v-else v-model="row.event" size="small" style="width: 130px">
                                 <a-option value="task_done">任务完成</a-option>
                                 <a-option value="pomodoro_end">番茄结束</a-option>
+                                <a-option value="break_end">休息结束</a-option>
                                 <a-option value="startup">启动时</a-option>
                               </a-select>
                               <a-button size="mini" type="text" status="danger" @click="triggerDrafts[p.id].splice(i, 1)">删除</a-button>
@@ -1068,6 +1112,7 @@ const TRIGGER_LABEL = {
   cron: 'cron',
   task_done: '任务完成',
   pomodoro_end: '番茄结束',
+  break_end: '休息结束',
   startup: '启动时',
 }
 
@@ -1529,6 +1574,13 @@ const AI_FEATURES = [
 /** 固定两条渠道，不允许增删 */
 const fixedChannels = computed(() => ensureFixedChannels(form.notification))
 
+/** 番茄钟节奏预设：回填时长数字框（非独立模式） */
+function applyPomodoroPreset(focus, shortBreak, longBreak) {
+  form.pomodoro.duration_minutes = focus
+  form.pomodoro.short_break_minutes = shortBreak
+  form.pomodoro.long_break_minutes = longBreak
+}
+
 function emptyForm() {
   return {
     polling: {
@@ -1544,6 +1596,12 @@ function emptyForm() {
       extend_minutes: 10,
       tray_display: 'countdown',
       tray_text: '专注中',
+      short_break_minutes: 5,
+      long_break_minutes: 15,
+      long_break_every: 4,
+      auto_start_breaks: true,
+      auto_start_focus: false,
+      daily_goal_pomodoros: 0,
     },
     nightly: {},
     notification: {
@@ -2072,7 +2130,8 @@ function normalizeLoaded(s) {
   if (!form.ops.param_presets) form.ops.param_presets = {}
   opsUserDir.value = form.ops.user_plugins_dir || ''
   if (!form.polling) form.polling = emptyForm().polling
-  if (!form.pomodoro) form.pomodoro = emptyForm().pomodoro
+  // 番茄钟：旧配置缺新键时补默认
+  form.pomodoro = { ...emptyForm().pomodoro, ...(form.pomodoro || s.pomodoro || {}) }
   if (!form.pomodoro.tray_display) form.pomodoro.tray_display = 'countdown'
   if (!form.pomodoro.tray_text) form.pomodoro.tray_text = '专注中'
 
@@ -2368,6 +2427,11 @@ body.zt-skin-neo .nav-main {
   font-size: 12px;
   color: var(--color-text-3);
   line-height: 1.4;
+}
+/* 番茄钟节奏预设标签：可点击回填 */
+.pomo-preset {
+  cursor: pointer;
+  user-select: none;
 }
 /* 分类页仍用 poll-block 类名 */
 .poll-block {
