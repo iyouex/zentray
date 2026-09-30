@@ -218,7 +218,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { Message } from '@arco-design/web-vue'
 import { PhX } from '@phosphor-icons/vue'
 import PluginDocDrawer from '@/components/PluginDocDrawer.vue'
@@ -465,7 +465,28 @@ async function openReport(record, logOnly = false) {
   }
 }
 
-onMounted(loadPlugins)
+// —— 与设置页/磁盘同步：面板常驻打开期间，目录可能被外部变更（终端删/拷、
+// 其他会话安装、打包升级），列表是打开时的快照。窗口重获焦点/重新可见时
+// 自动刷新；展开参数表单时跳过，避免清掉未提交的草稿。
+// 设置页无需同样处理：单活策略下开设置必先关本面板，重开即重挂载取新数据。
+let _lastAutoSync = Date.now() // 初始化为当前，跳过开窗时的首个 focus 重复拉取
+function _autoSync() {
+  if (document.visibilityState !== 'visible') return
+  if (expanded.value || loading.value || runsLoading.value) return
+  const now = Date.now()
+  if (now - _lastAutoSync < 1000) return
+  _lastAutoSync = now
+  refresh()
+}
+onMounted(() => {
+  loadPlugins()
+  window.addEventListener('focus', _autoSync)
+  document.addEventListener('visibilitychange', _autoSync)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('focus', _autoSync)
+  document.removeEventListener('visibilitychange', _autoSync)
+})
 
 // 卡片「说明」→ 使用说明抽屉
 const docVisible = ref(false)
