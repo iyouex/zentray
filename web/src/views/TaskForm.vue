@@ -225,13 +225,19 @@
                   <div class="slots-box">
                     <div v-for="(slot, idx) in form.reminder_slots" :key="idx" class="slot-row">
                       <template v-if="form.periodicity === 'weekly'">
-                        <span class="slot-label">周</span>
-                        <NumberSpinner
+                        <a-select
                           v-model="slot.weekday"
-                          :min="0"
-                          :max="6"
-                        />
-                        <span class="slot-hint">0=一 … 6=日</span>
+                          size="mini"
+                          class="slot-weekday"
+                        >
+                          <a-option
+                            v-for="(w, i) in WEEK_LABELS"
+                            :key="i"
+                            :value="i"
+                          >
+                            {{ w }}
+                          </a-option>
+                        </a-select>
                       </template>
                       <template v-else>
                         <span class="slot-label">每月</span>
@@ -416,6 +422,8 @@ const periodOpts = [
   { label: '每周', value: 'weekly' },
   { label: '每月', value: 'monthly' },
 ]
+// 周几下拉文案（存储值 0=周一 … 6=周日，与后端 wd 表一致）
+const WEEK_LABELS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
 const priorityOpts = [
   { label: '🔴 紧急高危', value: 'high' },
   { label: '🟡 中等优先级', value: 'medium' },
@@ -1032,6 +1040,9 @@ onMounted(async () => {
 .slot-hint {
   font-size: 12px;
   color: var(--color-text-3);
+}
+.slot-weekday {
+  width: 96px;
 }
 .muted {
   color: var(--color-text-3);
