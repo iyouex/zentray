@@ -334,7 +334,11 @@ class TrayController(QObject):
         summary = report.get("summary", "")
         name = report.get("name") or plugin_id
         status = "执行成功" if ok else f"执行失败: {summary}"
-        self.renderer.show_notification(f"脚本: {name}", status[:120])
+        self.renderer.show_notification(
+            f"脚本: {name}",
+            status[:120],
+            on_click=self._make_report_opener(report.get("run_id", "")),
+        )
         try:
             from zentray.services.activity_log import log_event
 
@@ -354,6 +358,22 @@ class TrayController(QObject):
         except Exception:
             pass
         self._write_back_result(report, name)
+
+    @staticmethod
+    def _make_report_opener(run_id: str):
+        """通知点击回调：复用报告端点逻辑（html 报告→浏览器，否则 md→阅读器）。"""
+        if not run_id:
+            return None
+
+        def opener():
+            try:
+                from zentray.api.handlers import _plugin_run_open
+
+                _plugin_run_open({"run_id": run_id})
+            except Exception:
+                logger.exception("打开运行报告失败: %s", run_id)
+
+        return opener
 
     def _write_back_result(self, report: dict, plugin_name: str) -> None:
         """manifest write_back 开启且有任务上下文时，把 RESULT 文本写回任务。"""

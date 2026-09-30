@@ -34,9 +34,9 @@ class TrayRenderer:
         """更新右键菜单"""
         self.backend.update_menu(items)
 
-    def show_notification(self, title: str, msg: str) -> None:
-        """弹出系统通知"""
-        self.backend.show_notification(title, msg)
+    def show_notification(self, title: str, msg: str, on_click=None) -> None:
+        """弹出系统通知；on_click 非空时点击通知触发（支持则常驻）"""
+        self.backend.show_notification(title, msg, on_click)
 
     def shutdown(self) -> None:
         """关闭托盘"""

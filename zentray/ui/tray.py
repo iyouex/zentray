@@ -40,6 +40,12 @@ def _short_label(text: str) -> str:
 class TrayImplementation(QObject):
     action_received = Signal(str)
     label_changed = Signal(str)
+    # 通知点击回调（跨线程投递到主线程执行）
+    notification_clicked = Signal(object)
+
+    def __init__(self):
+        super().__init__()
+        self.notification_clicked.connect(lambda cb: cb() if cb else None)
 
     def set_label(self, text: str):
         pass
@@ -55,7 +61,7 @@ class TrayImplementation(QObject):
     def update_menu(self, items: list):
         pass
 
-    def show_notification(self, title: str, msg: str):
+    def show_notification(self, title: str, msg: str, on_click=None):
         pass
 
     def shutdown(self):
@@ -183,7 +189,27 @@ class LinuxBridgeTray(TrayImplementation):
     def update_menu(self, items: list):
         self._send({"type": "menu", "items": items})
 
-    def show_notification(self, title: str, msg: str):
+    def show_notification(self, title: str, msg: str, on_click=None):
+        # 带 on_click 且 notify-send 支持 --action（libnotify≥0.8）时：
+        # --wait 常驻至用户操作，点击通知即触发回调（主线程执行）
+        if on_click and _notify_send_supports_actions():
+            def run_action():
+                try:
+                    out = subprocess.run(
+                        [
+                            "notify-send", "-a", "ZenTray",
+                            "--action", "default=点击查看报告",
+                            "--wait", str(title), str(msg),
+                        ],
+                        capture_output=True, text=True, timeout=300,
+                    )
+                    if out.stdout.strip():
+                        self.notification_clicked.emit(on_click)
+                except Exception:
+                    pass
+
+            threading.Thread(target=run_action, daemon=True).start()
+            return
         # 优先 notify-send，避免临时 QSystemTrayIcon 造成“弹窗感”
         try:
             subprocess.Popen(
@@ -196,6 +222,8 @@ class LinuxBridgeTray(TrayImplementation):
             pass
         try:
             tray = QSystemTrayIcon(QIcon.fromTheme("emblem-default"))
+            if on_click:
+                tray.messageClicked.connect(lambda: on_click() or tray.hide)
             tray.show()
             tray.showMessage(title, msg, QSystemTrayIcon.Information, 4000)
             QTimer.singleShot(4500, tray.hide)
@@ -240,6 +268,8 @@ class QtStandardTray(TrayImplementation):
         self.menu.addAction("加载中…").setEnabled(False)
         self.tray.setContextMenu(self.menu)
         self.tray.activated.connect(self._on_activated)
+        self._pending_click = None
+        self.tray.messageClicked.connect(self._on_message_clicked)
         self.tray.setToolTip("ZenTray")
         self.tray.show()
         self.actions = []
@@ -256,6 +286,11 @@ class QtStandardTray(TrayImplementation):
             QSystemTrayIcon.Context,
         ):
             self.menu.popup(QCursor.pos())
+
+    def _on_message_clicked(self):
+        cb, self._pending_click = self._pending_click, None
+        if cb:
+            cb()
 
     def set_label(self, text: str):
         tip = _short_label(text) if text else "ZenTray"
@@ -305,11 +340,29 @@ class QtStandardTray(TrayImplementation):
                 qt_menu.addAction(action)
                 self.actions.append(action)
 
-    def show_notification(self, title: str, msg: str):
+    def show_notification(self, title: str, msg: str, on_click=None):
+        self._pending_click = on_click
         self.tray.showMessage(title, msg, QSystemTrayIcon.Information, 4000)
 
     def shutdown(self):
         self.tray.hide()
+
+
+_notify_action_cache: bool | None = None
+
+
+def _notify_send_supports_actions() -> bool:
+    """notify-send 是否支持 --action/--wait（libnotify ≥ 0.8），探测一次缓存。"""
+    global _notify_action_cache
+    if _notify_action_cache is None:
+        try:
+            res = subprocess.run(
+                ["notify-send", "--help"], capture_output=True, text=True, timeout=3
+            )
+            _notify_action_cache = "--action" in (res.stdout + res.stderr)
+        except Exception:
+            _notify_action_cache = False
+    return _notify_action_cache
 
 
 def _appindicator_available() -> bool:
