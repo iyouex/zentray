@@ -88,6 +88,26 @@ export async function startPomodoro(taskId = '') {
   return http.post('/api/pomodoro/start', { task_id: taskId })
 }
 
+// ---- Windows 托盘速览面板（/glance）----
+
+/** 速览复合状态：轮播槽任务 + 活跃序 + 番茄态 + 待看报告 + 脚本占用 */
+export async function getGlance() {
+  const { data } = await http.get('/api/glance')
+  return data
+}
+
+/** 番茄控制：stop / extend / skip_break */
+export async function pomodoroControl(action) {
+  const { data } = await http.post('/api/pomodoro/control', { action })
+  return data
+}
+
+/** 速览报告 chip：点开即消（run:/ai: key） */
+export async function glanceReportOpen(key) {
+  const { data } = await http.post('/api/glance/report-open', { key })
+  return data
+}
+
 export async function listTemplates() {
   const { data } = await http.get('/api/templates')
   return data.items || []

@@ -444,6 +444,11 @@
                       style="width: 168px"
                     />
                   </div>
+                  <div class="field-line">
+                    <span class="field-k">图标叠加倒计时</span>
+                    <a-switch v-model="form.pomodoro.tray_icon_countdown" size="small" />
+                    <span class="hint-sm">Windows：饼图内叠加剩余分钟数字</span>
+                  </div>
                 </div>
               </section>
 
@@ -1680,6 +1685,7 @@ function emptyForm() {
       extend_minutes: 10,
       tray_display: 'countdown',
       tray_text: '专注中',
+      tray_icon_countdown: false,
       short_break_minutes: 5,
       long_break_minutes: 15,
       long_break_every: 4,
