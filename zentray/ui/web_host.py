@@ -309,6 +309,8 @@ def _respawn_page(dlg: "VueDialog", route: str, query: dict) -> None:
 
     前端 App.vue 以递增 router-view 的 key 响应该事件，等价于重新挂载当前
     页面组件（onMounted 重新拉数据），避免保活面板展示陈旧数据。
+    事件带 skipFx 标记：重开场景跳过 out-in 转场（否则动画与内容串行，
+    跨路由内容要等退场+入场动画演完才出现）。
     """
     page = getattr(dlg, "page", None)
     if page is None:
@@ -321,7 +323,7 @@ def _respawn_page(dlg: "VueDialog", route: str, query: dict) -> None:
     frag = route if route.startswith("/") else f"/{route}"
     page.runJavaScript(
         "location.hash=" + json.dumps(f"#{frag}?{urlencode(q)}") + ";"
-        "window.dispatchEvent(new Event('zentray:reopen'));"
+        "window.dispatchEvent(new CustomEvent('zentray:reopen', {detail: {skipFx: true}}));"
     )
 
 

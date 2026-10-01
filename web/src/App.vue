@@ -34,14 +34,25 @@ const syncAppearance = async () => {
   }
   themeEffective.value = applyTheme(themeMode.value)
 }
-const handleReopen = () => {
+const handleReopen = (e) => {
   viewKey.value++
+  // 保活重开跳过转场：Python _respawn_page 带 skipFx 标记。开窗要的是即刻
+  // 可见内容，out-in 串行动画把跨路由内容出现拖到 168~331ms 且先演旧页；
+  // 页面内手动路由切换不带标记，转场不受影响。
+  skipReopenFx.value = !!e?.detail?.skipFx
   syncAppearance()
 }
+const skipReopenFx = ref(false)
 
 // ---- 页面转场（spec §3.1）：CSS 类退役，GSAP timeline 接管 ----
 // 退场：根直接子块依次下沉淡出；入场：标题逐字浮升 + 其余子块弹簧 stagger。
 function onPageLeave(el, done) {
+  if (skipReopenFx.value) {
+    // 保活重开：0 时长补间异步收尾——同步 done 会与「路由切换+viewKey 重挂」
+    // 双切换竞态踩 Vue Transition 卸载崩溃（null.parentNode），必须保异步语义
+    gsap.to(el, { autoAlpha: 1, duration: 0.001, onComplete: done })
+    return
+  }
   if (motionOff()) {
     done()
     return
@@ -64,6 +75,12 @@ function onPageLeave(el, done) {
 
 function onPageEnter(el, done) {
   gsap.set(el, { autoAlpha: 1 })
+  if (skipReopenFx.value) {
+    skipReopenFx.value = false
+    // 异步 done（同 leave 侧）：内容即刻插入淡入，不串行等待
+    gsap.from(el, { autoAlpha: 0, duration: 0.16, ease: 'none', onComplete: done })
+    return
+  }
   if (motionOff()) {
     done()
     return
