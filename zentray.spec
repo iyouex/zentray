@@ -189,7 +189,6 @@ a = Analysis(
         'numpy',
         'pandas',
         'scipy',
-        'PIL',
         'cv2',
         'PySide6.Qt3DAnimation',
         'PySide6.Qt3DCore',
