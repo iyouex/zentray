@@ -76,6 +76,25 @@
           <a-switch v-model="model.save_local" :disabled="!model.enabled" />
         </a-form-item>
 
+        <a-form-item label="报告托盘轮播">
+          <a-space size="small">
+            <a-switch v-model="model.report_tray_enabled" :disabled="!model.enabled" />
+            <a-input-number
+              v-model="model.report_tray_minutes"
+              :disabled="!model.enabled || !model.report_tray_enabled"
+              :min="1"
+              :max="1440"
+              :step="5"
+              size="small"
+              style="width: 104px"
+            />
+            <span class="muted">分钟</span>
+          </a-space>
+          <div class="muted tiny">
+            完成通知未点击查看时，报告提示进入顶栏任务轮播，到期自动退出
+          </div>
+        </a-form-item>
+
         <a-divider>风格（毒舌 / 温柔 / 干练 + 自定义）</a-divider>
         <p class="muted">内置三套默认风格，提示词均可改；也可新增自定义风格。</p>
 

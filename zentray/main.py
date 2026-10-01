@@ -147,8 +147,10 @@ def _start_nightly_if_needed(runtime: AppRuntime, task_repo: TaskRepository) -> 
         if runtime.nightly is None or not runtime.nightly.isRunning():
             runtime.nightly = NightlyJobWorker(task_repo)
             if runtime.controller:
+                # 连 controller 绑定方法（QObject，排队回主线程）：
+                # 通知可点击开报告 + 未查看报告进入顶栏轮播
                 runtime.nightly.job_completed.connect(
-                    runtime.controller.renderer.show_notification
+                    runtime.controller.on_ai_job_completed
                 )
             runtime.nightly.start()
             logger.info("AI 计划/复盘 worker 已启动")
@@ -328,6 +330,7 @@ def main():
             changed_requested = Signal()
             apply_settings_requested = Signal()
             pomodoro_requested = Signal(str)  # task_id（空=无绑定）
+            report_viewed = Signal(str)  # 报告 key（run:<id>/ai:<path>），移出顶栏轮播
 
             def __init__(self, runtime_ref):
                 super().__init__()
@@ -335,6 +338,7 @@ def main():
                 self.changed_requested.connect(self._on_changed)
                 self.apply_settings_requested.connect(self._on_apply)
                 self.pomodoro_requested.connect(self._on_pomodoro)
+                self.report_viewed.connect(self._on_report_viewed)
 
             def _on_changed(self):
                 if self._runtime_ref.controller:
@@ -349,6 +353,11 @@ def main():
                 if controller:
                     controller.start_pomodoro(task_id or None)
 
+            def _on_report_viewed(self, key):
+                controller = self._runtime_ref.controller
+                if controller:
+                    controller.mark_report_viewed(key)
+
         _api_ui_relay = _ApiUiRelay(runtime)
         set_api_context(
             ApiContext(
@@ -359,6 +368,7 @@ def main():
                 plugin_loader=getattr(runtime.controller, "plugin_loader", None),
                 pomodoro_service=getattr(runtime.controller, "pomodoro_service", None),
                 start_pomodoro=_api_ui_relay.pomodoro_requested.emit,
+                mark_report_viewed=_api_ui_relay.report_viewed.emit,
             )
         )
         if vue_ui_available():

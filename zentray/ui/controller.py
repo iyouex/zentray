@@ -16,6 +16,7 @@ from PySide6.QtWidgets import QApplication
 
 from zentray.services.task_service import TaskService
 from zentray.services.pomodoro_service import PomodoroService
+from zentray.services.report_rotation import ReportRotation
 from zentray.services.settings_manager import SettingsManager
 from zentray.plugins.loader import PluginLoader
 from zentray.plugins.runtime import PluginRuntime
@@ -49,6 +50,10 @@ class TrayController(QObject):
         self._last_icon = None
         # 启动阶段：仅应用图标，等首次轮播 tick 再显示饼图+标题
         self._carousel_started = False
+        # 待查看报告轮播：通知未点击打开的报告临时加入任务轮播，到期/查看后退出
+        self.report_rotation = ReportRotation()
+        self._report_flip = False  # 当前 tick 轮到报告槽（与任务交替）
+        self._report_idx = 0
 
         # 插件运行时（信号必须连 QObject 绑定方法：发射方在 python 线程，
         # AutoConnection 会排队回主线程；连 lambda 会进错误线程）
@@ -176,6 +181,15 @@ class TrayController(QObject):
                 self.poll_timer.setInterval(self._next_interval_ms())
                 return
 
+            # 待查看报告与任务交替轮播（到期或被查看后自动退出交替）
+            reports = self.report_rotation.active()
+            self._report_flip = bool(reports) and not self._report_flip
+            if self._report_flip:
+                self._report_idx = (self._report_idx + 1) % len(reports)
+                self.update_display(update_menu=False)
+                self.poll_timer.setInterval(self._next_interval_ms())
+                return
+
             prev = self.task_service.get_current_task()
             nxt = self.task_service.advance_rotation()
             self._poll_count += 1
@@ -247,8 +261,17 @@ class TrayController(QObject):
             if focus_title:
                 text = f"{text} · {focus_title}"
         else:
+            # 报告槽：本 tick 轮到待查看报告时优先展示（应用图标 + 提示文字）
+            report_text = ""
+            if self._report_flip:
+                active = self.report_rotation.active()
+                if active:
+                    report_text = active[self._report_idx % len(active)]["text"]
             task = self.task_service.get_current_task()
-            if task:
+            if report_text:
+                icon = "app_icon"
+                text = report_text
+            elif task:
                 # 扇形填充 = 子任务完成比例（10% 步进；无子任务空饼）
                 subs = getattr(task, "subtasks", None) or []
                 pct = (
@@ -451,11 +474,21 @@ class TrayController(QObject):
         summary = report.get("summary", "")
         name = report.get("name") or plugin_id
         status = "执行成功" if ok else f"执行失败: {summary}"
+        run_id = str(report.get("run_id", "") or "")
+        key = f"run:{run_id}" if run_id else ""
         self.renderer.show_notification(
             f"脚本: {name}",
             status[:120],
-            on_click=self._make_report_opener(report.get("run_id", "")),
+            on_click=self._make_report_opener(run_id, mark_key=key),
         )
+        # 通知未被点击查看：报告提示进入顶栏轮播，到期自动退出
+        if key:
+            ops = self._settings.ops
+            minutes = int(getattr(ops, "report_tray_minutes", 60) or 0)
+            if getattr(ops, "report_tray_enabled", True) and minutes > 0:
+                self.report_rotation.add(key, f"📄 插件报告待查看: {name}", minutes)
+                self._carousel_started = True
+                self.update_display(update_menu=False)
         try:
             from zentray.services.activity_log import log_event
 
@@ -476,13 +509,14 @@ class TrayController(QObject):
             pass
         self._write_back_result(report, name)
 
-    @staticmethod
-    def _make_report_opener(run_id: str):
+    def _make_report_opener(self, run_id: str, mark_key: str = ""):
         """通知点击回调：复用报告端点逻辑（html 报告→浏览器，否则 md→阅读器）。"""
         if not run_id:
             return None
 
         def opener():
+            if mark_key:
+                self.mark_report_viewed(mark_key)
             try:
                 from zentray.api.handlers import _plugin_run_open
 
@@ -491,6 +525,52 @@ class TrayController(QObject):
                 logger.exception("打开运行报告失败: %s", run_id)
 
         return opener
+
+    def on_ai_job_completed(self, kind: str, title: str, msg: str, report_path: str) -> None:
+        """AI 计划/复盘完成（nightly worker 信号，AutoConnection 排队回主线程）。
+
+        通知可点击打开本地报告；未点击查看时按 plan/review 各自设置进入顶栏轮播。
+        """
+        key = f"ai:{report_path}" if report_path else ""
+        if key:
+            job = getattr(self._settings.ai, kind, None)
+            minutes = int(getattr(job, "report_tray_minutes", 60) or 0) if job else 0
+            if job and getattr(job, "report_tray_enabled", True) and minutes > 0:
+                label = "计划" if kind == "plan" else "复盘"
+                self.report_rotation.add(key, f"📄 {label}报告待查看", minutes)
+                self._carousel_started = True
+                self.update_display(update_menu=False)
+        self.renderer.show_notification(
+            title,
+            msg,
+            on_click=self._make_file_opener(report_path, mark_key=key),
+        )
+
+    def _make_file_opener(self, path: str, mark_key: str = ""):
+        """通知点击回调：系统默认应用打开本地报告文件（md 等）。"""
+        if not path:
+            return None
+
+        def opener():
+            if mark_key:
+                self.mark_report_viewed(mark_key)
+            try:
+                from pathlib import Path
+
+                from zentray.api.handlers import _open_with_system
+
+                _open_with_system(Path(path))
+            except Exception:
+                logger.exception("打开报告失败: %s", path)
+
+        return opener
+
+    def mark_report_viewed(self, key: str) -> None:
+        """报告已被查看（通知点击 / 面板打开）：移出顶栏轮播并刷新。"""
+        if self.report_rotation.mark_viewed(key):
+            if not self.report_rotation.active():
+                self._report_flip = False
+            self.update_display(update_menu=False)
 
     def _write_back_result(self, report: dict, plugin_name: str) -> None:
         """manifest write_back 开启且有任务上下文时，把 RESULT 文本写回任务。"""

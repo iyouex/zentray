@@ -45,6 +45,7 @@ class ApiContext:
         plugin_loader=None,
         pomodoro_service=None,
         start_pomodoro: Optional[Callable[[str], None]] = None,
+        mark_report_viewed: Optional[Callable[[str], None]] = None,
     ):
         self.task_service = task_service
         self.on_changed = on_changed or (lambda: None)
@@ -54,6 +55,8 @@ class ApiContext:
         self.pomodoro_service = pomodoro_service
         # 主线程启动番茄钟（HTTP 线程直接 start 会跨线程启 QTimer）
         self.start_pomodoro = start_pomodoro or (lambda task_id: None)
+        # 报告被打开（经 UI 中继回主线程，移出顶栏轮播）
+        self.mark_report_viewed = mark_report_viewed or (lambda key: None)
 
 
 _ctx = ApiContext()
@@ -1106,6 +1109,7 @@ def _plugin_run_open(body: dict) -> tuple[int, dict]:
         html_path = Path(m.group(0))
         if html_path.is_file():
             _open_with_system(html_path)
+            _ctx.mark_report_viewed(f"run:{run_id}")
             return 200, {"ok": True, "file": str(html_path)}
     log_text = ""
     log_path = runs_dir / f"{run_id}.log"
@@ -1117,6 +1121,7 @@ def _plugin_run_open(body: dict) -> tuple[int, dict]:
     except OSError as e:
         return 500, {"error": f"报告写入失败: {e}"}
     _open_with_system(md_path)
+    _ctx.mark_report_viewed(f"run:{run_id}")
     return 200, {"ok": True, "file": str(md_path)}
 
 

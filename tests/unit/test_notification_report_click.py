@@ -24,17 +24,26 @@ def test_notify_send_action_probe():
 
 def test_report_opener_invokes_run_open(monkeypatch):
     calls = []
+    viewed = []
+
+    class _Self:
+        def mark_report_viewed(self, key):
+            viewed.append(key)
 
     def fake_open(body):
         calls.append(body)
         return 200, {"ok": True}
 
     monkeypatch.setattr("zentray.api.handlers._plugin_run_open", fake_open)
-    cb = TrayController._make_report_opener("20260930_120000_ai-news-digest")
+    cb = TrayController._make_report_opener(
+        _Self(), "20260930_120000_ai-news-digest", mark_key="run:20260930_120000_ai-news-digest"
+    )
     assert cb is not None
     cb()
     assert calls == [{"run_id": "20260930_120000_ai-news-digest"}]
+    # 点击查看同时把报告移出顶栏轮播
+    assert viewed == ["run:20260930_120000_ai-news-digest"]
 
 
 def test_report_opener_none_without_run_id():
-    assert TrayController._make_report_opener("") is None
+    assert TrayController._make_report_opener(object(), "") is None

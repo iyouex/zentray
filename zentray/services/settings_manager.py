@@ -181,6 +181,9 @@ class OpsSettings:
     installed_at: Dict[str, str] = field(default_factory=dict)
     # 已删除的内置（示例）插件 id：包目录不可写/重装会复活，删除=隐藏
     hidden_bundled: List[str] = field(default_factory=list)
+    # 运行报告托盘轮播：完成通知未点击查看时，报告提示进入顶栏任务轮播，到期退出
+    report_tray_enabled: bool = True
+    report_tray_minutes: int = 60
 
 
 @dataclass
@@ -225,6 +228,9 @@ class AIJobSettings:
     skip_weekends: bool = False
     skip_holidays: bool = False
     save_local: bool = True
+    # 报告托盘轮播：完成通知未点击查看时，报告提示进入顶栏任务轮播，到期退出
+    report_tray_enabled: bool = True
+    report_tray_minutes: int = 60
 
     def __post_init__(self):
         # styles 由外部 merge 注入；此处仅保证列表
@@ -244,6 +250,8 @@ class AIJobSettings:
             "skip_weekends": self.skip_weekends,
             "skip_holidays": self.skip_holidays,
             "save_local": self.save_local,
+            "report_tray_enabled": self.report_tray_enabled,
+            "report_tray_minutes": int(self.report_tray_minutes),
         }
 
     @classmethod
@@ -259,6 +267,8 @@ class AIJobSettings:
             skip_weekends=bool(data.get("skip_weekends", False)),
             skip_holidays=bool(data.get("skip_holidays", False)),
             save_local=bool(data.get("save_local", True)),
+            report_tray_enabled=bool(data.get("report_tray_enabled", True)),
+            report_tray_minutes=int(data.get("report_tray_minutes", 60) or 60),
         )
 
 
@@ -619,6 +629,8 @@ class SettingsManager:
                     for k, v in (o.get("installed_at") or {}).items()
                 },
                 hidden_bundled=[str(x) for x in (o.get("hidden_bundled") or [])],
+                report_tray_enabled=bool(o.get("report_tray_enabled", True)),
+                report_tray_minutes=int(o.get("report_tray_minutes", 60) or 60),
             )
 
         # 用 review 回写 nightly 兼容

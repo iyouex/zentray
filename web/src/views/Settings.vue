@@ -484,6 +484,27 @@
                   </div>
                   <a-switch v-model="form.ops.enabled" />
                 </div>
+                <div class="plugin-switch-row" style="margin-top: 14px">
+                  <div>
+                    <div class="plugin-title">运行报告托盘轮播</div>
+                    <div class="plugin-desc">
+                      脚本完成通知未点击查看时，报告提示进入顶栏任务轮播，到期自动退出。
+                    </div>
+                  </div>
+                  <a-space size="small">
+                    <a-input-number
+                      v-model="form.ops.report_tray_minutes"
+                      :min="1"
+                      :max="1440"
+                      :step="5"
+                      size="small"
+                      style="width: 104px"
+                      :disabled="!form.ops.report_tray_enabled"
+                    />
+                    <span class="plugin-desc">分钟</span>
+                    <a-switch v-model="form.ops.report_tray_enabled" />
+                  </a-space>
+                </div>
               </a-card>
 
               <a-collapse v-model:active-key="opsPanes" class="ops-collapse" :bordered="false">
@@ -1688,6 +1709,8 @@ function emptyForm() {
       user_plugins_dir: '',
       trigger_overrides: {},
       param_presets: {},
+      report_tray_enabled: true,
+      report_tray_minutes: 60,
     },
   }
 }
@@ -1800,6 +1823,8 @@ function emptyJob(h, m) {
     skip_weekends: false,
     skip_holidays: false,
     save_local: true,
+    report_tray_enabled: true,
+    report_tray_minutes: 60,
   }
 }
 

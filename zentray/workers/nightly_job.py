@@ -22,7 +22,7 @@ class NightlyJobWorker(QThread):
     - 修改触发时刻后允许同日按新时刻再跑
     """
 
-    job_completed = Signal(str, str)  # title, message
+    job_completed = Signal(str, str, str, str)  # kind, title, message, report_path
 
     def __init__(self, task_repo: TaskRepository):
         super().__init__()
@@ -151,26 +151,30 @@ class NightlyJobWorker(QThread):
 
     def _run_plan(self, today_str: str):
         try:
-            ok = execute_daily_plan(today_str, self.task_repo)
+            ok, path = execute_daily_plan(today_str, self.task_repo)
             if ok:
-                self.job_completed.emit("每日计划", "今日计划已生成。")
+                self.job_completed.emit("plan", "每日计划", "今日计划已生成。", path)
             else:
                 self.job_completed.emit(
+                    "plan",
                     "每日计划",
                     "计划已执行，推送可能失败；请查看本地 reviews/。",
+                    path,
                 )
         except Exception as e:
             logger.exception("Daily plan error: %s", e)
 
     def _run_review(self, today_str: str):
         try:
-            ok = execute_nightly_review(today_str, self.task_repo)
+            ok, path = execute_nightly_review(today_str, self.task_repo)
             if ok:
-                self.job_completed.emit("每日复盘", "复盘已生成。")
+                self.job_completed.emit("review", "每日复盘", "复盘已生成。", path)
             else:
                 self.job_completed.emit(
+                    "review",
                     "每日复盘",
                     "复盘已执行，推送可能失败；请查看本地 reviews/。",
+                    path,
                 )
         except Exception as e:
             logger.exception("Nightly review error: %s", e)
@@ -255,7 +259,7 @@ def _notify_and_save(
     return result.get("status") == "ok" or result.get("app_popup")
 
 
-def execute_daily_plan(today_str: str, task_repo: TaskRepository) -> bool:
+def execute_daily_plan(today_str: str, task_repo: TaskRepository) -> tuple[bool, str]:
     """生成每日计划。"""
     from zentray.services.settings_manager import SettingsManager
 
@@ -309,10 +313,10 @@ def execute_daily_plan(today_str: str, task_repo: TaskRepository) -> bool:
         )
     except Exception:
         pass
-    return ok
+    return ok, (str(DATA_DIR / "reviews" / filename) if save_local else "")
 
 
-def execute_nightly_review(today_str: str, task_repo: TaskRepository) -> bool:
+def execute_nightly_review(today_str: str, task_repo: TaskRepository) -> tuple[bool, str]:
     """生成每日复盘（兼容旧入口名）。"""
     from zentray.services.settings_manager import SettingsManager
 
@@ -372,4 +376,4 @@ def execute_nightly_review(today_str: str, task_repo: TaskRepository) -> bool:
         )
     except Exception:
         pass
-    return ok
+    return ok, (str(DATA_DIR / "reviews" / filename) if save_local else "")
