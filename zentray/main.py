@@ -249,9 +249,9 @@ def main():
     for warning in warnings:
         logger.warning(warning)
 
-    ensure_app_icons()
-
     app = QApplication(sys.argv)
+    # 图标生成用 QPainter，须在 QApplication 之后（无实例时会临时起 offscreen）
+    ensure_app_icons()
     app.setQuitOnLastWindowClosed(False)
     app.setApplicationName("ZenTray")
     app.setApplicationDisplayName("ZenTray")
