@@ -476,11 +476,31 @@ class TrayController(QObject):
         status = "执行成功" if ok else f"执行失败: {summary}"
         run_id = str(report.get("run_id", "") or "")
         key = f"run:{run_id}" if run_id else ""
-        self.renderer.show_notification(
-            f"脚本: {name}",
-            status[:120],
-            on_click=self._make_report_opener(run_id, mark_key=key),
-        )
+        # 通知渠道可多选（设置-插件）；空 = 跟随通知设置已启用渠道
+        sel = self._settings.ops.notify_channels
+        if not sel or "app_popup" in sel:
+            self.renderer.show_notification(
+                f"脚本: {name}",
+                status[:120],
+                on_click=self._make_report_opener(run_id, mark_key=key),
+            )
+        if not sel or "wxpusher" in sel:
+            # 后台线程推送：HTTP timeout 10s，不能卡托盘主线程
+            import threading
+
+            def _push():
+                try:
+                    from zentray.services.notification import NotificationClient
+
+                    NotificationClient.from_settings().send(
+                        f"脚本: {name}",
+                        (report.get("result_text") or status)[:500],
+                        channels=["wxpusher"],
+                    )
+                except Exception:
+                    logger.exception("插件报告 WxPusher 推送失败: %s", plugin_id)
+
+            threading.Thread(target=_push, daemon=True).start()
         # 通知未被点击查看：报告提示进入顶栏轮播，到期自动退出
         if key:
             ops = self._settings.ops
@@ -489,6 +509,7 @@ class TrayController(QObject):
                 self.report_rotation.add(key, f"📄 插件报告待查看: {name}", minutes)
                 self._carousel_started = True
                 self.update_display(update_menu=False)
+
         try:
             from zentray.services.activity_log import log_event
 

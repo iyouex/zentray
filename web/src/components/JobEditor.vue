@@ -76,6 +76,14 @@
           <a-switch v-model="model.save_local" :disabled="!model.enabled" />
         </a-form-item>
 
+        <a-form-item label="完成通知渠道">
+          <a-checkbox-group v-model="model.notify_channels" :disabled="!model.enabled" @change="onChannelsChange">
+            <a-checkbox value="app_popup">应用弹窗</a-checkbox>
+            <a-checkbox value="wxpusher">WxPusher</a-checkbox>
+          </a-checkbox-group>
+          <div class="muted tiny">可多选，至少保留一项；WxPusher 需在 设置 → 🔔 通知 中启用才实际推送</div>
+        </a-form-item>
+
         <a-form-item label="报告托盘轮播">
           <a-space size="small">
             <a-switch v-model="model.report_tray_enabled" :disabled="!model.enabled" />
@@ -254,10 +262,17 @@ watch(
   () => model.value,
   (v) => {
     if (v && !Array.isArray(v.styles)) v.styles = []
+    // 空 = 跟随全局（后端语义）；界面上物化为全选，避免看着像「不通知」
+    if (v && !Array.isArray(v.notify_channels)) v.notify_channels = ['app_popup', 'wxpusher']
     syncTextFromModel()
   },
   { immediate: true, deep: true },
 )
+
+/** 至少保留一个渠道 */
+function onChannelsChange(v) {
+  if (!v || !v.length) model.value.notify_channels = ['app_popup']
+}
 
 watch(
   () => [model.value?.trigger_hour, model.value?.trigger_minute],

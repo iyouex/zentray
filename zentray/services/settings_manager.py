@@ -111,6 +111,18 @@ def default_notify_channels() -> List[NotifyChannel]:
     ]
 
 
+def sanitize_channel_types(raw) -> List[str]:
+    """渠道类型白名单清洗：只留 app_popup/wxpusher，去重保序。"""
+    if not isinstance(raw, (list, tuple)):
+        return []
+    seen: list = []
+    for x in raw:
+        v = str(x or "").strip()
+        if v in ("app_popup", "wxpusher") and v not in seen:
+            seen.append(v)
+    return seen
+
+
 @dataclass
 class NotificationSettings:
     """多渠道通知；可同时开启。"""
@@ -184,6 +196,9 @@ class OpsSettings:
     # 运行报告托盘轮播：完成通知未点击查看时，报告提示进入顶栏任务轮播，到期退出
     report_tray_enabled: bool = True
     report_tray_minutes: int = 60
+    # 插件报告通知渠道（app_popup/wxpusher，可多选）；空 = 跟随通知设置已启用渠道
+    notify_channels: List[str] = field(default_factory=list)
+
 
 
 @dataclass
@@ -231,6 +246,9 @@ class AIJobSettings:
     # 报告托盘轮播：完成通知未点击查看时，报告提示进入顶栏任务轮播，到期退出
     report_tray_enabled: bool = True
     report_tray_minutes: int = 60
+    # 完成通知渠道（app_popup/wxpusher，可多选）；空 = 跟随通知设置已启用渠道
+    notify_channels: List[str] = field(default_factory=list)
+
 
     def __post_init__(self):
         # styles 由外部 merge 注入；此处仅保证列表
@@ -252,6 +270,8 @@ class AIJobSettings:
             "save_local": self.save_local,
             "report_tray_enabled": self.report_tray_enabled,
             "report_tray_minutes": int(self.report_tray_minutes),
+            "notify_channels": list(self.notify_channels),
+
         }
 
     @classmethod
@@ -269,6 +289,8 @@ class AIJobSettings:
             save_local=bool(data.get("save_local", True)),
             report_tray_enabled=bool(data.get("report_tray_enabled", True)),
             report_tray_minutes=int(data.get("report_tray_minutes", 60) or 60),
+            notify_channels=sanitize_channel_types(data.get("notify_channels")),
+
         )
 
 
@@ -631,6 +653,8 @@ class SettingsManager:
                 hidden_bundled=[str(x) for x in (o.get("hidden_bundled") or [])],
                 report_tray_enabled=bool(o.get("report_tray_enabled", True)),
                 report_tray_minutes=int(o.get("report_tray_minutes", 60) or 60),
+                notify_channels=sanitize_channel_types(o.get("notify_channels")),
+
             )
 
         # 用 review 回写 nightly 兼容

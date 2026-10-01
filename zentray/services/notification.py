@@ -30,17 +30,24 @@ class NotificationClient:
 
         return SettingsManager().is_notification_configured()
 
-    def send(self, title: str, content: str) -> dict:
-        """向所有已启用且已配置的渠道发送。"""
+    def send(
+        self, title: str, content: str, channels: Optional[List[str]] = None
+    ) -> dict:
+        """向已启用且已配置的渠道发送。
+
+        channels：渠道类型白名单（app_popup/wxpusher，可多选）；
+        None/空 = 全部已启用渠道（默认行为）。
+        """
         from zentray.services.settings_manager import SettingsManager
 
         sm = SettingsManager()
         n = sm.notification
+        sel = set(channels) if channels else None
         results: Dict[str, Any] = {"channels": {}}
         any_ok = False
 
         # 应用弹窗：由调用方（托盘）监听；此处只标记
-        if n.app_popup_enabled():
+        if n.app_popup_enabled() and (sel is None or "app_popup" in sel):
             results["channels"]["app_popup"] = {
                 "status": "ok",
                 "message": "app_popup",
@@ -48,7 +55,9 @@ class NotificationClient:
             any_ok = True
 
         # WxPusher 多条
-        wx_list = n.wxpusher_channels()
+        wx_list = (
+            n.wxpusher_channels() if (sel is None or "wxpusher" in sel) else []
+        )
         if not wx_list and self._legacy_token and self._legacy_uid:
             wx_list = []  # 走 legacy 下方
         for ch in wx_list:
@@ -68,8 +77,9 @@ class NotificationClient:
                 any_ok = True
 
         # 兼容旧单字段
-        if self._legacy_token or (
-            n.wxpusher_app_token and n.wxpusher_uid and not wx_list
+        if (sel is None or "wxpusher" in sel) and (
+            self._legacy_token
+            or (n.wxpusher_app_token and n.wxpusher_uid and not wx_list)
         ):
             wx = WxPusherService(
                 app_token=self._legacy_token or n.wxpusher_app_token,
@@ -84,12 +94,16 @@ class NotificationClient:
 
         if any_ok:
             results["status"] = "ok"
-            # 标记是否需要本地弹窗
-            results["app_popup"] = n.app_popup_enabled()
+            # 标记是否需要本地弹窗（含渠道筛选）
+            results["app_popup"] = n.app_popup_enabled() and (
+                sel is None or "app_popup" in sel
+            )
             return results
 
         logger.warning("No notification channel succeeded: %s", results)
         results["status"] = "error"
         results["message"] = "没有可用的通知渠道（请检查设置）"
-        results["app_popup"] = n.app_popup_enabled()
+        results["app_popup"] = n.app_popup_enabled() and (
+            sel is None or "app_popup" in sel
+        )
         return results
