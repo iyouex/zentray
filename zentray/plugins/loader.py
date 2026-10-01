@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence
@@ -10,6 +11,36 @@ from zentray.plugins.manifest import ValidationResult, validate_plugin_dir
 from zentray.plugins.models import PluginManifest
 
 logger = logging.getLogger(__name__)
+
+# 扫描缓存：/api/plugins 每次交互都新建 loader 全量扫描（yaml 解析 + 校验 +
+# 覆盖日志刷屏），绝大多数时间目录无变化。签名 = 两根目录的一级子目录与
+# plugin.yaml stat + 隐藏集合——任何插件增删改都会立刻失配走真扫描；
+# TTL 仅兜底 mtime 粒度外的诡异变更。
+# ponytail: 模块级单缓存；多用户目录并发切换场景出现再做 key 化
+_SCAN_TTL = 5.0
+_scan_cache: dict = {"sig": None, "at": 0.0, "plugins": (), "failures": ()}
+
+
+def _scan_signature(bundled_dir, user_dir, hidden) -> tuple:
+    parts = []
+    for root, tag in ((bundled_dir, "b"), (user_dir, "u")):
+        entries = []
+        p = Path(root).resolve() if root else None
+        entries.append(("__root__", str(p)))
+        try:
+            if p and p.is_dir():
+                for child in sorted(p.iterdir()):
+                    if not child.is_dir() or child.name.startswith("."):
+                        continue
+                    try:
+                        st = (child / "plugin.yaml").stat()
+                        entries.append((child.name, st.st_mtime_ns, st.st_size))
+                    except OSError:
+                        entries.append((child.name, None, 0))
+        except OSError:
+            pass
+        parts.append((tag, tuple(entries)))
+    return (tuple(parts), frozenset(hidden))
 
 
 @dataclass
@@ -43,7 +74,21 @@ class PluginLoader:
         bundled_dir: Optional[Path] = None,
         user_dir: Optional[Path] = None,
     ) -> List[LoadedPlugin]:
-        """扫描插件目录（v2：给定的目录恒扫描，无加载开关）。"""
+        """扫描插件目录（v2：给定的目录恒扫描，无加载开关；未变时命中缓存）。"""
+        try:
+            from zentray.services.settings_manager import SettingsManager
+
+            hidden = set(SettingsManager().ops.hidden_bundled)
+        except Exception:
+            logger.exception("隐藏内置插件设置读取失败，按空集过滤")
+            hidden = set()
+
+        sig = _scan_signature(bundled_dir, user_dir, hidden)
+        if _scan_cache["sig"] == sig and time.monotonic() - _scan_cache["at"] < _SCAN_TTL:
+            self._plugins = dict(_scan_cache["plugins"])
+            self._failures = list(_scan_cache["failures"])
+            return self.plugins
+
         self._plugins.clear()
         self._failures.clear()
 
@@ -54,18 +99,18 @@ class PluginLoader:
 
         # 已删除的示例插件：包目录不动（重装会复活），扫描期隐藏。
         # 同 id 的用户副本 source=user，不受影响。
-        try:
-            from zentray.services.settings_manager import SettingsManager
+        if hidden:
+            for pid in hidden:
+                p = self._plugins.get(pid)
+                if p is not None and p.source == "bundled":
+                    del self._plugins[pid]
 
-            hidden = set(SettingsManager().ops.hidden_bundled)
-            if hidden:
-                for pid in hidden:
-                    p = self._plugins.get(pid)
-                    if p is not None and p.source == "bundled":
-                        del self._plugins[pid]
-        except Exception:
-            logger.exception("隐藏内置插件失败，忽略过滤")
-
+        _scan_cache.update(
+            sig=sig,
+            at=time.monotonic(),
+            plugins=dict(self._plugins),
+            failures=list(self._failures),
+        )
         return self.plugins
 
     def _scan_root(self, root: Path, *, source: str) -> None:
