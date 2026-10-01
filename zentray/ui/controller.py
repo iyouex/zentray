@@ -242,6 +242,10 @@ class TrayController(QObject):
                 text = (getattr(pomo, "tray_text", None) or "专注中").strip() or "专注中"
             else:
                 text = f"{rem // 60:02d}:{rem % 60:02d}"
+            # 绑定任务的专注：右侧文字带任务标题后缀（截断由托盘层统一处理）
+            focus_title = (self.pomodoro_service.task_title or "").strip()
+            if focus_title:
+                text = f"{text} · {focus_title}"
         else:
             task = self.task_service.get_current_task()
             if task:
