@@ -42,9 +42,14 @@ body.zt-skin-aurora::before {
   }
 }
 
-/* 浅色主题光晕减淡成粉彩水洗；纯黑主题稍收敛避免灰雾 */
+/* 浅色「冰璃」：浅色底吃色，光晕浓度比深色高一档、透明度回 1（浓度自控） */
 body.zt-skin-aurora.theme-light::before {
-  opacity: 0.55;
+  background:
+    radial-gradient(38% 45% at 22% 28%, rgba(45, 212, 191, 0.3), transparent 70%),
+    radial-gradient(34% 40% at 78% 22%, rgba(129, 140, 248, 0.28), transparent 70%),
+    radial-gradient(40% 42% at 62% 82%, rgba(232, 121, 249, 0.24), transparent 70%),
+    radial-gradient(30% 36% at 12% 78%, rgba(56, 189, 248, 0.24), transparent 70%);
+  opacity: 1;
 }
 body.zt-skin-aurora.theme-oled-dark::before {
   opacity: 0.8;
@@ -72,10 +77,22 @@ body.zt-skin-aurora .quick-add-box {
     inset 0 1px 0 color-mix(in srgb, #ffffff 6%, transparent);
 }
 
+/* 冰璃浅色玻璃面：白 72% + 放大饱和增益 + 白内高光，模糊里透出粉彩极光 */
+body.zt-skin-aurora.theme-light .arco-card,
+body.zt-skin-aurora.theme-light .quick-add-box,
+body.zt-skin-aurora.theme-light .task-card-item {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(20px) saturate(1.6);
+  -webkit-backdrop-filter: blur(20px) saturate(1.6);
+  border-color: rgba(15, 23, 42, 0.1);
+}
 body.zt-skin-aurora.theme-light .arco-card,
 body.zt-skin-aurora.theme-light .quick-add-box {
-  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.14),
-    inset 0 1px 0 color-mix(in srgb, #ffffff 55%, transparent);
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+body.zt-skin-aurora.theme-light .task-card-item.active {
+  background: rgba(255, 255, 255, 0.8);
 }
 
 /* 任务卡玻璃化（hover 呼吸条与 Flip 兼容不变） */
@@ -216,4 +233,16 @@ body.zt-skin-aurora .quick-add-box:focus-within {
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45),
     0 0 0 1.5px var(--color-primary-glow),
     0 0 28px color-mix(in srgb, #818cf8 25%, transparent);
+}
+
+/* 冰璃浅色：大投影去黑改蓝灰、主按钮投影随 glow 提档 */
+body.zt-skin-aurora.theme-light .quick-add-box:focus-within {
+  box-shadow: 0 16px 48px rgba(15, 23, 42, 0.18),
+    0 0 0 1.5px var(--color-primary-glow),
+    0 0 28px color-mix(in srgb, #818cf8 25%, transparent);
+}
+body.zt-skin-aurora.theme-light
+  .arco-btn-primary:not([class*='arco-btn-status']):not(.arco-btn-danger) {
+  box-shadow: 0 4px 16px var(--color-primary-glow),
+    0 1px 3px rgba(15, 23, 42, 0.15);
 }

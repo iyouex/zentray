@@ -65,16 +65,23 @@ body.theme-oled-dark {
 }
 
 body.theme-light {
-  --color-bg-base: #f8fafc;
+  /* 冰璃：冰蓝底让极光显色（纯白底玻璃感不可见） */
+  --color-bg-base: #edf1f9;
   --color-surface: #ffffff;
-  --color-surface-hover: rgba(0, 0, 0, 0.025);
-  --color-border: #e2e8f0;
+  --color-surface-hover: rgba(15, 23, 42, 0.03);
+  --color-border: #dbe3ef;
   --color-primary: #0d9488;
   --color-primary-hover: #0f766e;
-  --color-primary-glow: rgba(13, 148, 136, 0.15);
-  --color-text-primary: #0f172a;
-  --color-text-muted: #475569;
+  --color-primary-glow: rgba(13, 148, 136, 0.28);
+  --color-text-primary: #1e293b;
+  --color-text-muted: #5b6b82;
   --color-text-subdued: #94a3b8;
+  /* 文字级强调加深保可读（填充/描边仍用亮色） */
+  --zt-pri-high: #dc2626;
+  --zt-pri-mid: #b45309;
+  --zt-pri-low: #5b6b82;
+  --zt-due-late: #dc2626;
+  --zt-due-soon: #b45309;
   background: var(--color-bg-base);
   color: var(--color-text-primary);
 }

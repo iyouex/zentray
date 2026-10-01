@@ -66,24 +66,35 @@ body.zt-skin-neo.theme-oled-dark {
   --color-text-subdued: #7a8290;
 }
 
+/* 浅色「纸墨」：暖纸底 + 纯白卡 + 炭黑描边 + 实心墨色硬阴影。
+   令牌全部就地声明——皮肤基块（0-1-1，本文件在前）会压过 styles.css 的
+   theme-light（0-1-1，在后），漏一项就漏回深色值。 */
 body.zt-skin-neo.theme-light {
-  --color-bg-base: #eef0ea;
-  --color-surface-hover: rgba(11, 13, 16, 0.035);
-  --color-border: #10141c;
-  --color-primary: #5c8a0a;
+  --color-bg-base: #f4f4ef;
+  --color-surface: #ffffff;
+  --color-surface-hover: rgba(23, 28, 38, 0.04);
+  --color-border: #171c26;
+  --color-primary: #55790a;
   --color-primary-hover: #497008;
   --color-primary-glow: rgba(200, 245, 66, 0.45);
-  --color-text-primary: #10141c;
-  --color-text-muted: #46505e;
+  --color-text-primary: #171c26;
+  --color-text-muted: #55607a;
   --color-text-subdued: #6b7686;
-  /* 浅色：灰色硬阴影 */
-  --zt-shadow-card: 3px 3px 0 rgba(15, 23, 42, 0.3);
-  --zt-shadow-card-hover: 1px 1px 0 rgba(15, 23, 42, 0.3);
-  /* Arco 主色重映射：可读的深 lime（rgb 三元组） */
-  --primary-4: 124 172 22;
-  --primary-5: 101 163 13;
-  --primary-6: 92 138 10;
-  --primary-7: 74 111 8;
+  /* 实心墨色硬阴影（卡 3px / 钮 2px），不再发灰 */
+  --zt-shadow-card: 3px 3px 0 #171c26;
+  --zt-shadow-card-hover: 1px 1px 0 #171c26;
+  --zt-ink: #171c26;
+  /* 文字级强调换可读深色：纯 lime / cyan 仅作填充与描边 */
+  --zt-pri-high: #d92d20;
+  --zt-pri-mid: #a16207;
+  --zt-pri-low: #55607a;
+  --zt-due-late: #d92d20;
+  --zt-due-soon: #a16207;
+  /* Arco 主色重映射：lime-ink #55790a（rgb 三元组） */
+  --primary-4: 116 152 20;
+  --primary-5: 101 138 14;
+  --primary-6: 85 121 10;
+  --primary-7: 74 106 8;
 }
 
 body.zt-skin-neo.zt-shape-crisp {
@@ -121,6 +132,10 @@ body.zt-skin-neo .page-header h2::before {
   background: linear-gradient(135deg, var(--zt-lime) 50%, var(--zt-cyan) 50%);
   vertical-align: -1px;
   pointer-events: none;
+}
+/* 纸墨：双色方块加墨描边（浅色下亮色块贴纸感） */
+body.zt-skin-neo.theme-light .page-header h2::before {
+  border: 1.5px solid var(--color-border);
 }
 
 /* 周期徽标方角 */
@@ -161,6 +176,11 @@ body.zt-skin-neo .task-card-item.active {
 }
 body.zt-skin-neo .task-card-item.active::before {
   background: var(--zt-lime);
+}
+/* 纸墨选中：墨描边不变 + 青柠洗底（对比靠底色不靠描边） */
+body.zt-skin-neo.theme-light .task-card-item.active {
+  border-color: var(--color-border);
+  background: #f4fcc0;
 }
 
 /* 快速添加：方角 + 2px 描边 + 硬阴影 */
@@ -225,7 +245,7 @@ body.zt-skin-neo.theme-light
   .arco-btn-primary:not(.arco-btn-disabled):not(.arco-btn-loading):not(
     .arco-btn-status-danger
   ):not(.arco-btn-status-warning):not(.arco-btn-status-success) {
-  box-shadow: 2px 2px 0 rgba(15, 23, 42, 0.35);
+  box-shadow: 2px 2px 0 #171c26;
 }
 
 /* 全按钮按压手感：位移 1-2px + 阴影随动（text 型按钮除外） */
@@ -254,6 +274,26 @@ body.zt-skin-neo .arco-btn:not(.arco-btn-primary):not(.arco-btn-text):not(
   border-color: var(--zt-cyan);
   color: var(--zt-cyan);
   background: color-mix(in srgb, var(--zt-cyan) 8%, transparent);
+}
+
+/* 纸墨浅色次按钮：白底 + 墨描边（cyan 调是深色专属，浅色下不可读） */
+body.zt-skin-neo.theme-light .arco-btn:not(.arco-btn-primary):not(.arco-btn-text):not(
+    .arco-btn-status-danger
+  ):not(.arco-btn-status-warning):not(.arco-btn-status-success):not(
+    .arco-btn-disabled
+  ):not(.arco-btn-loading) {
+  border-color: var(--color-border);
+  color: var(--color-text-primary);
+  background: #ffffff;
+}
+body.zt-skin-neo.theme-light .arco-btn:not(.arco-btn-primary):not(.arco-btn-text):not(
+    .arco-btn-status-danger
+  ):not(.arco-btn-status-warning):not(.arco-btn-status-success):not(
+    .arco-btn-disabled
+  ):not(.arco-btn-loading):hover {
+  border-color: var(--color-border);
+  color: var(--color-text-primary);
+  background: var(--color-surface-hover);
 }
 
 /* 滚动条：8px 方角双色 thumb */
@@ -306,15 +346,21 @@ body.zt-skin-neo .arco-modal {
   box-shadow: 5px 5px 0 rgba(0, 0, 0, 0.5);
 }
 body.zt-skin-neo.theme-light .arco-modal {
-  box-shadow: 5px 5px 0 rgba(15, 23, 42, 0.25);
+  box-shadow: 5px 5px 0 #171c26;
 }
 body.zt-skin-neo .arco-drawer {
   border: 2px solid var(--color-border);
   box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.5);
 }
+body.zt-skin-neo.theme-light .arco-drawer {
+  box-shadow: 4px 4px 0 #171c26;
+}
 body.zt-skin-neo .arco-message {
   border: 1.5px solid var(--color-border);
   box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.5);
+}
+body.zt-skin-neo.theme-light .arco-message {
+  box-shadow: 2px 2px 0 #171c26;
 }
 
 /* 优先级 chip：描边随文字色（border-color 缺省取 currentColor） */
