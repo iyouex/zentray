@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 import weakref
 
 from PySide6.QtCore import Qt, QSize, QObject, QEvent, QPoint, QTimer
@@ -329,9 +330,15 @@ def apply_dialog_chrome(
     """
     # stay_on_top 以入参为准：保活复用会带着旧 flags 重建，若沿用旧值，
     # reminder（置顶）关闭后复用的 tasks 面板会被永久置顶。
+    # macOS：常规对话框走原生标题栏（红绿灯/Esc/⌘W、标题栏拖拽），不装自研
+    # 拖拽层（设计 §12.2）；Spotlight 式浮层（tool=True，如快速添加）保持无边框。
+    native_titlebar = sys.platform == "darwin" and not tool
     stays_on_top = stay_on_top
-    window_type = Qt.Tool if tool else Qt.Dialog
-    flags = Qt.FramelessWindowHint | window_type | Qt.CustomizeWindowHint
+    if native_titlebar:
+        flags = Qt.Dialog
+    else:
+        window_type = Qt.Tool if tool else Qt.Dialog
+        flags = Qt.FramelessWindowHint | window_type | Qt.CustomizeWindowHint
     if stays_on_top:
         flags |= Qt.WindowStaysOnTopHint
     dialog.setWindowFlags(flags)
@@ -351,7 +358,8 @@ def apply_dialog_chrome(
     dialog.resize(fixed_w, fixed_h)
     # 期望尺寸：Resize 守卫仅在窗口被改“小”（合成器 bug 特征）时恢复，用户拉大则放行
     setattr(dialog, "_chrome_size", (fixed_w, fixed_h))
-    enable_dialog_drag(dialog)
+    if not native_titlebar:
+        enable_dialog_drag(dialog)
     schedule_center(dialog)
 
 

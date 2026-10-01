@@ -386,9 +386,18 @@ def _appindicator_available() -> bool:
 
 def create_tray_backend(app) -> TrayImplementation:
     """
+    macOS：MacStatusItemTray（NSStatusItem icon+标题轮播 + NSMenu + 系统通知）。
     Linux：优先顶栏 AppIndicator（文字轮播）。
     其它平台 / 无 Indicator：Qt 托盘。
     """
+    if sys.platform == "darwin":
+        try:
+            from zentray.ui.mac_tray import MacStatusItemTray
+
+            backend = MacStatusItemTray()
+            return backend
+        except Exception:
+            logger.exception("MacStatusItemTray 启动失败，回退 Qt 托盘")
     if sys.platform.startswith("linux") and _appindicator_available():
         try:
             backend = LinuxBridgeTray()

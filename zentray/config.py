@@ -65,7 +65,10 @@ AI_API_KEY = os.getenv("AI_API_KEY")
 AI_MODEL_NAME = os.getenv("AI_MODEL_NAME", "gpt-4o")
 
 POMODORO_MINUTES = 25
-HOTKEY_QUICK_ADD = "<ctrl>+<alt>+t"
+# macOS 默认 ⌥Space（与 Spotlight ⌘Space 错开，见 docs/design/mac-interaction-design.md §1）
+HOTKEY_QUICK_ADD = (
+    "<alt>+<space>" if sys.platform == "darwin" else "<ctrl>+<alt>+t"
+)
 
 os.makedirs(ARCHIVE_DIR, exist_ok=True)
 

@@ -42,6 +42,13 @@ dev = [
     "pytest-cov>=4.0",
     "black>=23.0",
 ]
+# macOS 平台层（NSStatusItem 托盘 / UN 系统通知 / SMAppService 登录项）；
+# 热键走 Carbon ctypes，无需额外依赖。Linux/Windows 不装。
+mac = [
+    "pyobjc-framework-Cocoa>=9.0",
+    "pyobjc-framework-UserNotifications>=9.0",
+    "pyobjc-framework-ServiceManagement>=9.0",
+]
 
 [project.scripts]
 zentray = "zentray.main:main"
