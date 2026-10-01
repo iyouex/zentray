@@ -550,22 +550,21 @@
                           <a-tag size="small" :color="p.type === 'service' ? 'orangered' : 'green'">
                             {{ p.type === 'service' ? '服务' : '脚本' }}
                           </a-tag>
-                          <a-tag size="small" color="gray">v{{ p.version }}</a-tag>
                           <a-tag v-if="p.category" size="small" color="cyan">{{ p.category }}</a-tag>
                           <a-tag v-if="p.write_back" size="small" color="purple">结果写回任务</a-tag>
                           <a-tag v-if="p.updated_at" size="small" class="plug-time">
                             {{ p.updated_at?.replace('T', ' ') }}
                           </a-tag>
-                        </div>
-                        <div v-if="p.description" class="plug-desc">{{ p.description }}</div>
-                        <div v-if="p.triggers?.length" class="plug-triggers">
-                          <span class="plug-trig-k">自动触发：</span>
-                          <a-tag v-for="(t, i) in p.triggers" :key="i" size="small" color="arcoblue">
-                            {{ t }}
-                          </a-tag>
-                          <a-tag v-if="p.trigger_override" size="small" color="orange">已自定义</a-tag>
-                        </div>
-                        <div class="plug-ops">
+                          <!-- 第二行合并到首行：描述+触发一行放不下时折行 -->
+                          <span v-if="p.description" class="plug-desc">{{ p.description }}</span>
+                          <template v-if="p.triggers?.length">
+                            <span class="plug-trig-k">触发</span>
+                            <a-tag v-for="(t, i) in p.triggers" :key="i" size="small" color="arcoblue">
+                              {{ t }}
+                            </a-tag>
+                            <a-tag v-if="p.trigger_override" size="small" color="orange">自定义</a-tag>
+                          </template>
+                          <span class="plug-spacer" />
                           <div v-if="p.triggers?.length || p.manifest_triggers?.length" class="plug-auth">
                             <a-switch
                               size="small"
@@ -2784,7 +2783,7 @@ body.zt-skin-neo .nav-main {
   padding-right: 4px;
 }
 .plug-item {
-  padding: 12px 2px;
+  padding: 7px 2px;
   border-bottom: 1px solid var(--color-border-2);
 }
 .plug-item:last-child {
@@ -2796,7 +2795,7 @@ body.zt-skin-neo .nav-main {
 .plug-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
 }
 .plug-name {
@@ -2807,35 +2806,23 @@ body.zt-skin-neo .nav-main {
   font-size: 11px;
   opacity: 0.75;
 }
+/* 单行化：描述/触发与名称同行（放不下自然折行），按钮右贴 */
 .plug-desc {
-  margin-top: 4px;
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--color-text-3);
-  line-height: 1.45;
-}
-.plug-triggers {
-  margin-top: 6px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
 }
 .plug-trig-k {
   font-size: 12px;
   color: var(--color-text-3);
 }
-.plug-ops {
-  margin-top: 8px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+.plug-spacer {
+  flex: 1;
 }
 .plug-auth {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-right: 8px;
+  margin-right: 2px;
 }
 .plug-auth-text {
   font-size: 12px;
