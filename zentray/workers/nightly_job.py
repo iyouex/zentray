@@ -1,6 +1,7 @@
 import datetime
 import logging
 import time
+from typing import List, Optional
 
 from PySide6.QtCore import QThread, Signal
 
@@ -152,28 +153,42 @@ class NightlyJobWorker(QThread):
     def _run_plan(self, today_str: str):
         try:
             ok = execute_daily_plan(today_str, self.task_repo)
-            if ok:
-                self.job_completed.emit("每日计划", "今日计划已生成。")
-            else:
-                self.job_completed.emit(
-                    "每日计划",
-                    "计划已执行，推送可能失败；请查看本地 reviews/。",
-                )
+            if self._popup_selected("plan"):
+                if ok:
+                    self.job_completed.emit("每日计划", "今日计划已生成。")
+                else:
+                    self.job_completed.emit(
+                        "每日计划",
+                        "计划已执行，推送可能失败；请查看本地 reviews/。",
+                    )
         except Exception as e:
             logger.exception("Daily plan error: %s", e)
 
     def _run_review(self, today_str: str):
         try:
             ok = execute_nightly_review(today_str, self.task_repo)
-            if ok:
-                self.job_completed.emit("每日复盘", "复盘已生成。")
-            else:
-                self.job_completed.emit(
-                    "每日复盘",
-                    "复盘已执行，推送可能失败；请查看本地 reviews/。",
-                )
+            if self._popup_selected("review"):
+                if ok:
+                    self.job_completed.emit("每日复盘", "复盘已生成。")
+                else:
+                    self.job_completed.emit(
+                        "每日复盘",
+                        "复盘已执行，推送可能失败；请查看本地 reviews/。",
+                    )
         except Exception as e:
             logger.exception("Nightly review error: %s", e)
+
+    @staticmethod
+    def _popup_selected(kind: str) -> bool:
+        """应用弹窗是否在该 job 的通知渠道选择内（空 = 跟随全局已启用）。"""
+        from zentray.services.settings_manager import SettingsManager
+
+        try:
+            job = SettingsManager().ai.plan if kind == "plan" else SettingsManager().ai.review
+            sel = job.notify_channels
+            return not sel or "app_popup" in sel
+        except Exception:
+            return True
 
     def _run_backup(self):
         """自动备份失败只留日志，不打扰用户（下次到点重试）。"""
@@ -239,6 +254,7 @@ def _notify_and_save(
     *,
     save_local: bool,
     filename: str,
+    channels: Optional[List[str]] = None,
 ) -> bool:
     if save_local:
         reviews = DATA_DIR / "reviews"
@@ -250,8 +266,8 @@ def _notify_and_save(
             logger.warning("save review failed: %s", e)
 
     client = NotificationClient.from_settings()
-    result = client.send(title, report)
-    # 应用弹窗由 job_completed 信号触发托盘通知
+    result = client.send(title, report, channels=channels or None)
+    # 应用弹窗由 job_completed 信号触发托盘通知（_popup_selected 再拦一道）
     return result.get("status") == "ok" or result.get("app_popup")
 
 
@@ -296,6 +312,7 @@ def execute_daily_plan(today_str: str, task_repo: TaskRepository) -> bool:
         report,
         save_local=save_local,
         filename=filename,
+        channels=SettingsManager().ai.plan.notify_channels,
     )
     try:
         from zentray.services.activity_log import log_event
@@ -359,6 +376,7 @@ def execute_nightly_review(today_str: str, task_repo: TaskRepository) -> bool:
         report,
         save_local=save_local,
         filename=filename,
+        channels=SettingsManager().ai.review.notify_channels,
     )
     try:
         from zentray.services.activity_log import log_event

@@ -484,6 +484,16 @@
                   </div>
                   <a-switch v-model="form.ops.enabled" />
                 </div>
+                <a-divider style="margin: 10px 0" />
+                <a-form-item label="脚本完成通知渠道" style="margin-bottom: 0">
+                  <a-checkbox-group v-model="form.ops.notify_channels" @change="onOpsChannelsChange">
+                    <a-checkbox value="app_popup">应用弹窗</a-checkbox>
+                    <a-checkbox value="wxpusher">WxPusher</a-checkbox>
+                  </a-checkbox-group>
+                  <div class="plugin-desc" style="margin-top: 4px">
+                    可多选，至少保留一项（随「保存设置」生效）；WxPusher 需在 设置 → 🔔 通知 中启用才实际推送
+                  </div>
+                </a-form-item>
               </a-card>
 
               <a-collapse v-model:active-key="opsPanes" class="ops-collapse" :bordered="false">
@@ -1282,6 +1292,11 @@ async function loadOpsRuns() {
   } finally {
     opsRunsLoading.value = false
   }
+}
+
+/** 插件报告通知渠道：至少保留一项 */
+function onOpsChannelsChange(v) {
+  if (!v || !v.length) form.ops.notify_channels = ['app_popup']
 }
 
 /** ops 局部保存惯例：getSettings → 合并 → saveSettings（后端 ops 分支整体替换） */
@@ -2176,6 +2191,10 @@ function normalizeLoaded(s) {
   form.ops = { ...emptyForm().ops, ...(s.ops || {}) }
   if (!form.ops.trigger_overrides) form.ops.trigger_overrides = {}
   if (!form.ops.param_presets) form.ops.param_presets = {}
+  // 空 = 跟随全局（后端语义）；界面上物化为全选
+  if (!Array.isArray(form.ops.notify_channels) || !form.ops.notify_channels.length) {
+    form.ops.notify_channels = ['app_popup', 'wxpusher']
+  }
   opsUserDir.value = form.ops.user_plugins_dir || ''
   if (!form.polling) form.polling = emptyForm().polling
   // 番茄钟：旧配置缺新键时补默认

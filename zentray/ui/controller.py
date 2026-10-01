@@ -451,11 +451,31 @@ class TrayController(QObject):
         summary = report.get("summary", "")
         name = report.get("name") or plugin_id
         status = "执行成功" if ok else f"执行失败: {summary}"
-        self.renderer.show_notification(
-            f"脚本: {name}",
-            status[:120],
-            on_click=self._make_report_opener(report.get("run_id", "")),
-        )
+        # 通知渠道可多选（设置-插件）；空 = 跟随通知设置已启用渠道
+        sel = self._settings.ops.notify_channels
+        if not sel or "app_popup" in sel:
+            self.renderer.show_notification(
+                f"脚本: {name}",
+                status[:120],
+                on_click=self._make_report_opener(report.get("run_id", "")),
+            )
+        if not sel or "wxpusher" in sel:
+            # 后台线程推送：HTTP timeout 10s，不能卡托盘主线程
+            import threading
+
+            def _push():
+                try:
+                    from zentray.services.notification import NotificationClient
+
+                    NotificationClient.from_settings().send(
+                        f"脚本: {name}",
+                        (report.get("result_text") or status)[:500],
+                        channels=["wxpusher"],
+                    )
+                except Exception:
+                    logger.exception("插件报告 WxPusher 推送失败: %s", plugin_id)
+
+            threading.Thread(target=_push, daemon=True).start()
         try:
             from zentray.services.activity_log import log_event
 

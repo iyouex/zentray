@@ -111,6 +111,18 @@ def default_notify_channels() -> List[NotifyChannel]:
     ]
 
 
+def sanitize_channel_types(raw) -> List[str]:
+    """渠道类型白名单清洗：只留 app_popup/wxpusher，去重保序。"""
+    if not isinstance(raw, (list, tuple)):
+        return []
+    seen: list = []
+    for x in raw:
+        v = str(x or "").strip()
+        if v in ("app_popup", "wxpusher") and v not in seen:
+            seen.append(v)
+    return seen
+
+
 @dataclass
 class NotificationSettings:
     """多渠道通知；可同时开启。"""
@@ -181,6 +193,8 @@ class OpsSettings:
     installed_at: Dict[str, str] = field(default_factory=dict)
     # 已删除的内置（示例）插件 id：包目录不可写/重装会复活，删除=隐藏
     hidden_bundled: List[str] = field(default_factory=list)
+    # 插件报告通知渠道（app_popup/wxpusher，可多选）；空 = 跟随通知设置已启用渠道
+    notify_channels: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -225,6 +239,8 @@ class AIJobSettings:
     skip_weekends: bool = False
     skip_holidays: bool = False
     save_local: bool = True
+    # 完成通知渠道（app_popup/wxpusher，可多选）；空 = 跟随通知设置已启用渠道
+    notify_channels: List[str] = field(default_factory=list)
 
     def __post_init__(self):
         # styles 由外部 merge 注入；此处仅保证列表
@@ -244,6 +260,7 @@ class AIJobSettings:
             "skip_weekends": self.skip_weekends,
             "skip_holidays": self.skip_holidays,
             "save_local": self.save_local,
+            "notify_channels": list(self.notify_channels),
         }
 
     @classmethod
@@ -259,6 +276,7 @@ class AIJobSettings:
             skip_weekends=bool(data.get("skip_weekends", False)),
             skip_holidays=bool(data.get("skip_holidays", False)),
             save_local=bool(data.get("save_local", True)),
+            notify_channels=sanitize_channel_types(data.get("notify_channels")),
         )
 
 
@@ -619,6 +637,7 @@ class SettingsManager:
                     for k, v in (o.get("installed_at") or {}).items()
                 },
                 hidden_bundled=[str(x) for x in (o.get("hidden_bundled") or [])],
+                notify_channels=sanitize_channel_types(o.get("notify_channels")),
             )
 
         # 用 review 回写 nightly 兼容
