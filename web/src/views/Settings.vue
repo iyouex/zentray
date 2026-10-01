@@ -1941,7 +1941,7 @@ async function onPickBackupFile() {
     if (!r.id) Message.info('仅桌面端支持文件选择')
     return
   }
-  plugImportPath.value = r.path
+  importPath.value = r.path
   importNeedsPassword.value = snapshots.value.some((s) => s.path === r.path && s.encrypted)
 }
 
@@ -2037,7 +2037,7 @@ function loadBackupPage() {
 
 /** 快照行「恢复」：回填路径 + 密码态，走 onImportBackup 的确认流程 */
 function restoreSnapshot(record) {
-  plugImportPath.value = record.path
+  importPath.value = record.path
   importNeedsPassword.value = !!record.encrypted
   importPassword.value = ''
   onImportBackup()
