@@ -689,7 +689,12 @@ def _plugins_list(*, scan_always: bool = False) -> dict:
                 ],
                 "trigger_override": m.id in sm.ops.trigger_overrides,
                 "params": [
-                    {"name": x.name, "default": x.default, "description": x.description}
+                    {
+                        "name": x.name,
+                        "default": x.default,
+                        "description": x.description,
+                        "variadic": x.variadic,
+                    }
                     for x in m.params
                 ],
                 "updated_at": updated_at,
@@ -1160,13 +1165,20 @@ def _run_plugin(plugin_id: str, body: dict) -> tuple[int, dict]:
         task = _ctx.task_service.find_task(task_id)
         if task is None:
             return 404, {"error": f"任务不存在: {task_id}"}
-    # 命名入参：显式传入 > 预设 > default（body.params {name: value}）
+    # 命名入参：显式传入 > 预设 > default（body.params {name: value| [values]}）
     param_values = None
     m_params = plug.manifest.params
     if m_params:
         raw_params = body.get("params")
         if raw_params is not None and not isinstance(raw_params, dict):
             return 400, {"error": "params 必须是对象"}
+        # 多值（列表）仅允许出现在 variadic 参数上，且元素必须全为字符串
+        variadic_names = {x.name for x in m_params if x.variadic}
+        for k, v in (raw_params or {}).items():
+            if isinstance(v, list) and (
+                k not in variadic_names or not all(isinstance(x, str) for x in v)
+            ):
+                return 400, {"error": f"参数 {k} 不支持该多值"}
         from zentray.plugins.models import resolve_param_values
 
         try:

@@ -588,8 +588,13 @@
                         </div>
                       </div>
 
-                      <!-- 每插件展开：调度规则 / 参数预设 -->
-                      <a-collapse :bordered="false" class="plug-edit" :key="p.id">
+                      <!-- 每插件展开：调度规则 / 参数预设（受控：保存刷新列表后仍保持展开） -->
+                      <a-collapse
+                        :bordered="false"
+                        class="plug-edit"
+                        :active-key="opsEditOpen[p.id] ? ['edit'] : []"
+                        @change="(keys) => (opsEditOpen[p.id] = keys.includes('edit'))"
+                      >
                         <a-collapse-item key="edit" header="调度规则 / 参数预设">
                           <div class="plug-edit-sec">
                             <div class="plug-edit-head">
@@ -634,7 +639,19 @@
                               <span class="preset-k" :title="prm.description || prm.name">
                                 {{ prm.description || prm.name }}
                               </span>
-                              <a-input v-model="presetDrafts[p.id][prm.name]" size="small" style="width: 260px" :placeholder="`缺省 ${prm.default || '空'}`" />
+                              <!-- 可变长度参数：默认一行，「＋ 加一条」增行 -->
+                              <div v-if="prm.variadic" class="preset-many">
+                                <div v-for="(_, vi) in presetDrafts[p.id][prm.name]" :key="vi" class="preset-many-row">
+                                  <a-input v-model="presetDrafts[p.id][prm.name][vi]" size="small" style="width: 260px" :placeholder="`缺省 ${prm.default || '空'}`" />
+                                  <a-button
+                                    v-if="presetDrafts[p.id][prm.name].length > 1"
+                                    size="mini" type="text" status="danger"
+                                    @click="presetDrafts[p.id][prm.name].splice(vi, 1)"
+                                  >删除</a-button>
+                                </div>
+                                <a-button size="mini" @click="presetDrafts[p.id][prm.name].push('')">＋ 加一条</a-button>
+                              </div>
+                              <a-input v-else v-model="presetDrafts[p.id][prm.name]" size="small" style="width: 260px" :placeholder="`缺省 ${prm.default || '空'}`" />
                             </div>
                             <div class="trig-actions">
                               <a-button size="small" type="primary" :loading="opsPresetSaving === p.id" @click="saveParamPreset(p)">保存预设</a-button>
@@ -1090,6 +1107,8 @@ const opsRunBusy = ref('')
 const opsAuthBusy = ref('')
 const opsRuleSaving = ref('')
 const opsPresetSaving = ref('')
+// 每插件「调度规则 / 参数预设」折叠态（受控，保存后刷新列表不丢）
+const opsEditOpen = reactive({})
 // 使用说明抽屉
 const opsDocVisible = ref(false)
 const opsDocPlugin = ref(null)
@@ -1209,7 +1228,16 @@ function syncPresetDraft(p) {
   const saved = form.ops.param_presets?.[p.id] || {}
   presetDrafts[p.id] = {}
   for (const prm of p.params || []) {
-    presetDrafts[p.id][prm.name] = saved[prm.name] ?? prm.default ?? ''
+    if (prm.variadic) {
+      // 可变长度：预设/缺省归一为行数组，至少一行
+      const v = saved[prm.name]
+      const rows = Array.isArray(v)
+        ? v.filter((s) => s !== '')
+        : v != null && v !== '' ? [v] : prm.default ? [prm.default] : []
+      presetDrafts[p.id][prm.name] = rows.length ? rows : ['']
+    } else {
+      presetDrafts[p.id][prm.name] = saved[prm.name] ?? prm.default ?? ''
+    }
   }
 }
 
@@ -2825,6 +2853,19 @@ body.zt-skin-neo .nav-main {
   min-width: 120px;
   font-size: 12.5px;
   color: var(--color-text-2);
+}
+/* 可变长度参数：多行值 + 加一条 */
+.preset-many {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+.preset-many-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 /* —— 校验失败 —— */
 .plug-fail-box {

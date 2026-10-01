@@ -123,6 +123,9 @@ params:
   - name: target          # 必填，同一插件内唯一
     default: "all"        # 可选，缺省值（字符串，缺省空串）
     description: 作用目标  # 可选，弹窗/设置页的输入框标签
+    variadic: true        # 可选，可变长度参数（仅允许最后一个参数）：
+                          #   值可为多值列表，按序逐个追加 argv，空串跳过；
+                          #   面板/设置页默认一行输入，「＋ 加一条」增行
 ```
 
 实际 argv = `entry + manifest.args + [参数值...]`，参数值优先级：

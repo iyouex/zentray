@@ -288,6 +288,7 @@ def _validate_params(
 
     out: List[PluginParam] = []
     seen: set[str] = set()
+    n = len(raw_params) if isinstance(raw_params, list) else 0
     for i, item in enumerate(raw_params, start=1):
         if not isinstance(item, dict):
             errors.append(f"params[{i}] 必须是 mapping")
@@ -300,11 +301,16 @@ def _validate_params(
             errors.append(f"params[{i}].name 重复: {name}")
             continue
         seen.add(name)
+        # variadic：可变长度参数仅允许最后一个（其后还有参数则多值插入位置歧义）
+        variadic = bool(item.get("variadic"))
+        if variadic and i != n:
+            errors.append(f"params[{i}].variadic 仅允许声明在最后一个参数上")
         out.append(
             PluginParam(
                 name=name,
                 default=str(item.get("default") or ""),
                 description=str(item.get("description") or "").strip(),
+                variadic=variadic,
             )
         )
     return out

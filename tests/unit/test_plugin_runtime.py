@@ -310,6 +310,25 @@ def test_resolve_param_values_priority():
     assert resolve_param_values(params, None) == ["da", "db", "dc"]
 
 
+def test_resolve_param_values_variadic():
+    """variadic 参数：值可为列表，按序展开追加 argv，空串过滤。"""
+    from zentray.plugins.models import PluginParam, resolve_param_values
+
+    params = [
+        PluginParam(name="mode"),
+        PluginParam(name="targets", variadic=True),
+    ]
+    # 显式多值
+    assert resolve_param_values(params, None, {"mode": "fast", "targets": ["a", "", "b"]}) == [
+        "fast", "a", "b",
+    ]
+    # 预设多值 / 单值 str 皆可
+    assert resolve_param_values(params, {"targets": ["x", "y"]}, {"mode": "m"}) == ["m", "x", "y"]
+    assert resolve_param_values(params, {"targets": "solo"}, {"mode": "m"}) == ["m", "solo"]
+    # 无任何值：variadic 贡献 0 项（default 空串被过滤）
+    assert resolve_param_values(params, None) == [""]
+
+
 # ==========================================
 # 卡死修复：静默挂死脚本的超时必须落地（_busy 复位、报告落盘）
 # ==========================================

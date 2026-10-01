@@ -90,7 +90,25 @@
                         <span class="pp-param-k" :title="prm.description || prm.name">
                           {{ prm.description || prm.name }}
                         </span>
+                        <!-- 可变长度参数：默认一行，「＋ 加一条」增行 -->
+                        <div v-if="prm.variadic" class="pp-param-many">
+                          <div v-for="(_, vi) in drafts[p.id][prm.name]" :key="vi" class="pp-many-row">
+                            <a-input
+                              v-model="drafts[p.id][prm.name][vi]"
+                              size="small"
+                              :placeholder="`缺省 ${prm.default || '空'}`"
+                              @press-enter="runScript(p)"
+                            />
+                            <a-button
+                              v-if="drafts[p.id][prm.name].length > 1"
+                              size="mini" type="text" status="danger"
+                              @click="drafts[p.id][prm.name].splice(vi, 1)"
+                            >✕</a-button>
+                          </div>
+                          <a-button size="mini" @click="drafts[p.id][prm.name].push('')">＋ 加一条</a-button>
+                        </div>
                         <a-input
+                          v-else
                           v-model="drafts[p.id][prm.name]"
                           size="small"
                           :placeholder="`缺省 ${prm.default || '空'}`"
@@ -304,11 +322,11 @@ function applyList(data) {
   busy.value = !!data.busy
   items.value = data.items || []
   failures.value = data.failures || []
-  // 预填基线：参数预设 → manifest default
+  // 预填基线：参数预设 → manifest default（variadic 归一为行数组，至少一行）
   for (const p of items.value) {
     drafts[p.id] = {}
     for (const prm of p.params || []) {
-      drafts[p.id][prm.name] = prm.default ?? ''
+      drafts[p.id][prm.name] = prm.variadic ? (prm.default ? [prm.default] : ['']) : prm.default ?? ''
     }
   }
 }
@@ -332,7 +350,16 @@ async function loadPlugins() {
       for (const p of items.value) {
         const saved = presets[p.id] || {}
         for (const prm of p.params || []) {
-          if (saved[prm.name] != null) drafts[p.id][prm.name] = saved[prm.name]
+          if (saved[prm.name] == null) continue
+          if (prm.variadic) {
+            const v = saved[prm.name]
+            const rows = Array.isArray(v)
+              ? v.filter((s2) => s2 !== '')
+              : v !== '' ? [v] : []
+            drafts[p.id][prm.name] = rows.length ? rows : ['']
+          } else {
+            drafts[p.id][prm.name] = saved[prm.name]
+          }
         }
       }
     }
@@ -587,6 +614,23 @@ watch(docPlugin, (v) => { if (v) docVisible.value = true })
   color: var(--color-text-2);
 }
 .pp-param .arco-input-wrapper {
+  flex: 1;
+}
+/* 可变长度参数：多行值 + 加一条 */
+.pp-param-many {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+.pp-many-row {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 6px;
+}
+.pp-many-row .arco-input-wrapper {
   flex: 1;
 }
 .pp-confirm {

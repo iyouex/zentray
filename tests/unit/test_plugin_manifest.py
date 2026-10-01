@@ -190,6 +190,8 @@ def test_fixture_param_echo_valid():
         ("params:\n  - default: x\n", "name 必填"),
         ("params:\n  - target\n", "mapping"),
         ("params: not-a-list\n", "列表"),
+        # variadic 只允许最后一个参数
+        ("params:\n  - name: a\n    variadic: true\n  - name: b\n", "variadic"),
     ],
 )
 def test_params_invalid(tmp_path, yaml_extra, expect_error):
@@ -197,6 +199,17 @@ def test_params_invalid(tmp_path, yaml_extra, expect_error):
     r = validate_plugin_dir(d)
     assert not r.ok
     assert any(expect_error in e for e in r.errors), r.errors
+
+
+def test_params_variadic_last_ok(tmp_path):
+    d = _write_plugin(
+        tmp_path,
+        _BASE_V2 + "params:\n  - name: a\n  - name: b\n    variadic: true\n",
+    )
+    r = validate_plugin_dir(d)
+    assert r.ok, r.error_text()
+    assert r.manifest.params[0].variadic is False
+    assert r.manifest.params[1].variadic is True
 
 
 def test_params_need_v2(tmp_path):

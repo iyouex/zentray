@@ -158,9 +158,11 @@ class PluginRuntime(QObject):
         return env
 
     @staticmethod
-    def _preset_or_default(m, param) -> str:
-        """入参缺省值：预设（settings.ops.param_presets）> manifest default。"""
-        return resolve_param_values([param], _read_param_presets(m.id))[0]
+    def _preset_or_default(m, param) -> list:
+        """入参缺省值：预设（settings.ops.param_presets）> manifest default。
+        返回 list：variadic 参数的预设多值逐个展开，普通参数恰一项。
+        """
+        return resolve_param_values([param], _read_param_presets(m.id))
 
     def _run_script_thread(
         self,
@@ -178,9 +180,10 @@ class PluginRuntime(QObject):
         meta_json = self._runs_dir / f"{run_id}.json"
         last_json = self._runs_dir / "last.json"
 
-        values = list(param_values) if param_values is not None else [
-            self._preset_or_default(m, p) for p in m.params
-        ]
+        values = list(param_values) if param_values is not None else (
+            # variadic 参数预设可为多值列表，逐个展开（保持声明顺序）
+            [v for p in m.params for v in self._preset_or_default(m, p)]
+        )
         cmd = [str(m.entry_path), *m.args, *values]
         env = self._base_env(m)
         # 任务上下文最后注入（动态覆盖静态）；触发来源始终注入
