@@ -532,7 +532,7 @@ function setTab(k) {
   runFlip(() => {
     viewTab.value = k
   })
-  if (k === 'history' && !archivedLoaded.value) loadArchived()
+  if (k === 'history' && !archivedLoaded.value && !histLoading.value) loadArchived()
   ensureSelectionVisible()
 }
 
@@ -605,6 +605,8 @@ async function runFlip(mutate) {
 
 async function reload() {
   loading.value = true
+  // 历史计数随主数据并行预取：tab 徽标开窗即准，切回 /tasks 也刷新
+  loadArchived()
   try {
     const [freshTasks, freshTemplates] = await Promise.all([listTasks(), listTemplates()])
     runFlip(() => {
