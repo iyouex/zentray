@@ -280,6 +280,7 @@ class TrayController(QObject):
             pomodoro_phase=pomo.phase,
             pomodoro_today=self._pomodoro_today_stats(),
             focus_task_title=pomo.task_title if pomo.phase == "focus" else "",
+            pomodoro_label_format=self._settings.pomodoro.menu_label_format,
         )
         if self.menu_builder.should_update(items):
             self.renderer.update_menu(items)

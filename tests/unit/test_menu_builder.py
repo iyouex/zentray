@@ -158,20 +158,58 @@ def test_focus_with_bound_task_shows_info_row():
     assert by_id["pomodoro_task"]["enabled"] is False
 
 
-def test_today_stats_row():
+def test_today_stats_merged_into_start_button():
+    """空闲段：专注按钮融合今日统计；无独立统计行。"""
     mb = MenuBuilder()
     items = mb.build_main_menu(
         is_pomodoro=False,
         pomodoro_minutes=25,
         extend_minutes=10,
         pomodoro_today=(3, 75),
+        pomodoro_label_format="🍅 专注{focus}mins -- 今日{today}mins",
+    )
+    by_id = {it["id"]: it for it in items if isinstance(it, dict)}
+    assert by_id["pomodoro"]["label"] == "🍅 专注25mins -- 今日75mins"
+    assert by_id["pomodoro"]["enabled"] is True
+    assert "pomodoro_stats" not in by_id
+
+
+def test_merged_label_format_placeholders_and_fallback():
+    mb = MenuBuilder()
+    items = mb.build_main_menu(
+        is_pomodoro=False,
+        pomodoro_today=(2, 50),
+        pomodoro_label_format="今日已{count}🍅/{today}分，开专注{focus}分",
+    )
+    by_id = {it["id"]: it for it in items if isinstance(it, dict)}
+    assert by_id["pomodoro"]["label"] == "今日已2🍅/50分，开专注25分"
+    # 非法格式：回退兜底文案
+    items2 = mb.build_main_menu(
+        is_pomodoro=False,
+        pomodoro_minutes=25,
+        pomodoro_today=(1, 25),
+        pomodoro_label_format="{oops",
+    )
+    by_id2 = {it["id"]: it for it in items2 if isinstance(it, dict)}
+    assert by_id2["pomodoro"]["label"] == "🍅 专注 25分钟 -- 今日 25分钟"
+    # 不传格式且不传统计（None）：保持旧版纯专注按钮
+    items3 = mb.build_main_menu(is_pomodoro=False)
+    by_id3 = {it["id"]: it for it in items3 if isinstance(it, dict)}
+    assert by_id3["pomodoro"]["label"] == "🍅 专注 25 分钟"
+
+
+def test_active_phase_keeps_stats_row():
+    """专注/休息中：无开始按钮，今日统计单列一行。"""
+    mb = MenuBuilder()
+    items = mb.build_main_menu(
+        is_pomodoro=True,
+        pomodoro_phase="focus",
+        pomodoro_today=(3, 75),
     )
     by_id = {it["id"]: it for it in items if isinstance(it, dict)}
     assert by_id["pomodoro_stats"]["label"] == "今日 🍅 3 · 75 分钟"
     assert by_id["pomodoro_stats"]["enabled"] is False
-    # 不传统计（None）：无该行
-    items2 = mb.build_main_menu(is_pomodoro=False)
-    assert "pomodoro_stats" not in {it["id"] for it in items2 if isinstance(it, dict)}
+    assert "pomodoro" not in by_id
 
 
 def test_break_icon_generation(tmp_path):

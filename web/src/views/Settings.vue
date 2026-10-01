@@ -446,6 +446,27 @@
                   </div>
                 </div>
               </section>
+
+              <div class="compact-sep" />
+
+              <section class="compact-block">
+                <div class="compact-head">菜单按钮</div>
+                <p class="hint-sm">
+                  托盘菜单「专注」按钮空闲时融合今日统计。占位符：{focus}=本次专注分钟、{today}=今日专注分钟、{count}=今日番茄数。
+                </p>
+                <div class="field-table">
+                  <div class="field-line">
+                    <span class="field-k">按钮文案</span>
+                    <a-input
+                      v-model="form.pomodoro.menu_label_format"
+                      size="small"
+                      placeholder="🍅 专注{focus}mins -- 今日{today}mins"
+                      :max-length="64"
+                      style="width: 320px"
+                    />
+                  </div>
+                </div>
+              </section>
             </div>
           </template>
 
@@ -1600,6 +1621,7 @@ function emptyForm() {
       auto_start_breaks: true,
       auto_start_focus: false,
       daily_goal_pomodoros: 0,
+      menu_label_format: '🍅 专注{focus}mins -- 今日{today}mins',
     },
     nightly: {},
     notification: {

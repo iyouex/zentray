@@ -54,6 +54,8 @@ class PomodoroSettings:
     auto_start_breaks: bool = True   # 专注结束自动开始休息
     auto_start_focus: bool = False   # 休息结束自动开始下一段专注
     daily_goal_pomodoros: int = 0    # 每日目标番茄数（达标通知）；0=不启用
+    # 托盘菜单专注按钮文案（融合今日统计）：{focus}=本次专注分钟 {today}=今日专注分钟 {count}=今日番茄数
+    menu_label_format: str = "🍅 专注{focus}mins -- 今日{today}mins"
 
 
 @dataclass
@@ -509,6 +511,8 @@ class SettingsManager:
                 auto_start_breaks=bool(p.get("auto_start_breaks", True)),
                 auto_start_focus=bool(p.get("auto_start_focus", False)),
                 daily_goal_pomodoros=p.get("daily_goal_pomodoros", 0),
+                menu_label_format=str(p.get("menu_label_format") or "").strip()
+                or PomodoroSettings.menu_label_format,
             )
         if "nightly" in data:
             n = data["nightly"]
