@@ -40,6 +40,18 @@
               {{ c.label }} · {{ histStatusCount(c.key) }}
             </button>
           </div>
+          <div v-if="viewTab === 'history' && archivedLoaded" class="filter-row" role="group" aria-label="时间范围">
+            <button
+              v-for="c in histRangeChips"
+              :key="c.key"
+              class="fchip"
+              type="button"
+              :aria-pressed="String(histRange === c.key)"
+              @click="setHistRange(c.key)"
+            >
+              {{ c.label }} · {{ histRangeCount(c.key) }}
+            </button>
+          </div>
           <div v-if="categoryChips.length > 1" class="filter-row" role="group" aria-label="分类筛选">
             <button
               v-for="c in categoryChips"
@@ -502,11 +514,51 @@ function histStatusCount(k) {
   return archived.value.filter((a) => STATUS_FAMILY[a.status] === k).length
 }
 
+/** 历史时间范围（客户端过滤）：今天/本周（周一起）/本月（自然月） */
+const histRange = ref('all')
+const histRangeChips = [
+  { key: 'all', label: '全部' },
+  { key: 'today', label: '今天' },
+  { key: 'week', label: '本周' },
+  { key: 'month', label: '本月' },
+]
+
+function inHistRange(a, k) {
+  if (k === 'all') return true
+  const d = new Date(a.archived_at || '')
+  if (Number.isNaN(d.getTime())) return false
+  const now = new Date()
+  if (k === 'today') return d.toDateString() === now.toDateString()
+  if (k === 'week') {
+    const ws = new Date(now)
+    ws.setHours(0, 0, 0, 0)
+    ws.setDate(ws.getDate() - ((ws.getDay() + 6) % 7)) // 本周一 0 点
+    return d >= ws
+  }
+  return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
+}
+
+function histRangeCount(k) {
+  return archived.value.filter((a) => inHistRange(a, k)).length
+}
+
+function setHistRange(k) {
+  if (histRange.value === k) return
+  runFlip(() => {
+    histRange.value = k
+  })
+  ensureSelectionVisible()
+}
+
 function matchesType(item) {
   // 活跃 = 全部在库任务（一次性 + 周期实例 + 孤儿）；周期 = 纯模板；历史 = 归档条目
   if (viewTab.value === 'active') return item.kind === 'task'
   if (viewTab.value === 'periodic') return item.kind === 'tmpl'
-  return item.kind === 'hist' && (histStatus.value === 'all' || STATUS_FAMILY[item.status] === histStatus.value)
+  return (
+    item.kind === 'hist' &&
+    (histStatus.value === 'all' || STATUS_FAMILY[item.status] === histStatus.value) &&
+    inHistRange(item, histRange.value)
+  )
 }
 
 function matches(item) {
