@@ -387,8 +387,18 @@ def _appindicator_available() -> bool:
 def create_tray_backend(app) -> TrayImplementation:
     """
     Linux：优先顶栏 AppIndicator（文字轮播）。
+    Windows：WindowsTray（左键速览 + QPainter 动态图标 + tooltip）。
     其它平台 / 无 Indicator：Qt 托盘。
     """
+    if sys.platform == "win32":
+        try:
+            from zentray.ui.win_tray import WindowsTray
+
+            backend = WindowsTray(app)
+            logger.info("托盘后端: WindowsTray (左键速览 + 动态图标)")
+            return backend
+        except Exception:
+            logger.exception("WindowsTray 启动失败，回退 Qt 托盘")
     if sys.platform.startswith("linux") and _appindicator_available():
         try:
             backend = LinuxBridgeTray()

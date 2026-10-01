@@ -64,6 +64,10 @@ class TrayController(QObject):
         self._ops_tray_text = ""
 
         self.renderer.backend.action_received.connect(self.handle_action)
+        # Windows 托盘左键速览（仅 WindowsTray 后端有该信号）
+        _glance_sig = getattr(self.renderer.backend, "glance_requested", None)
+        if _glance_sig is not None:
+            _glance_sig.connect(self._on_glance_requested)
         self.pomodoro_service.time_updated.connect(self._on_pomodoro_tick)
         self.pomodoro_service.pomodoro_finished.connect(self._on_pomodoro_end)
         self.pomodoro_service.break_finished.connect(self._on_break_end)
@@ -128,6 +132,15 @@ class TrayController(QObject):
 
         if not dispatch(action_id, self):
             logger.debug("未识别的菜单 action: %s", action_id)
+
+    def _on_glance_requested(self, pos) -> None:
+        """托盘左键：打开任务速览面板（Windows；Vue 不可用时回退菜单）。"""
+        from zentray.ui.vue_commands import try_vue_glance
+
+        if not try_vue_glance(self, pos):
+            menu = getattr(self.renderer.backend, "menu", None)
+            if menu is not None:
+                menu.popup(pos)
 
     def reload_ops_plugins(self) -> None:
         """按设置扫描插件。"""
@@ -381,20 +394,9 @@ class TrayController(QObject):
     def _pomodoro_today_stats(self) -> tuple:
         """今日 (番茄数, 专注分钟)——建菜单时现算，不引常驻缓存。"""
         try:
-            from datetime import datetime as _dt
+            from zentray.services.activity_log import pomodoro_today_stats
 
-            from zentray.services.activity_log import query_events
-
-            today = _dt.now().strftime("%Y-%m-%d")
-            count = minutes = 0
-            for ev in query_events(category="pomodoro", days=1, limit=500):
-                if (ev.get("time") or "")[:10] != today:
-                    continue
-                if ev.get("action") != "pomodoro_done":
-                    continue
-                count += 1
-                minutes += int((ev.get("meta") or {}).get("minutes") or 0)
-            return count, minutes
+            return pomodoro_today_stats()
         except Exception:
             return 0, 0
 

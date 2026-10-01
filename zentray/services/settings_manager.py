@@ -47,6 +47,8 @@ class PomodoroSettings:
     # 托盘文字：countdown=倒计时 mm:ss；text=自定义文案（左侧始终为番茄饼图）
     tray_display: str = "countdown"  # countdown | text
     tray_text: str = "专注中"
+    # Windows 专属：托盘图标饼图内叠加剩余分钟数字（小图标可读性因 DPI 而异，默认关）
+    tray_icon_countdown: bool = False
     # 专注-休息循环
     short_break_minutes: int = 5
     long_break_minutes: int = 15
@@ -537,6 +539,7 @@ class SettingsManager:
                 extend_minutes=p.get("extend_minutes", 10),
                 tray_display=disp,
                 tray_text=(p.get("tray_text") or "专注中").strip() or "专注中",
+                tray_icon_countdown=bool(p.get("tray_icon_countdown", False)),
                 short_break_minutes=p.get("short_break_minutes", 5),
                 long_break_minutes=p.get("long_break_minutes", 15),
                 long_break_every=p.get("long_break_every", 4),

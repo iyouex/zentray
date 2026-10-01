@@ -97,6 +97,33 @@ def try_vue_quick_add(controller: "TrayController") -> bool:
     return True
 
 
+def try_vue_glance(controller: "TrayController", anchor=None) -> bool:
+    """任务速览面板（Windows 左键托盘）：锚定托盘上方、不夺焦点。
+
+    面板内快捷动作（快速添加/打开列表）由前端直调 API；关闭后刷新托盘呈现。
+    """
+    if not use_vue_ui():
+        return False
+    ok, payload = open_vue_route(
+        "/glance",
+        title="ZenTray 速览",
+        width=360,
+        height=470,
+        frameless=True,
+        anchor=anchor,
+        no_activate=True,
+    )
+    if ok and isinstance(payload, dict):
+        action = payload.get("action")
+        if action == "quick_add":
+            try_vue_quick_add(controller)
+        elif action == "open_tasks":
+            try_vue_task_list(controller)
+    if ok:
+        controller.update_display()
+    return True
+
+
 def try_vue_plugin_panel(controller: "TrayController") -> bool:
     """插件面板（GNOME 托盘无右弹子菜单，列表/运行/启停统一在 Vue 面板）。"""
     if not use_vue_ui():
