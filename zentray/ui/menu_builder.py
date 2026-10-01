@@ -109,11 +109,23 @@ class MenuBuilder:
                 )
             else:
                 label = f"🍅 专注 {pomodoro_minutes} 分钟"
+            # 「--」/换行 = 菜单内分行：首行专注按钮，其余为信息行
+            lines = [
+                ln.strip()
+                for ln in label.replace("\n", " -- ").split(" -- ")
+                if ln.strip()
+            ] or [label]
             items.append({
                 "id": "pomodoro",
-                "label": label,
+                "label": lines[0],
                 "enabled": not ops_busy,
             })
+            for i, ln in enumerate(lines[1:], start=2):
+                items.append({
+                    "id": f"pomodoro_info{i}",
+                    "label": ln,
+                    "enabled": False,
+                })
 
         if is_pomodoro and pomodoro_today is not None:
             count, minutes = pomodoro_today

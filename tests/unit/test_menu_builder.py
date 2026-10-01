@@ -169,8 +169,10 @@ def test_today_stats_merged_into_start_button():
         pomodoro_label_format="🍅 专注{focus}mins -- 今日{today}mins",
     )
     by_id = {it["id"]: it for it in items if isinstance(it, dict)}
-    assert by_id["pomodoro"]["label"] == "🍅 专注25mins -- 今日75mins"
+    assert by_id["pomodoro"]["label"] == "🍅 专注25mins"
     assert by_id["pomodoro"]["enabled"] is True
+    assert by_id["pomodoro_info2"]["label"] == "今日75mins"
+    assert by_id["pomodoro_info2"]["enabled"] is False
     assert "pomodoro_stats" not in by_id
 
 
@@ -191,7 +193,8 @@ def test_merged_label_format_placeholders_and_fallback():
         pomodoro_label_format="{oops",
     )
     by_id2 = {it["id"]: it for it in items2 if isinstance(it, dict)}
-    assert by_id2["pomodoro"]["label"] == "🍅 专注 25分钟 -- 今日 25分钟"
+    assert by_id2["pomodoro"]["label"] == "🍅 专注 25分钟"
+    assert by_id2["pomodoro_info2"]["label"] == "今日 25分钟"
     # 不传格式且不传统计（None）：保持旧版纯专注按钮
     items3 = mb.build_main_menu(is_pomodoro=False)
     by_id3 = {it["id"]: it for it in items3 if isinstance(it, dict)}
