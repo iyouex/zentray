@@ -80,8 +80,9 @@
           <a-checkbox-group v-model="model.notify_channels" :disabled="!model.enabled" @change="onChannelsChange">
             <a-checkbox value="app_popup">应用弹窗</a-checkbox>
             <a-checkbox value="wxpusher">WxPusher</a-checkbox>
+            <a-checkbox value="feishu_bot">飞书机器人</a-checkbox>
           </a-checkbox-group>
-          <div class="muted tiny">可多选，至少保留一项；WxPusher 需在 设置 → 🔔 通知 中启用才实际推送</div>
+          <div class="muted tiny">可多选，至少保留一项；WxPusher / 飞书机器人需在 设置 → 🔔 通知 中启用才实际推送</div>
         </a-form-item>
 
         <a-form-item label="报告托盘轮播">
@@ -263,7 +264,7 @@ watch(
   (v) => {
     if (v && !Array.isArray(v.styles)) v.styles = []
     // 空 = 跟随全局（后端语义）；界面上物化为全选，避免看着像「不通知」
-    if (v && !Array.isArray(v.notify_channels)) v.notify_channels = ['app_popup', 'wxpusher']
+    if (v && !Array.isArray(v.notify_channels)) v.notify_channels = ['app_popup', 'wxpusher', 'feishu_bot']
     syncTextFromModel()
   },
   { immediate: true, deep: true },
