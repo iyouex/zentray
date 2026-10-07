@@ -175,6 +175,12 @@ export async function setAutostart(enabled) {
   return data
 }
 
+/** Windows：打开系统任务栏设置页（合并模式引导） */
+export async function openTaskbarSettings() {
+  const { data } = await http.post('/api/system/open-taskbar-settings', {})
+  return data
+}
+
 /** 导出备份 zip；opts.password AES-256 加密、opts.destPath 另存为绝对路径 */
 export async function exportBackup(include, { password, destPath } = {}) {
   const body = { include }

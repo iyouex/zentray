@@ -155,13 +155,17 @@ class QuickAddSettings:
 class AppearanceSettings:
     """系统/外观。theme: light | dark | system；autostart 为开机自启偏好；
     motion: full|off 界面动效开关；shape: round|crisp 形状风格；
-    skin: neo|aurora|synth|clay 界面皮肤。"""
+    skin: neo|aurora|synth|clay 界面皮肤。
+    Windows 任务栏中央按钮（设计 §3.0）：center 开关 / 标签长度 8-32 / 跑马灯。"""
 
     theme: str = "system"
     autostart: bool = False
     motion: str = "full"
     shape: str = "round"
     skin: str = "neo"
+    taskbar_center_enabled: bool = True
+    taskbar_label_length: int = 20
+    taskbar_label_marquee: bool = False
 
 
 @dataclass
@@ -604,12 +608,20 @@ class SettingsManager:
             skin = str(a.get("skin") or "neo").lower()
             if skin not in ("neo", "aurora", "synth", "clay"):
                 skin = "neo"
+            try:
+                label_len = int(a.get("taskbar_label_length", 20) or 20)
+            except (TypeError, ValueError):
+                label_len = 20
+            label_len = max(8, min(32, label_len))
             self._settings.appearance = AppearanceSettings(
                 theme=theme,
                 autostart=autostart,
                 motion=motion,
                 shape=shape,
                 skin=skin,
+                taskbar_center_enabled=bool(a.get("taskbar_center_enabled", True)),
+                taskbar_label_length=label_len,
+                taskbar_label_marquee=bool(a.get("taskbar_label_marquee", False)),
             )
         if "backup" in data:
             b = data["backup"] or {}

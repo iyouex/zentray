@@ -1,19 +1,20 @@
 # zentray/ui/win_tray.py
 """
-Windows 通知区托盘后端。
+Windows 托盘后端（docs/design/windows-interaction-design.md §3，2026-10-07 重设计）。
 
-Windows 通知区无文字槽位（docs/design/windows-interaction-design.md §3）：
-- 呈现迁移为「QPainter 动态图标 + tooltip 全量状态 + 左键速览面板」三层
-- 左键/双击 = 任务速览面板（glance_requested → controller）；右键 = 菜单
+- 主显示：任务栏中央应用按钮 = QPainter 动态图标 + 完整文字标签（§3.0，
+  WindowsTaskbarCenterTray）；左键=速览面板、悬停=tooltip
+- 辅助：通知区图标（WindowsTray）——右键菜单 / toast / 合并模式兜底
 - 图标运行时绘制（饼图/番茄/茶绿/转圈/徽标/倒计时叠加），替代预烘焙 PNG
 """
 from __future__ import annotations
 
 import re
+import sys
 
-from PySide6.QtCore import QPoint, QRect, Qt, Signal
+from PySide6.QtCore import QEvent, QPoint, QRect, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QCursor, QIcon, QPainter, QPen, QPixmap
-from PySide6.QtWidgets import QSystemTrayIcon
+from PySide6.QtWidgets import QWidget, QSystemTrayIcon
 
 from zentray.ui.tray import QtStandardTray
 
@@ -185,6 +186,7 @@ class WindowsTray(QtStandardTray):
             pass
         spec = icon_paint_spec(name, text, countdown_on=countdown)
         pm = paint_tray_pixmap(spec, self._app_icon_path)
+        self._last_pixmap = None  # 中央按钮复用同一 pixmap
         if pm is None or pm.isNull():
             # 绘制失败回退预烘焙 PNG（父类逻辑）
             path = self._icon_dir / f"{name}.png"
@@ -196,4 +198,159 @@ class WindowsTray(QtStandardTray):
                 self.tray.setIcon(QIcon(str(path)))
         else:
             self.tray.setIcon(QIcon(pm))
+            self._last_pixmap = pm
         self._last_icon = name
+
+
+# ============================================================
+# 任务栏中央按钮（设计 §3.0，2026-10-07 重设计）
+# 机制回收自搁置分支 feature/win-tray-title：1×1 离屏无边框窗口
+# 造任务栏应用按钮，setWindowTitle=轮播文字、setWindowIcon=动态图标。
+# ============================================================
+
+def taskbar_label(text: str, max_chars: int, offset: int = 0) -> str:
+    """中央按钮标签（纯函数）：超长截断…；offset>0 为跑马灯滚动位。"""
+    t = (text or "").strip() or "ZenTray"
+    n = max(8, min(32, int(max_chars or 20)))
+    if len(t) <= n:
+        return t
+    if offset <= 0:
+        return t[: n - 1] + "…"
+    padded = t + "   ·   "
+    off = offset % len(padded)
+    return (padded[off:] + padded[:off])[:n]
+
+
+def taskbar_label_visible() -> bool | None:
+    """任务栏是否「从不合并」（文字标签可见）。True/False；探测不到（非
+    Windows / 键缺失）返回 None，前端隐藏提示行。"""
+    if not sys.platform.startswith("win32"):
+        return None
+    try:
+        import winreg
+
+        key = (
+            r"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+        )
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key) as k:
+            val, _ = winreg.QueryValueEx(k, "TaskbarGlomLevel")
+            return int(val) == 2  # 0=始终合并 1=占满时 2=从不
+    except Exception:
+        return None
+
+
+class _TaskbarCenterWindow(QWidget):
+    """1×1 离屏窗口：系统为它在任务栏生成应用按钮。
+
+    左键按钮 = 窗口被激活 → 拦截 ActivationChange 弹速览面板（锚定光标，
+    即按钮位置），随后 hide/show 复位释放前台焦点（窗口永不现身）。
+    """
+
+    glance_requested = Signal(QPoint)
+
+    def __init__(self):
+        super().__init__()
+        self._resetting = False
+        self.setWindowFlags(
+            Qt.WindowType.Window
+            | Qt.WindowType.FramelessWindowHint
+            | Qt.WindowType.WindowMinimizeButtonHint  # 保任务栏分组正确
+        )
+        self.setWindowTitle("ZenTray")
+        self.resize(1, 1)
+        self.move(-10000, -10000)
+        self.show()
+
+    def changeEvent(self, ev):
+        if (
+            ev.type() == QEvent.Type.ActivationChange
+            and self.isActiveWindow()
+            and not self._resetting
+        ):
+            self._resetting = True
+            pos = QCursor.pos()
+            QTimer.singleShot(0, lambda: self.glance_requested.emit(QPoint(pos.x(), pos.y())))
+            # 延迟 hide/show：不在事件处理中重入；复位后交还前台焦点
+            def _reset():
+                self.hide()
+                self.show()
+                self._resetting = False
+
+            QTimer.singleShot(0, _reset)
+        super().changeEvent(ev)
+
+
+class WindowsTaskbarCenterTray(WindowsTray):
+    """§3.0 主显示：任务栏中央按钮（动态图标+文字标签）。
+
+    继承 WindowsTray——通知区图标降为辅助（菜单锚点/toast/合并模式兜底），
+    图标绘制、tooltip、右键菜单、通知区左键速览全部沿用。
+    """
+
+    def __init__(self, app):
+        super().__init__(app)
+        self.taskbar_window: _TaskbarCenterWindow | None = None
+        self._tb_text = "ZenTray"
+        self._marquee_offset = 0
+        self._marquee_timer = QTimer(self)
+        self._marquee_timer.setInterval(400)  # 旧分支已验证节奏
+        self._marquee_timer.timeout.connect(self._on_marquee_tick)
+
+    # —— 设置实时读取（保存设置无需重启）——
+    @staticmethod
+    def _tb_settings() -> tuple[bool, int, bool]:
+        try:
+            from zentray.services.settings_manager import SettingsManager
+
+            ap = SettingsManager().appearance
+            return (
+                bool(ap.taskbar_center_enabled),
+                int(ap.taskbar_label_length),
+                bool(ap.taskbar_label_marquee),
+            )
+        except Exception:
+            return True, 20, False
+
+    def set_state(self, icon: str, text: str):
+        super().set_state(icon, text)
+        enabled, length, marquee = self._tb_settings()
+        if not enabled:
+            self._close_taskbar_window()
+            return
+        if self.taskbar_window is None:
+            self.taskbar_window = _TaskbarCenterWindow()
+            self.taskbar_window.glance_requested.connect(self.glance_requested)
+        win = self.taskbar_window
+        if self._last_pixmap is not None:
+            win.setWindowIcon(QIcon(self._last_pixmap))
+        self._tb_text = (text or "").strip() or "ZenTray"
+        self._marquee_offset = 0
+        self._sync_taskbar_title(length, marquee)
+        if marquee and len(self._tb_text) > length:
+            if not self._marquee_timer.isActive():
+                self._marquee_timer.start()
+        elif self._marquee_timer.isActive():
+            self._marquee_timer.stop()
+
+    def _on_marquee_tick(self):
+        _, length, _ = self._tb_settings()
+        self._marquee_offset += 1
+        win.setWindowTitle(taskbar_label(self._tb_text, length, self._marquee_offset))
+
+    def _sync_taskbar_title(self, length: int, marquee: bool) -> None:
+        if self.taskbar_window is None:
+            return
+        self.taskbar_window.setWindowTitle(
+            taskbar_label(self._tb_text, length, 0 if not marquee else self._marquee_offset)
+        )
+
+    def _close_taskbar_window(self) -> None:
+        if self._marquee_timer.isActive():
+            self._marquee_timer.stop()
+        if self.taskbar_window is not None:
+            self.taskbar_window.close()
+            self.taskbar_window = None
+
+    def shutdown(self):
+        self._close_taskbar_window()
+        super().shutdown()
