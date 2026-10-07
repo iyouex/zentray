@@ -153,7 +153,7 @@ class QuickAddSettings:
 class AppearanceSettings:
     """系统/外观。theme: light | dark | system；autostart 为开机自启偏好；
     motion: full|off 界面动效开关；shape: round|crisp 形状风格；
-    skin: neo|aurora 界面皮肤。"""
+    skin: neo|aurora|synth|clay 界面皮肤。"""
 
     theme: str = "system"
     autostart: bool = False
@@ -599,7 +599,7 @@ class SettingsManager:
             if shape not in ("round", "crisp"):
                 shape = "round"
             skin = str(a.get("skin") or "neo").lower()
-            if skin not in ("neo", "aurora"):
+            if skin not in ("neo", "aurora", "synth", "clay"):
                 skin = "neo"
             self._settings.appearance = AppearanceSettings(
                 theme=theme,

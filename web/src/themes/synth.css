@@ -1,0 +1,246 @@
+/* =====================================================================
+   Synth 霓虹皮肤层（feature/ui-skins-synth-clay）
+   参照：Catppuccin / Tokyo Night 夜色板 + uiverse.io 霓虹卡。
+   仅在 body.zt-skin-synth 时生效：深靛夜底 + 青/品红/紫霓虹强调，
+   辉光只出现在交互态（hover/active/focus），静态元素保持低亮度。
+   消费基线令牌体系；令牌按「皮肤×主题」组合覆盖（特异性 0-2-1）。
+   ===================================================================== */
+
+/* ---- 令牌层 ---- */
+body.zt-skin-synth,
+body.zt-skin-synth.theme-slate-dark,
+body.zt-skin-synth.theme-dark {
+  --color-bg-base: #12101c;
+  --color-surface: #1b1830;
+  --color-surface-hover: rgba(255, 255, 255, 0.06);
+  --color-border: #2e2a4a;
+  --color-primary: #22d3ee;
+  --color-primary-hover: #67e8f9;
+  --color-primary-glow: rgba(34, 211, 238, 0.35);
+  --color-text-primary: #eef0ff;
+  --color-text-muted: #9d9ec2;
+  --color-text-subdued: #6f6d94;
+  /* 圆角介于 neo 与 aurora 之间 */
+  --zt-radius-win: 18px;
+  --zt-radius-card: 14px;
+  --zt-radius-md: 10px;
+  --zt-ease-out: cubic-bezier(0.3, 1.2, 0.3, 1);
+  --zt-dur-fast: 160ms;
+  /* 霓虹三色 */
+  --zt-neon-pink: #f472d6;
+  --zt-neon-violet: #a78bfa;
+  background: radial-gradient(
+      60% 50% at 80% -10%,
+      rgba(167, 139, 250, 0.07),
+      transparent 70%
+    ),
+    var(--color-bg-base);
+  color: var(--color-text-primary);
+}
+
+body.zt-skin-synth.theme-oled-dark {
+  --color-bg-base: #08070d;
+  --color-surface: #100e1a;
+  --color-border: #242040;
+  background: var(--color-bg-base);
+}
+
+/* 浅色「晨雾霓虹」：淡丁香底 + 加深可读的霓虹色（发光让位于可读性） */
+body.zt-skin-synth.theme-light {
+  --color-bg-base: #f1eefb;
+  --color-surface: #ffffff;
+  --color-surface-hover: rgba(33, 31, 54, 0.04);
+  --color-border: #dcd7f0;
+  --color-primary: #0e7490;
+  --color-primary-hover: #155e75;
+  --color-primary-glow: rgba(14, 116, 144, 0.3);
+  --color-text-primary: #211f36;
+  --color-text-muted: #5a5470;
+  --color-text-subdued: #8b86a3;
+  --zt-neon-pink: #c026d3;
+  --zt-neon-violet: #7c3aed;
+  background: var(--color-bg-base);
+  color: var(--color-text-primary);
+}
+
+body.zt-skin-synth.zt-shape-crisp {
+  --zt-radius-win: 12px;
+  --zt-radius-card: 8px;
+  --zt-radius-md: 6px;
+}
+
+/* Arco 主色重映射：暗色 = 霓虹青（rgb 三元组） */
+body.zt-skin-synth[arco-theme='dark'] {
+  --primary-4: 34 190 210;
+  --primary-5: 34 211 238;
+  --primary-6: 103 232 249;
+  --primary-7: 165 240 252;
+}
+/* 浅色 = cyan-700 可读深青 */
+body.zt-skin-synth.theme-light {
+  --primary-4: 8 125 148;
+  --primary-5: 14 116 144;
+  --primary-6: 21 94 117;
+  --primary-7: 15 77 96;
+}
+
+/* ---- 结构层 ---- */
+
+/* 页头：霓虹渐变下划线（青→品红→透明） */
+body.zt-skin-synth .page-header::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -6px;
+  height: 2px;
+  width: 46%;
+  border-radius: 999px;
+  pointer-events: none;
+  opacity: 0.7;
+  background: linear-gradient(90deg, var(--color-primary), var(--zt-neon-pink) 60%, transparent);
+  box-shadow: 0 0 8px var(--color-primary-glow);
+}
+body.zt-skin-synth .page-header {
+  position: relative;
+}
+
+/* 任务卡：hover 边框亮起 + 微辉光（基线呼吸条不变） */
+body.zt-skin-synth .task-card-item {
+  transition: transform var(--zt-dur-fast) var(--zt-ease-out),
+    box-shadow var(--zt-dur-fast) var(--zt-ease-out),
+    border-color var(--zt-dur-fast) var(--zt-ease-out), background 0.2s ease;
+}
+body.zt-skin-synth .task-card-item:hover {
+  border-color: color-mix(in srgb, var(--color-primary) 55%, var(--color-border));
+  box-shadow: 0 0 18px var(--color-primary-glow);
+}
+
+/* 选中任务卡：静态青→品红双色描边环 + 外辉光（与 aurora 的流转环区分：
+   霓虹灯常亮而非旋转，静态可访问性更好） */
+body.zt-skin-synth .task-card-item.active {
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 8%, var(--color-surface));
+  box-shadow: 0 0 20px var(--color-primary-glow);
+}
+body.zt-skin-synth .task-card-item.active::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1.5px;
+  pointer-events: none;
+  background: linear-gradient(
+    120deg,
+    var(--color-primary),
+    var(--zt-neon-violet) 50%,
+    var(--zt-neon-pink)
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+}
+
+/* 主按钮：青→紫渐变实底 + 辉光投影；hover 亮度提档辉光扩散；按下辉光收拢 */
+body.zt-skin-synth .arco-btn-primary:not([class*='arco-btn-status']):not(.arco-btn-danger) {
+  background: linear-gradient(135deg, var(--color-primary), var(--zt-neon-violet));
+  border: none;
+  color: #ffffff;
+  box-shadow: 0 4px 18px var(--color-primary-glow);
+  transition: all 0.1s cubic-bezier(0, 0, 1, 1),
+    box-shadow var(--zt-dur-fast) var(--zt-ease-out),
+    filter var(--zt-dur-fast) var(--zt-ease-out);
+}
+body.zt-skin-synth .arco-btn-primary:not([class*='arco-btn-status']):not(.arco-btn-danger):hover {
+  filter: brightness(1.12);
+  box-shadow: 0 6px 26px var(--color-primary-glow),
+    0 0 22px color-mix(in srgb, var(--zt-neon-pink) 25%, transparent);
+}
+body.zt-skin-synth .arco-btn-primary:not([class*='arco-btn-status']):not(.arco-btn-danger):active {
+  box-shadow: 0 0 10px var(--color-primary-glow);
+}
+
+/* 次按钮：青描边幽灵态 */
+body.zt-skin-synth .arco-btn:not(.arco-btn-primary):not(.arco-btn-text):not(
+    .arco-btn-status-danger
+  ):not(.arco-btn-status-warning):not(.arco-btn-status-success):not(
+    .arco-btn-disabled
+  ):not(.arco-btn-loading):hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+}
+
+/* 输入聚焦：双色霓虹（青光环 + 品红外晕） */
+body.zt-skin-synth .arco-input-wrapper:focus-within,
+body.zt-skin-synth .arco-textarea-wrapper:focus-within {
+  box-shadow: 0 0 0 1.5px var(--color-primary-glow),
+    0 0 16px color-mix(in srgb, var(--zt-neon-pink) 20%, transparent);
+}
+
+/* 快速添加胶囊：聚焦双色辉光贯通整圈 */
+body.zt-skin-synth .quick-add-box:focus-within {
+  border-color: var(--color-primary);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45),
+    0 0 0 1.5px var(--color-primary-glow),
+    0 0 26px color-mix(in srgb, var(--zt-neon-pink) 22%, transparent);
+}
+body.zt-skin-synth.theme-light .quick-add-box:focus-within {
+  box-shadow: 0 16px 48px rgba(33, 31, 54, 0.18),
+    0 0 0 1.5px var(--color-primary-glow),
+    0 0 26px color-mix(in srgb, var(--zt-neon-pink) 20%, transparent);
+}
+
+/* 图片识别拖放区：hover 霓虹描边 */
+body.zt-skin-synth .ocr-drop:hover,
+body.zt-skin-synth .ocr-drop.is-drag {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 1.5px var(--color-primary-glow),
+    0 0 16px color-mix(in srgb, var(--zt-neon-pink) 18%, transparent);
+}
+
+/* 滚动条：青→品红渐变 thumb */
+body.zt-skin-synth ::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--color-primary), var(--zt-neon-pink));
+  border-radius: 999px;
+}
+
+/* 弹窗：顶部霓虹饰条 + 夜色卡面 */
+body.zt-skin-synth .arco-modal {
+  position: relative;
+  border: 1px solid var(--color-border);
+  box-shadow: 0 0 30px color-mix(in srgb, var(--color-primary-glow) 60%, transparent),
+    0 12px 40px rgba(0, 0, 0, 0.5);
+}
+body.zt-skin-synth .arco-modal::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  border-radius: var(--zt-radius-win) var(--zt-radius-win) 0 0;
+  background: linear-gradient(90deg, var(--color-primary), var(--zt-neon-pink));
+  box-shadow: 0 0 10px var(--color-primary-glow);
+  pointer-events: none;
+}
+
+/* 下拉面板：夜色 + 边框微亮 */
+body.zt-skin-synth .arco-dropdown {
+  border: 1px solid color-mix(in srgb, var(--color-primary) 22%, var(--color-border));
+}
+
+/* 青底上的选中字形改夜墨（暗色 checkbox / radio-button 组） */
+body.zt-skin-synth[arco-theme='dark'] .arco-radio-button.arco-radio-checked {
+  background-color: var(--color-primary);
+  color: #06121a;
+  border-color: var(--color-primary);
+}
+
+/* 辉光全是装饰：motion-off 全局 kill 已覆盖 transition/animation；
+   reduce 下补显式去辉光脉冲来源（box-shadow 过渡时长收敛） */
+@media (prefers-reduced-motion: reduce) {
+  body.zt-skin-synth .arco-btn-primary:not([class*='arco-btn-status']):not(.arco-btn-danger) {
+    transition-duration: 140ms !important;
+  }
+}

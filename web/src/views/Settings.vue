@@ -820,6 +820,8 @@
                     <a-radio-group v-model="form.appearance.skin" @change="onAppearancePreview">
                       <a-radio value="neo">Neo</a-radio>
                       <a-radio value="aurora">Aurora</a-radio>
+                      <a-radio value="synth">霓虹 Synth</a-radio>
+                      <a-radio value="clay">黏土 Clay</a-radio>
                     </a-radio-group>
                   </a-form-item>
                   <a-form-item label="界面动效">
@@ -2189,7 +2191,7 @@ function normalizeLoaded(s) {
   if (form.appearance.autostart == null) form.appearance.autostart = false
   if (form.appearance.motion == null) form.appearance.motion = 'full'
   if (form.appearance.shape == null) form.appearance.shape = 'round'
-  if (form.appearance.skin !== 'neo' && form.appearance.skin !== 'aurora') form.appearance.skin = 'neo'
+  if (!['neo', 'aurora', 'synth', 'clay'].includes(form.appearance.skin)) form.appearance.skin = 'neo'
   if (!form.categories) form.categories = emptyForm().categories
   if (!Array.isArray(form.categories.primary_list)) form.categories.primary_list = []
   // 括号强制成对
@@ -2357,6 +2359,36 @@ body.zt-skin-neo .nav-main {
   border: none;
   box-shadow: var(--zt-shadow-card);
   background: var(--color-surface);
+}
+/* Synth：选中项霓虹渐变竖条 + 提亮 */
+body.zt-skin-synth .nav-main :deep(.arco-menu-item.arco-menu-selected) {
+  position: relative;
+  font-weight: 600;
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+}
+body.zt-skin-synth .nav-main :deep(.arco-menu-item.arco-menu-selected)::before {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 22%;
+  bottom: 22%;
+  width: 3px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--color-primary), var(--zt-neon-pink));
+  box-shadow: 0 0 8px var(--color-primary-glow);
+}
+/* Clay：导航项 tonal 胶囊（M3 navigation 样式） */
+body.zt-skin-clay .nav-main {
+  border: 1px solid var(--color-border);
+  box-shadow: var(--zt-shadow-card);
+}
+body.zt-skin-clay .nav-main :deep(.arco-menu-item) {
+  border-radius: 999px;
+}
+body.zt-skin-clay .nav-main :deep(.arco-menu-item.arco-menu-selected) {
+  background: color-mix(in srgb, var(--color-primary) 18%, var(--color-surface));
+  color: var(--color-primary);
+  font-weight: 700;
 }
 .settings-body {
   min-width: 0;

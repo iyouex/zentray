@@ -4,8 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ZenTray</title>
-    <script type="module" crossorigin src="./assets/index-CKjkzHdI.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-BSeX4j-9.css">
+    <script type="module" crossorigin src="./assets/index-CPDZAyMF.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-SgrrrHot.css">
   </head>
   <body>
     <script>
@@ -31,7 +31,7 @@
           }
           if (b.motion === 'off') c.add('zt-motion-off')
           if (b.shape === 'crisp') c.add('zt-shape-crisp')
-          c.add(b.skin === 'aurora' ? 'zt-skin-aurora' : 'zt-skin-neo')
+          c.add('zt-skin-' + (['aurora', 'synth', 'clay'].indexOf(b.skin) >= 0 ? b.skin : 'neo'))
         } catch (e) {}
       })()
     </script>

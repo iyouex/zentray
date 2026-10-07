@@ -7,6 +7,8 @@ import { vStagger } from './directives/stagger'
 import './styles.css'
 import './themes/neo.css'
 import './themes/aurora.css'
+import './themes/synth.css'
+import './themes/clay.css'
 
 const app = createApp(App)
 app.use(ArcoVue)

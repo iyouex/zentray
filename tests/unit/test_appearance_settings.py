@@ -40,6 +40,15 @@ def test_appearance_roundtrip(tmp_data_dir):
     assert sm2.appearance.shape == "crisp"
     assert sm2.appearance.skin == "aurora"
 
+def test_appearance_new_skins_roundtrip(tmp_data_dir):
+    """synth/clay 新皮肤：合法入名单，持久化往返不丢。"""
+    for skin in ("synth", "clay"):
+        sm = SettingsManager.reload()
+        sm.appearance.skin = skin
+        sm.save()
+        sm2 = SettingsManager.reload()
+        assert sm2.appearance.skin == skin
+
 
 def test_appearance_theme_int_dirty_value(tmp_data_dir):
     sf = sm_mod.SETTINGS_FILE

@@ -1,0 +1,250 @@
+/* =====================================================================
+   Clay 黵土皮肤层（feature/ui-skins-synth-clay）
+   参照：claymorphism（uiverse.io 社区）× Material 3 Expressive。
+   仅在 body.zt-skin-clay 时生效：大圆角实心软表面 + 对夹膨膨阴影
+   （受光面高光 / 背光面投影）+ 果冻按压回弹。与 aurora 的区别：
+   实心不透明，体积感全靠双向阴影，不靠模糊。
+   ===================================================================== */
+
+/* ---- 令牌层 ---- */
+body.zt-skin-clay,
+body.zt-skin-clay.theme-slate-dark,
+body.zt-skin-clay.theme-dark {
+  /* 可可软糖 */
+  --color-bg-base: #211d28;
+  --color-surface: #2c2735;
+  --color-surface-hover: rgba(255, 255, 255, 0.06);
+  --color-border: #3d3748;
+  --color-primary: #ff8a73;
+  --color-primary-hover: #ffa48e;
+  --color-primary-glow: rgba(255, 138, 115, 0.3);
+  --color-text-primary: #f5efe9;
+  --color-text-muted: #b3a8ba;
+  --color-text-subdued: #857a90;
+  /* 大圆角 */
+  --zt-radius-win: 28px;
+  --zt-radius-card: 24px;
+  --zt-radius-md: 16px;
+  --zt-shadow-card: 10px 10px 24px rgba(0, 0, 0, 0.5),
+    -4px -4px 14px rgba(255, 255, 255, 0.035);
+  --zt-shadow-card-hover: 14px 16px 32px rgba(0, 0, 0, 0.55),
+    -6px -6px 18px rgba(255, 255, 255, 0.045);
+  /* 果冻弹簧（回弹比基线更弹） */
+  --zt-ease-spring: cubic-bezier(0.34, 1.8, 0.5, 1);
+  /* 黵土糖果色 */
+  --zt-clay-mint: #8fd8b5;
+  --zt-clay-sun: #ffd479;
+  /* Arco 大圆角 */
+  --border-radius-small: 12px;
+  --border-radius-medium: 16px;
+  --border-radius-large: 20px;
+  background: var(--color-bg-base);
+  color: var(--color-text-primary);
+}
+
+body.zt-skin-clay.theme-oled-dark {
+  --color-bg-base: #131018;
+  --color-surface: #1d1926;
+  --color-border: #2e2938;
+}
+
+/* 浅色「奶油拿铁」：奶油底 + 赤陶主色 + 暖光/暖影对夹阴影 */
+body.zt-skin-clay.theme-light {
+  --color-bg-base: #f7f1e8;
+  --color-surface: #fffdf8;
+  --color-surface-hover: rgba(51, 41, 31, 0.05);
+  --color-border: #e7dccd;
+  --color-primary: #c2532f;
+  --color-primary-hover: #a84526;
+  --color-primary-glow: rgba(194, 83, 47, 0.28);
+  --color-text-primary: #33291f;
+  --color-text-muted: #6d5f50;
+  --color-text-subdued: #98897a;
+  --zt-shadow-card: 8px 8px 20px rgba(59, 42, 30, 0.16),
+    -6px -6px 16px rgba(255, 255, 255, 0.9);
+  --zt-shadow-card-hover: 12px 14px 30px rgba(59, 42, 30, 0.2),
+    -8px -8px 20px rgba(255, 255, 255, 0.95);
+  /* 文字级强调换可读深色 */
+  --zt-pri-high: #d92d20;
+  --zt-pri-mid: #a16207;
+  --zt-pri-low: #6d5f50;
+  --zt-due-late: #d92d20;
+  --zt-due-soon: #a16207;
+}
+
+body.zt-skin-clay.zt-shape-crisp {
+  --zt-radius-win: 18px;
+  --zt-radius-card: 14px;
+  --zt-radius-md: 10px;
+  --border-radius-small: 8px;
+  --border-radius-medium: 10px;
+  --border-radius-large: 12px;
+}
+
+/* 卡面通用：顶高光内描边（软糖受光面） */
+body.zt-skin-clay .arco-card,
+body.zt-skin-clay .task-card-item,
+body.zt-skin-clay .quick-add-box {
+  box-shadow: var(--zt-shadow-card),
+    inset 0 2px 0 rgba(255, 255, 255, 0.06);
+}
+body.zt-skin-clay.theme-light .arco-card,
+body.zt-skin-clay.theme-light .task-card-item,
+body.zt-skin-clay.theme-light .quick-add-box {
+  box-shadow: var(--zt-shadow-card),
+    inset 0 2px 0 rgba(255, 255, 255, 0.65);
+}
+
+/* Arco 主色重映射：暗色 = 珊瑚桃；浅色 = 赤陶（rgb 三元组） */
+body.zt-skin-clay[arco-theme='dark'] {
+  --primary-4: 235 126 101;
+  --primary-5: 255 138 115;
+  --primary-6: 255 164 142;
+  --primary-7: 255 183 166;
+}
+body.zt-skin-clay.theme-light {
+  --primary-4: 198 92 59;
+  --primary-5: 194 83 47;
+  --primary-6: 168 69 38;
+  --primary-7: 143 58 32;
+}
+
+/* ---- 结构层 ---- */
+
+/* 任务卡：hover 上浮 + 膨影外扩（基线上浮 3px 保留） */
+body.zt-skin-clay .task-card-item {
+  border: 1px solid var(--color-border);
+  transition: transform var(--zt-dur-fast) var(--zt-ease-spring),
+    box-shadow var(--zt-dur-fast) var(--zt-ease-spring), background 0.2s ease;
+}
+/* 分类色条：全高圆头胖条（贴左 6px，卡内左距 18px 容得下） */
+body.zt-skin-clay .task-card-item::before {
+  left: 6px;
+  top: 8px;
+  bottom: 8px;
+  width: 4px;
+  background: var(--cat-color, var(--color-primary));
+}
+body.zt-skin-clay .task-card-item:hover::before {
+  top: 6px;
+  bottom: 6px;
+}
+/* 选中 = tonal 底 + 桃描边（M3 tonal 选中语言） */
+body.zt-skin-clay .task-card-item.active {
+  border-color: color-mix(in srgb, var(--color-primary) 45%, var(--color-border));
+  background: color-mix(in srgb, var(--color-primary) 14%, var(--color-surface));
+}
+
+/* 按钮：squish 果冻（hover 放大、按下压扁；text 型除外） */
+body.zt-skin-clay .arco-btn:not(.arco-btn-text):not(.arco-btn-disabled):hover {
+  transform: scale(1.04);
+}
+body.zt-skin-clay .arco-btn:not(.arco-btn-text):not(.arco-btn-disabled):active {
+  transform: scale(0.95);
+}
+body.zt-skin-clay .arco-btn:not(.arco-btn-text) {
+  box-shadow: 5px 5px 14px rgba(0, 0, 0, 0.16),
+    inset 0 2px 0 rgba(255, 255, 255, 0.06);
+  transition: all 0.1s cubic-bezier(0, 0, 1, 1),
+    transform var(--zt-dur-fast) var(--zt-ease-spring),
+    box-shadow var(--zt-dur-fast) var(--zt-ease-spring);
+}
+body.zt-skin-clay.theme-light .arco-btn:not(.arco-btn-text) {
+  box-shadow: 5px 5px 14px rgba(59, 42, 30, 0.14),
+    inset 0 2px 0 rgba(255, 255, 255, 0.65);
+}
+
+/* 主按钮：珊瑚/赤陶实底白字 */
+body.zt-skin-clay .arco-btn-primary:not([class*='arco-btn-status']):not(.arco-btn-danger) {
+  border: none;
+  font-weight: 700;
+}
+
+/* 次按钮：surface 实底 + 膨影（描边弱化为底色差） */
+body.zt-skin-clay .arco-btn:not(.arco-btn-primary):not(.arco-btn-text):not(
+    .arco-btn-status-danger
+  ):not(.arco-btn-status-warning):not(.arco-btn-status-success):not(
+    .arco-btn-disabled
+  ):not(.arco-btn-loading) {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+}
+body.zt-skin-clay .arco-btn:not(.arco-btn-primary):not(.arco-btn-text):not(
+    .arco-btn-status-danger
+  ):not(.arco-btn-status-warning):not(.arco-btn-status-success):not(
+    .arco-btn-disabled
+  ):not(.arco-btn-loading):hover {
+  background: var(--color-surface);
+  filter: brightness(1.05);
+  color: var(--color-text-primary);
+}
+
+/* 输入聚焦：光环 + 膨影加深（无辉光） */
+body.zt-skin-clay .arco-input-wrapper:focus-within,
+body.zt-skin-clay .arco-textarea-wrapper:focus-within {
+  box-shadow: 0 0 0 2px var(--color-primary-glow);
+}
+
+/* 快速添加：聚焦被「捏住」（阴影内收再叠加光环） */
+body.zt-skin-clay .quick-add-box:focus-within {
+  border-color: color-mix(in srgb, var(--color-primary) 40%, var(--color-border));
+  box-shadow: 6px 6px 16px rgba(0, 0, 0, 0.35),
+    inset 0 2px 0 rgba(255, 255, 255, 0.06),
+    0 0 0 2px var(--color-primary-glow);
+}
+body.zt-skin-clay.theme-light .quick-add-box:focus-within {
+  box-shadow: 5px 5px 14px rgba(59, 42, 30, 0.14),
+    inset 0 2px 0 rgba(255, 255, 255, 0.65),
+    0 0 0 2px var(--color-primary-glow);
+}
+
+/* 图片识别拖放区：圆角虚线 + 桃描边 hover */
+body.zt-skin-clay .ocr-drop {
+  border: 2px dashed var(--color-border);
+}
+body.zt-skin-clay .ocr-drop:hover,
+body.zt-skin-clay .ocr-drop.is-drag {
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+}
+
+/* 弹窗：软糖托盘（大圆角 + 大膨影） */
+body.zt-skin-clay .arco-modal {
+  border: 1px solid var(--color-border);
+  box-shadow: var(--zt-shadow-card-hover),
+    inset 0 2px 0 rgba(255, 255, 255, 0.06);
+}
+body.zt-skin-clay.theme-light .arco-modal {
+  box-shadow: var(--zt-shadow-card-hover),
+    inset 0 2px 0 rgba(255, 255, 255, 0.65);
+}
+body.zt-skin-clay .arco-message {
+  border: 1px solid var(--color-border);
+  box-shadow: 6px 6px 16px rgba(0, 0, 0, 0.2),
+    inset 0 2px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* 桃底上的选中字形改暖墨（暗色 radio-button 组） */
+body.zt-skin-clay[arco-theme='dark'] .arco-radio-button.arco-radio-checked {
+  background-color: var(--color-primary);
+  color: #33201a;
+  border-color: var(--color-primary);
+}
+
+/* 滚动条：全圆头暖砂 */
+body.zt-skin-clay ::-webkit-scrollbar {
+  width: 10px;
+}
+body.zt-skin-clay ::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-border) 70%, var(--color-surface));
+}
+
+/* squish 是装饰动效：reduce 下退化为纯色变 */
+@media (prefers-reduced-motion: reduce) {
+  body.zt-skin-clay .arco-btn:not(.arco-btn-text):not(.arco-btn-disabled):hover,
+  body.zt-skin-clay .arco-btn:not(.arco-btn-text):not(.arco-btn-disabled):active {
+    transform: none;
+  }
+}
