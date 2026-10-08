@@ -187,19 +187,40 @@ class _MacCarbonHotkey:
         self._on_trigger = on_trigger
 
         self._lib = ctypes.CDLL(self._HITOOLBOX)
-        # 64 位下不设 restype 会把指针按 c_int 截断
-        self._lib.GetApplicationEventTarget.restype = ctypes.c_void_p
-        self._lib.InstallEventHandler.restype = ctypes.c_int
-        self._lib.RegisterEventHotKey.restype = ctypes.c_int
-        self._lib.UnregisterEventHotKey.restype = ctypes.c_int
-
-        target = self._lib.GetApplicationEventTarget()
 
         class _EventHotKeyID(ctypes.Structure):
             _fields_ = [("signature", ctypes.c_uint32), ("id", ctypes.c_uint32)]
 
         class _EventTypeSpec(ctypes.Structure):
             _fields_ = [("eventClass", ctypes.c_uint32), ("eventKind", ctypes.c_uint32)]
+
+        # restype + argtypes 都要设：无 argtypes 时 ctypes 把 Python int 按
+        # C int（32 位）传参，GetApplicationEventTarget 返回的指针被截断，
+        # InstallEventHandler 内部解引用野指针 → SIGSEGV（arm64 macOS 26 实测）
+        self._lib.GetApplicationEventTarget.restype = ctypes.c_void_p
+        self._lib.GetApplicationEventTarget.argtypes = []
+        self._lib.InstallEventHandler.restype = ctypes.c_int
+        self._lib.InstallEventHandler.argtypes = [
+            ctypes.c_void_p,                   # inTarget
+            ctypes.c_void_p,                   # inHandler (EventHandlerUPP)
+            ctypes.c_uint,                     # inNumTypes
+            ctypes.c_void_p,                   # inList (EventTypeSpec*)
+            ctypes.c_void_p,                   # inUserData
+            ctypes.POINTER(ctypes.c_void_p),   # outRef
+        ]
+        self._lib.RegisterEventHotKey.restype = ctypes.c_int
+        self._lib.RegisterEventHotKey.argtypes = [
+            ctypes.c_uint32,                   # inHotKeyCode
+            ctypes.c_uint32,                   # inHotKeyModifiers
+            _EventHotKeyID,                    # inHotKeyID（结构体传值）
+            ctypes.c_void_p,                   # inTarget
+            ctypes.c_uint32,                   # inOptions
+            ctypes.POINTER(ctypes.c_void_p),   # outRef
+        ]
+        self._lib.UnregisterEventHotKey.restype = ctypes.c_int
+        self._lib.UnregisterEventHotKey.argtypes = [ctypes.c_void_p]
+
+        target = self._lib.GetApplicationEventTarget()
 
         # signature 'znty' + id 1；kEventClassKeyboard='keyb'(0x6B657962)，HotKeyPressed=5
         self._hk_id = _EventHotKeyID(0x7A6E7479, 1)
