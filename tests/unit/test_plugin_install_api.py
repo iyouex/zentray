@@ -41,8 +41,11 @@ def test_validate_bundled_param_demo(tmp_data_dir):
 
 
 def test_reject_outside_home(tmp_path, monkeypatch):
-    # /etc 通常不在允许范围
-    path, err = _safe_plugin_path("/etc")
+    # 系统目录必然存在且不在允许范围（/etc POSIX、WINDIR Windows）
+    import os
+
+    outside = os.environ.get("WINDIR", "/etc")
+    path, err = _safe_plugin_path(outside)
     assert path is None
     assert err and "允许范围" in err
 

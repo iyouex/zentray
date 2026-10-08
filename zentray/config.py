@@ -47,7 +47,7 @@ APP_NAME = "ZenTray"
 APP_AUTHOR = "Zen-Geek"
 # 语义化版本：见 docs/VERSIONING.md
 # PATCH +0.0.1 修 bug/优化；MINOR +0.1.0 功能迭代；MAJOR +1.0.0 重构改版
-VERSION = "0.7.2"
+VERSION = "0.7.3"
 
 DATA_DIR = _user_data_dir(APP_NAME)
 _load_dotenv(DATA_DIR / ".env", override=True)
@@ -65,7 +65,10 @@ AI_API_KEY = os.getenv("AI_API_KEY")
 AI_MODEL_NAME = os.getenv("AI_MODEL_NAME", "gpt-4o")
 
 POMODORO_MINUTES = 25
-HOTKEY_QUICK_ADD = "<ctrl>+<alt>+t"
+# macOS 默认 ⌥Space（与 Spotlight ⌘Space 错开，见 docs/design/mac-interaction-design.md §1）
+HOTKEY_QUICK_ADD = (
+    "<alt>+<space>" if sys.platform == "darwin" else "<ctrl>+<alt>+t"
+)
 
 os.makedirs(ARCHIVE_DIR, exist_ok=True)
 

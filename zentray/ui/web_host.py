@@ -8,13 +8,14 @@ from __future__ import annotations
 
 import json
 import logging
+import sys
 import weakref
 from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import urlencode
 
-from PySide6.QtCore import QObject, QTimer, QUrl, Qt, Signal
-from PySide6.QtWidgets import QDialog, QVBoxLayout
+from PySide6.QtCore import QObject, QPoint, QRect, QTimer, QUrl, Qt, Signal
+from PySide6.QtWidgets import QApplication, QDialog, QVBoxLayout
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,11 @@ if _HAS_WEBENGINE:
             s = url.toString()
             if s.startswith(("zentray://start_drag", "zentray://move")):
                 logger.debug("bridge nav: %s", s[:80])
+            if sys.platform == "darwin" and s.startswith(
+                ("zentray://start_drag", "zentray://move")
+            ):
+                # mac 原生标题栏拖拽：忽略前端自研拖拽桥（设计 §12.2）
+                return False
             if s.startswith("zentray://start_drag"):
                 # PySide6 6.11 已移除 QWebEnginePage.view()；_BridgePage 以 view 为父构造
                 view = self.parent()
@@ -164,6 +170,39 @@ _ACTIVE_VUE_DIALOGS: "weakref.WeakSet[VueDialog]" = weakref.WeakSet()
 _PARKED_VUE_DIALOGS: "dict[str, VueDialog]" = {}
 
 
+def _place_anchored(dlg: QDialog, anchor: QPoint) -> None:
+    """速览面板锚定：托盘图标上方、右缘对齐留 20px；放不下改到下方。"""
+    from zentray.ui.dialog_utils import mark_dialog_moved
+
+    mark_dialog_moved(dlg)  # 阻止居中定时器把窗口拽回屏幕中心
+    w, h = dlg.width(), dlg.height()
+    app = QApplication.instance()
+    screen = (app.screenAt(anchor) if app else None) or (app.primaryScreen() if app else None)
+    geo = screen.availableGeometry() if screen else QRect(0, 0, 1920, 1040)
+    x = anchor.x() - w + 20
+    y = anchor.y() - h - 12
+    if y < geo.top():
+        y = min(anchor.y() + 12, geo.bottom() - h + 1)
+    x = max(geo.left(), min(x, geo.right() - w + 1))
+    y = max(geo.top(), min(y, geo.bottom() - h + 1))
+    dlg.move(x, y)
+
+
+def _apply_win32_noactivate(dlg: QDialog) -> None:
+    """Windows：WS_EX_TOOLWINDOW（不进任务栏/Alt-Tab）+ WS_EX_NOACTIVATE（不夺焦点）。"""
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+
+        hwnd = int(dlg.winId())
+        user32 = ctypes.windll.user32
+        style = user32.GetWindowLongPtrW(hwnd, -20) | 0x80 | 0x08000000
+        user32.SetWindowLongPtrW(hwnd, -20, style)
+    except Exception:
+        logger.debug("noactivate exstyle 设置失败", exc_info=True)
+
+
 class VueDialog(QDialog):
     """
     打开 Vue 路由页面。
@@ -184,11 +223,16 @@ class VueDialog(QDialog):
         stay_on_top: bool = False,
         transparent: bool = False,
         modal: bool = True,
+        anchor: Optional[QPoint] = None,
+        no_activate: bool = False,
     ):
         super().__init__(parent)
         self.setWindowTitle(title)
         self.result_payload: Any = None
         self._vue_transparent = transparent
+        self._vue_anchor = anchor
+        self._vue_no_activate = no_activate
+        self._noactivate_done = False
         self.setModal(modal)
 
         from zentray.ui.dialog_utils import apply_dialog_chrome, schedule_center
@@ -202,6 +246,8 @@ class VueDialog(QDialog):
         )
         if transparent:
             self.setAttribute(Qt.WA_TranslucentBackground, True)
+        if anchor is not None:
+            _place_anchored(self, anchor)
 
         if not _HAS_WEBENGINE:
             layout = QVBoxLayout(self)
@@ -270,6 +316,9 @@ class VueDialog(QDialog):
         from zentray.ui.dialog_utils import schedule_center
 
         schedule_center(self)
+        if self._vue_no_activate and not self._noactivate_done:
+            self._noactivate_done = True
+            _apply_win32_noactivate(self)
 
     def _on_bridge_result(self, payload: object) -> None:
         logger.debug("bridge result: %s", payload)
@@ -339,6 +388,8 @@ def open_vue_route(
     stay_on_top: bool = False,
     transparent: bool = False,
     modal: bool = True,
+    anchor: Optional[QPoint] = None,
+    no_activate: bool = False,
 ) -> tuple[bool, Any]:
     """模态打开 Vue 页。返回 (accepted, payload)。"""
     from zentray.ui.dialog_utils import run_modal_loop
@@ -402,6 +453,9 @@ def open_vue_route(
                 stay_on_top=stay_on_top,
                 tool=frameless,
             )
+            parked._vue_no_activate = no_activate
+            if anchor is not None:
+                _place_anchored(parked, anchor)
             _respawn_page(parked, route, query or {})
             # 重新进入模态循环：run_modal_loop 内 show() 以全新 toplevel
             # 映射；结束时 _on_dialog_finished 继续接管保活。
@@ -421,6 +475,8 @@ def open_vue_route(
         stay_on_top=stay_on_top,
         transparent=transparent,
         modal=modal,
+        anchor=anchor,
+        no_activate=no_activate,
     )
     dlg._vue_route = route
     dlg._vue_query = query or {}

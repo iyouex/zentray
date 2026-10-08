@@ -444,6 +444,11 @@
                       style="width: 168px"
                     />
                   </div>
+                  <div class="field-line">
+                    <span class="field-k">图标叠加倒计时</span>
+                    <a-switch v-model="form.pomodoro.tray_icon_countdown" size="small" />
+                    <span class="hint-sm">Windows：饼图内叠加剩余分钟数字</span>
+                  </div>
                 </div>
               </section>
 
@@ -820,6 +825,8 @@
                     <a-radio-group v-model="form.appearance.skin" @change="onAppearancePreview">
                       <a-radio value="neo">Neo</a-radio>
                       <a-radio value="aurora">Aurora</a-radio>
+                      <a-radio value="synth">霓虹 Synth</a-radio>
+                      <a-radio value="clay">黏土 Clay</a-radio>
                     </a-radio-group>
                   </a-form-item>
                   <a-form-item label="界面动效">
@@ -857,6 +864,35 @@
                     @change="onAutostartChange"
                   />
                 </div>
+              </a-card>
+
+              <!-- Windows 任务栏中央按钮（设计 §3.0）；后端探测不到时整卡隐藏 -->
+              <a-card v-if="taskbarLabelVisible !== null" class="sys-card" :bordered="false" title="任务栏显示（Windows）">
+                <div class="sys-row">
+                  <div>
+                    <div class="sys-title">任务栏中央显示</div>
+                    <div class="sys-desc">
+                      任务栏正中常驻 ZenTray 按钮：动态图标 + 完整文字标签，与任务轮播同拍；
+                      关闭则退回仅通知区图标。
+                    </div>
+                  </div>
+                  <a-switch v-model="form.appearance.taskbar_center_enabled" />
+                </div>
+                <div class="field-table" style="margin-top: 12px">
+                  <div class="field-line">
+                    <span class="field-k">标签长度</span>
+                    <NumberSpinner v-model="form.appearance.taskbar_label_length" :min="8" :max="32" suffix="字" />
+                  </div>
+                  <div class="field-line">
+                    <span class="field-k">长标题跑马灯</span>
+                    <a-switch v-model="form.appearance.taskbar_label_marquee" size="small" />
+                  </div>
+                </div>
+                <p class="sys-desc" style="margin-top: 10px">超长标签默认截断加…；跑马灯开启后 400ms 步进滚动。改动随底部「保存设置」生效。</p>
+                <a-alert v-if="taskbarLabelVisible === false" type="warning" style="margin-top: 10px">
+                  任务栏当前为「合并按钮」模式，文字标签不显示（图标/速览面板不受影响）。
+                  <a-button size="mini" style="margin-left: 8px" @click="onOpenTaskbarSettings">前往任务栏设置</a-button>
+                </a-alert>
               </a-card>
             </div>
           </template>
@@ -1079,6 +1115,7 @@ import {
   listPlugins,
   openPluginReport,
   packArchive,
+  openTaskbarSettings,
   pickPath,
   previewPluginZip,
   runPlugin,
@@ -1105,6 +1142,8 @@ const notifyExpandKeys = ref([])
 const autostartEnabled = ref(false)
 const autostartLoading = ref(false)
 const autostartHint = ref('')
+// Windows 任务栏标签可见性（§3.0）：true/false；null=非 Windows/未知 → 隐藏整卡
+const taskbarLabelVisible = ref(null)
 const includeOptions = ref([])
 const exportInclude = ref([])
 const exportLoading = ref(false)
@@ -1678,6 +1717,7 @@ function emptyForm() {
       extend_minutes: 10,
       tray_display: 'countdown',
       tray_text: '专注中',
+      tray_icon_countdown: false,
       short_break_minutes: 5,
       long_break_minutes: 15,
       long_break_every: 4,
@@ -1716,7 +1756,16 @@ function emptyForm() {
       primary_list: [],
     },
     quick_add: { default_category: '工作', default_priority: 'medium' },
-    appearance: { theme: 'system', autostart: false, motion: 'full', shape: 'round', skin: 'neo' },
+    appearance: {
+      theme: 'system',
+      autostart: false,
+      motion: 'full',
+      shape: 'round',
+      skin: 'neo',
+      taskbar_center_enabled: true,
+      taskbar_label_length: 20,
+      taskbar_label_marquee: false,
+    },
     backup: { dir: '', auto_enabled: false, interval_days: 1, keep: 7, trigger_hour: 9 },
     ops: {
       enabled: false,
@@ -1868,6 +1917,16 @@ function onAppearancePreview() {
   applyAppearance(form.appearance)
 }
 
+/** Windows：打开系统任务栏设置页（合并模式引导） */
+async function onOpenTaskbarSettings() {
+  try {
+    const data = await openTaskbarSettings()
+    if (!data?.ok) Message.error(data?.error || '打开失败')
+  } catch (e) {
+    Message.error(e?.response?.data?.error || e?.message || '打开失败')
+  }
+}
+
 async function loadSystemStatus() {
   try {
     const data = await getSystemStatus()
@@ -1875,6 +1934,8 @@ async function loadSystemStatus() {
     form.appearance.autostart = !!data?.autostart?.preference
     const target = data?.autostart?.launch_target
     autostartHint.value = target ? `启动目标：${target}` : ''
+    const tb = data?.windows?.taskbar_label_visible
+    taskbarLabelVisible.value = tb === undefined ? null : tb
     const opts = data?.include_options || []
     includeOptions.value = opts
     if (!exportInclude.value.length) {
@@ -2189,7 +2250,11 @@ function normalizeLoaded(s) {
   if (form.appearance.autostart == null) form.appearance.autostart = false
   if (form.appearance.motion == null) form.appearance.motion = 'full'
   if (form.appearance.shape == null) form.appearance.shape = 'round'
-  if (form.appearance.skin !== 'neo' && form.appearance.skin !== 'aurora') form.appearance.skin = 'neo'
+  if (!['neo', 'aurora', 'synth', 'clay'].includes(form.appearance.skin)) form.appearance.skin = 'neo'
+  if (form.appearance.taskbar_center_enabled == null) form.appearance.taskbar_center_enabled = true
+  if (!Number.isFinite(form.appearance.taskbar_label_length)) form.appearance.taskbar_label_length = 20
+  form.appearance.taskbar_label_length = Math.max(8, Math.min(32, Number(form.appearance.taskbar_label_length) || 20))
+  if (form.appearance.taskbar_label_marquee == null) form.appearance.taskbar_label_marquee = false
   if (!form.categories) form.categories = emptyForm().categories
   if (!Array.isArray(form.categories.primary_list)) form.categories.primary_list = []
   // 括号强制成对
@@ -2357,6 +2422,36 @@ body.zt-skin-neo .nav-main {
   border: none;
   box-shadow: var(--zt-shadow-card);
   background: var(--color-surface);
+}
+/* Synth：选中项霓虹渐变竖条 + 提亮 */
+body.zt-skin-synth .nav-main :deep(.arco-menu-item.arco-menu-selected) {
+  position: relative;
+  font-weight: 600;
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+}
+body.zt-skin-synth .nav-main :deep(.arco-menu-item.arco-menu-selected)::before {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 22%;
+  bottom: 22%;
+  width: 3px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--color-primary), var(--zt-neon-pink));
+  box-shadow: 0 0 8px var(--color-primary-glow);
+}
+/* Clay：导航项 tonal 胶囊（M3 navigation 样式） */
+body.zt-skin-clay .nav-main {
+  border: 1px solid var(--color-border);
+  box-shadow: var(--zt-shadow-card);
+}
+body.zt-skin-clay .nav-main :deep(.arco-menu-item) {
+  border-radius: 999px;
+}
+body.zt-skin-clay .nav-main :deep(.arco-menu-item.arco-menu-selected) {
+  background: color-mix(in srgb, var(--color-primary) 18%, var(--color-surface));
+  color: var(--color-primary);
+  font-weight: 700;
 }
 .settings-body {
   min-width: 0;

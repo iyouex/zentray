@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "zentray"
-version = "0.7.2"
+version = "0.7.3"
 description = "Ubuntu/Linux 个人任务管理与专注效率工具 —— 系统托盘番茄钟 + GTD 看板"
 readme = "README.md"
 license = {text = "MIT"}
@@ -34,6 +34,7 @@ dependencies = [
     "injector>=0.21.0",
     "pyzipper>=0.3.6",
     "PyYAML>=6.0",
+    "Pillow>=10.0",
 ]
 
 [project.optional-dependencies]
@@ -41,6 +42,13 @@ dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
     "black>=23.0",
+]
+# macOS 平台层（NSStatusItem 托盘 / UN 系统通知 / SMAppService 登录项）；
+# 热键走 Carbon ctypes，无需额外依赖。Linux/Windows 不装。
+mac = [
+    "pyobjc-framework-Cocoa>=9.0",
+    "pyobjc-framework-UserNotifications>=9.0",
+    "pyobjc-framework-ServiceManagement>=9.0",
 ]
 
 [project.scripts]

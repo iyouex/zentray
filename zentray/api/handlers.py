@@ -46,6 +46,8 @@ class ApiContext:
         pomodoro_service=None,
         start_pomodoro: Optional[Callable[[str], None]] = None,
         mark_report_viewed: Optional[Callable[[str], None]] = None,
+        pomodoro_control: Optional[Callable[[str], None]] = None,
+        report_rotation=None,
     ):
         self.task_service = task_service
         self.on_changed = on_changed or (lambda: None)
@@ -57,6 +59,10 @@ class ApiContext:
         self.start_pomodoro = start_pomodoro or (lambda task_id: None)
         # 报告被打开（经 UI 中继回主线程，移出顶栏轮播）
         self.mark_report_viewed = mark_report_viewed or (lambda key: None)
+        # 番茄控制（stop/extend/skip_break，同样经 UI 中继回主线程）
+        self.pomodoro_control = pomodoro_control
+        # 报告轮播槽（速览面板读取待看报告）
+        self.report_rotation = report_rotation
 
 
 _ctx = ApiContext()
@@ -214,6 +220,14 @@ def handle_request(
         if method == "POST" and path == "/api/pomodoro/start":
             return _pomodoro_start(body)
 
+        # —— Windows 速览面板（/glance）：复合状态 + 报告打开 + 番茄控制 ——
+        if method == "GET" and path == "/api/glance":
+            return _glance_state()
+        if method == "POST" and path == "/api/glance/report-open":
+            return _glance_report_open(body)
+        if method == "POST" and path == "/api/pomodoro/control":
+            return _pomodoro_control(body)
+
         # —— 插件：列表 / 校验 / 安装 / 运行 / 运行历史 / 授权 ——
         # 精确路由必须置于下方 /api/plugins/ 前缀匹配之前，避免被吞
         if method == "GET" and path == "/api/plugins/runs":
@@ -281,6 +295,8 @@ def handle_request(
             return _system_status()
         if method == "POST" and path == "/api/system/autostart":
             return _system_set_autostart(body or {})
+        if method == "POST" and path == "/api/system/open-taskbar-settings":
+            return _open_taskbar_settings()
         if method == "POST" and path == "/api/system/export":
             return _system_export(body or {})
         if method == "POST" and path == "/api/system/import":
@@ -1104,7 +1120,7 @@ def _plugin_run_open(body: dict) -> tuple[int, dict]:
     # 结果正文带 .html 报告路径（如 AI 资讯日报）→ 直接用系统浏览器打开
     import re
 
-    m = re.search(r"[\w./~-]+\.html\b", str(report.get("result_text") or ""))
+    m = re.search(r"[\w./\\~-]+\.html\b", str(report.get("result_text") or ""))
     if m:
         html_path = Path(m.group(0))
         if html_path.is_file():
@@ -1218,6 +1234,106 @@ def _pomodoro_start(body: dict) -> tuple[int, dict]:
     return 200, {"ok": True, "task_id": task_id}
 
 
+def _glance_state() -> tuple[int, dict]:
+    """速览面板复合状态：轮播槽任务 + 活跃序 + 番茄态 + 待看报告 + 脚本占用。"""
+    ts = _ctx.task_service
+    item = None
+    if ts is not None:
+        task = ts.get_current_task()
+        if task is not None:
+            d = _task_dict(task)
+            subs = d.get("subtasks") or []
+            item = {
+                "id": d.get("id"),
+                "title": d.get("title") or "",
+                "display_title": ts.get_task_display_title(task) or d.get("title") or "",
+                "category": d.get("category") or "",
+                "priority": d.get("priority") or "medium",
+                "deadline": d.get("deadline"),
+                "subs_done": sum(1 for s in subs if s.get("status") == "done"),
+                "subs_total": len(subs),
+            }
+    active_ids = [t.id for t in ts.get_all_tasks()] if ts is not None else []
+
+    svc = _ctx.pomodoro_service
+    pomo: dict = {"phase": "idle", "task_title": ""}
+    if svc is not None and bool(getattr(svc, "is_active", False)):
+        pomo = {
+            "phase": getattr(svc, "phase", "focus"),
+            "remaining": int(svc.get_remaining() or 0),
+            "task_title": getattr(svc, "task_title", "") or "",
+        }
+    try:
+        from zentray.services.activity_log import pomodoro_today_stats
+
+        pomo["today_count"], pomo["today_minutes"] = pomodoro_today_stats()
+    except Exception:
+        pomo["today_count"], pomo["today_minutes"] = 0, 0
+
+    reports = []
+    rot = _ctx.report_rotation
+    if rot is not None:
+        try:
+            reports = [
+                {"key": r.get("key") or "", "text": r.get("text") or ""}
+                for r in rot.active()
+            ]
+        except Exception:
+            logger.exception("速览面板读取报告轮播失败")
+    runtime = _ctx.plugin_runtime
+    return 200, {
+        "item": item,
+        "active_ids": active_ids,
+        "pomodoro": pomo,
+        "reports": reports,
+        "ops_busy": bool(runtime is not None and getattr(runtime, "is_busy", False)),
+    }
+
+
+def _glance_report_open(body: dict) -> tuple[int, dict]:
+    """速览面板报告 chip：点开即消（run:→运行报告，ai:→本地报告文件）。"""
+    key = str(body.get("key") or "")
+    if not key:
+        return 400, {"error": "key 必填"}
+    _ctx.mark_report_viewed(key)
+    if key.startswith("run:"):
+        run_id = key[4:]
+        if not run_id or "/" in run_id or "\\" in run_id or Path(run_id).name != run_id:
+            return 400, {"error": "非法运行ID"}
+        return _plugin_run_open({"run_id": run_id})
+    if key.startswith("ai:"):
+        from zentray.config import DATA_DIR
+
+        try:
+            path = Path(key[3:]).resolve()
+            path.relative_to(Path(DATA_DIR).resolve())
+        except (ValueError, OSError):
+            return 400, {"error": "非法报告路径"}
+        if not path.is_file():
+            return 404, {"error": "报告文件不存在"}
+        _open_with_system(path)
+        return 200, {"ok": True, "file": str(path)}
+    return 400, {"error": "无法识别的报告 key"}
+
+
+def _pomodoro_control(body: dict) -> tuple[int, dict]:
+    """速览面板番茄控制：stop / extend / skip_break（经信号回主线程执行）。"""
+    action = str(body.get("action") or "").strip()
+    if action not in ("stop", "extend", "skip_break"):
+        return 400, {"error": "action 必须是 stop|extend|skip_break"}
+    svc = _ctx.pomodoro_service
+    if svc is None or not bool(getattr(svc, "is_active", False)):
+        return 409, {"error": "番茄钟未在运行"}
+    if action == "skip_break" and not bool(getattr(svc, "is_break", False)):
+        return 409, {"error": "当前不在休息段"}
+    if action == "extend" and bool(getattr(svc, "is_break", False)):
+        return 409, {"error": "休息段不能延长"}
+    if _ctx.pomodoro_control is None:
+        return 500, {"error": "pomodoro control unavailable"}
+    _ctx.pomodoro_control(action)
+    return 200, {"ok": True, "action": action}
+
+
 def _save_settings(data: dict) -> None:
     """写回 settings.json，复用 SettingsManager 的字段结构。"""
     from zentray.services.settings_manager import SettingsManager
@@ -1317,12 +1433,23 @@ def _system_status() -> tuple[int, dict]:
     sm = SettingsManager()
     pref = bool(sm.appearance.autostart)
     backup_dir = mig.backup_dir_from_settings()
+    # Windows 任务栏标签可见性（§3.0 合并模式检测）；非 Windows 为 None
+    label_visible = None
+    try:
+        from zentray.ui.win_tray import taskbar_label_visible
+
+        label_visible = taskbar_label_visible()
+    except Exception:
+        pass
     return 200, {
         "version": VERSION,
         "data_dir": str(DATA_DIR),
         "autostart": {
             **st,
             "preference": pref,
+        },
+        "windows": {
+            "taskbar_label_visible": label_visible,
         },
         "include_options": mig.list_include_options(),
         "exports_dir": str(mig.exports_dir()),
@@ -1356,6 +1483,21 @@ def _system_set_autostart(body: dict) -> tuple[int, dict]:
         "enabled": autostart_svc.is_enabled(),
         "preference": enabled,
     }
+
+
+def _open_taskbar_settings() -> tuple[int, dict]:
+    """打开 Windows 任务栏设置页（合并模式引导，设计 §3.0）。"""
+    import sys
+
+    if not sys.platform.startswith("win32"):
+        return 400, {"ok": False, "error": "仅 Windows 支持"}
+    try:
+        import os
+
+        os.startfile("ms-settings:taskbar")  # noqa: S606 固定白名单 URI
+        return 200, {"ok": True}
+    except Exception as e:
+        return 500, {"ok": False, "error": f"打开失败: {e}"}
 
 
 def _system_export(body: dict) -> tuple[int, dict]:

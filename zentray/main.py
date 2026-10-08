@@ -257,6 +257,15 @@ def main():
     app.setApplicationDisplayName("ZenTray")
     app.setDesktopFileName("zentray")
 
+    # macOS agent 形态：无 Dock 图标/主菜单栏（运行期等价 LSUIElement=1，设计 §0）
+    if sys.platform == "darwin":
+        try:
+            from zentray.ui.mac_tray import apply_mac_agent_behavior
+
+            apply_mac_agent_behavior()
+        except Exception:
+            logger.exception("macOS accessory 模式设置失败（不影响功能）")
+
     # 应用主图标（任务栏 / 对话框）
     try:
         from PySide6.QtGui import QIcon
@@ -331,6 +340,7 @@ def main():
             apply_settings_requested = Signal()
             pomodoro_requested = Signal(str)  # task_id（空=无绑定）
             report_viewed = Signal(str)  # 报告 key（run:<id>/ai:<path>），移出顶栏轮播
+            pomodoro_control_requested = Signal(str)  # stop|extend|skip_break（速览面板）
 
             def __init__(self, runtime_ref):
                 super().__init__()
@@ -358,6 +368,26 @@ def main():
                 if controller:
                     controller.mark_report_viewed(key)
 
+            def _on_pomodoro_control(self, action):
+                controller = self._runtime_ref.controller
+                if not controller:
+                    return
+                svc = controller.pomodoro_service
+                if action == "stop":
+                    controller.stop_pomodoro()
+                elif action == "skip_break":
+                    try:
+                        svc.skip_break()
+                    except Exception:
+                        logger.exception("跳过休息失败")
+                    controller.update_display(update_menu=True)
+                elif action == "extend":
+                    try:
+                        svc.extend()
+                    except Exception:
+                        logger.exception("延长专注失败")
+                    controller.update_display(update_menu=True)
+
         _api_ui_relay = _ApiUiRelay(runtime)
         set_api_context(
             ApiContext(
@@ -369,6 +399,8 @@ def main():
                 pomodoro_service=getattr(runtime.controller, "pomodoro_service", None),
                 start_pomodoro=_api_ui_relay.pomodoro_requested.emit,
                 mark_report_viewed=_api_ui_relay.report_viewed.emit,
+                pomodoro_control=_api_ui_relay.pomodoro_control_requested.emit,
+                report_rotation=getattr(runtime.controller, "report_rotation", None),
             )
         )
         if vue_ui_available():

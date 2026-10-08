@@ -17,7 +17,9 @@ PyInstaller 打包配置文件。
   ~460MB 到 /tmp；onedir 后由 dpkg-deb -Zxz -z9 统一压缩。
 """
 
+import os
 import re
+import sys
 
 # ---------- 基础分析 ----------
 block_cipher = None
@@ -169,8 +171,8 @@ a = Analysis(
         'yaml',
         # DI 容器
         'zentray.dependencies',
-        # pynput 平台特定后端
-        'pynput.keyboard._xorg',
+        # pynput 平台特定后端（按构建平台选择；mac 上 Carbon 优先，pynput 为回退）
+        'pynput.keyboard._darwin' if sys.platform == 'darwin' else 'pynput.keyboard._xorg',
         # 备份加密（AES zip；pycryptodomex 为 pyzipper 的 AES 后端）
         'pyzipper',
         'Cryptodome.Cipher.AES',
@@ -178,7 +180,10 @@ a = Analysis(
         'PySide6.QtWebEngineWidgets',
         'PySide6.QtWebEngineCore',
         'PySide6.QtWebChannel',
-    ],
+    ] + (
+        # macOS：托盘后端（create_tray_backend 函数内动态导入，显式声明保险）
+        ['zentray.ui.mac_tray'] if sys.platform == 'darwin' else []
+    ),
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -242,7 +247,12 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='resources/icons/app_icon.png',
+    # Windows 需 .ico（CI 构建前由 Pillow 从 png 生成）；其余平台沿用 png
+    icon=(
+        'resources/icons/app_icon.ico'
+        if sys.platform == 'win32' and os.path.exists('resources/icons/app_icon.ico')
+        else 'resources/icons/app_icon.png'
+    ),
 )
 
 coll = COLLECT(
@@ -254,3 +264,23 @@ coll = COLLECT(
     upx=False,                  # 本机无 upx 二进制，始终是 no-op
     name='ZenTray',             # 产物: dist/ZenTray/（可执行文件在其内）
 )
+
+if sys.platform == 'darwin':
+    # macOS：onedir + BUNDLE 产出 dist/ZenTray.app（windowed 不自动建 .app）。
+    # LSUIElement=True：agent 应用，无 Dock 图标/主菜单栏（设计 §0）。
+    _ver = re.search(
+        r'VERSION = "([^"]+)"',
+        open('zentray/config.py', encoding='utf-8').read(),
+    )
+    app = BUNDLE(
+        coll,
+        exe,
+        name='ZenTray.app',
+        icon='resources/icons/app_icon.png',
+        bundle_identifier='com.zentray.ZenTray',
+        info_plist={
+            'CFBundleName': 'ZenTray',
+            'CFBundleShortVersionString': _ver.group(1) if _ver else '0.0.0',
+            'LSUIElement': True,
+        },
+    )

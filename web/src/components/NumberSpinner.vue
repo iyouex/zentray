@@ -1,6 +1,6 @@
 <template>
   <!-- 横向紧凑：− 输入 + ，可输入也可点调 -->
-  <div class="num-spinner" :class="{ disabled }">
+  <div class="num-spinner" :class="{ disabled }" @wheel="onWheel">
     <button
       type="button"
       class="spin-btn"
@@ -68,6 +68,13 @@ function commit() {
 function nudge(dir) {
   model.value = clamp((model.value ?? props.min) + dir * props.step)
   text.value = String(model.value)
+}
+
+/** Windows 数字框惯例：悬停滚轮调节（上=增、下=减） */
+function onWheel(e) {
+  if (props.disabled) return
+  e.preventDefault()
+  nudge(e.deltaY < 0 ? 1 : -1)
 }
 </script>
 
