@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import sys
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -49,6 +50,7 @@ def test_center_dialog_skips_after_user_move(qapp):
     dlg.deleteLater()
 
 
+@pytest.mark.skipif(sys.platform == "darwin", reason="macOS 走原生标题栏分支，无 frameless/_drag_filter")
 def test_apply_dialog_chrome_frameless_dialog_and_drag_filter(qapp):
     dlg = QDialog()
     apply_dialog_chrome(dlg, width=480, height=320)
@@ -132,6 +134,7 @@ def test_chrome_dialog_records_fixed_size(qapp):
     assert getattr(dlg, "_chrome_size", None) == (500, 300)
 
 
+@pytest.mark.skipif(sys.platform == "darwin", reason="macOS 走原生标题栏分支，无 frameless/_drag_filter")
 def test_resize_guard_restores_fixed_size_after_platform_override(qapp):
     """混合 DPI 多屏最小化恢复时，Wayland configure 会绕过 min/max 把窗口折半（实测 900x540→450x270）。
 
@@ -177,6 +180,7 @@ def test_chrome_dialog_is_resizable_not_fixed(qapp):
     dlg.deleteLater()
 
 
+@pytest.mark.skipif(sys.platform == "darwin", reason="macOS 走原生标题栏分支，无 frameless/_drag_filter")
 def test_resize_guard_ignores_user_enlarge(qapp):
     """现在允许用户拉伸窗口：守卫只恢复“变小”（合成器 bug 特征），拉大必须放行。"""
     from PySide6.QtCore import QSize
@@ -190,6 +194,7 @@ def test_resize_guard_ignores_user_enlarge(qapp):
     dlg.deleteLater()
 
 
+@pytest.mark.skipif(sys.platform == "darwin", reason="macOS 走原生标题栏分支，无 frameless/_drag_filter")
 def test_resize_guard_total_recovery_cap(qapp):
     """两个并存弹窗的尺寸恢复会互相触发合成器 configure（无限减半拉锯）。
 
@@ -213,6 +218,7 @@ def test_resize_guard_total_recovery_cap(qapp):
     dlg.deleteLater()
 
 
+@pytest.mark.skipif(sys.platform == "darwin", reason="macOS 走原生标题栏分支，无 frameless/_drag_filter")
 def test_resize_guard_total_resets_after_normal_size(qapp):
     """total 是“每轮连续异常”的计数，不能按面板生命周期累计：
     合成器每次最小化都会发一次减半 configure（实测），生命周期累计配额
@@ -286,6 +292,7 @@ def test_run_modal_loop_accept_returns_true(qapp):
     dlg.deleteLater()
 
 
+@pytest.mark.skipif(sys.platform == "darwin", reason="macOS 走原生标题栏分支，无 frameless/_drag_filter")
 def test_is_interactive_widget_window_type_check(qapp):
     """Qt.Tool 是复合标志（含 Dialog 位），windowFlags() & Tool 对任何对话框恒真。
 

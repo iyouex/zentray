@@ -116,6 +116,128 @@ class SingleInstanceGuard(QObject):
         return ok
 
 
+# ==========================================
+# macOS：Carbon RegisterEventHotKey（纯 ctypes，无需 PyObjC，也无需
+# 辅助功能授权——NSEvent 全局监听才需要；Carbon 热键是事实标准）
+# ==========================================
+
+# HIToolbox ANSI 虚拟键码（命令/修饰键掩码：cmd=0x0100 shift=0x0200
+# option=0x0800 control=0x1000；kEventClassKeyboard='keyb'，HotKeyPressed=5）
+_MAC_MODS = {
+    "ctrl": 0x1000, "control": 0x1000,
+    "alt": 0x0800, "option": 0x0800, "opt": 0x0800,
+    "cmd": 0x0100, "command": 0x0100, "super": 0x0100, "win": 0x0100,
+    "meta": 0x0100, "windows": 0x0100,
+    "shift": 0x0200,
+}
+_MAC_KEYCODES = {
+    "space": 49, "return": 36, "enter": 36, "tab": 48,
+    "backspace": 51, "esc": 53, "escape": 53,
+    "a": 0, "s": 1, "d": 2, "f": 3, "h": 4, "g": 5, "z": 6, "x": 7,
+    "c": 8, "v": 9, "b": 11, "q": 12, "w": 13, "e": 14, "r": 15,
+    "y": 16, "t": 17, "o": 31, "u": 32, "i": 34, "p": 35, "l": 37,
+    "j": 38, "k": 40, "n": 45, "m": 46,
+    "1": 18, "2": 19, "3": 20, "4": 21, "5": 23, "6": 22, "7": 26,
+    "8": 28, "9": 25, "0": 29,
+}
+
+
+def mac_hotkey_parse(hotkey_str: str):
+    """pynput 风格热键串 → (Carbon 修饰键掩码, 键码)；无法映射返回 None。
+
+    至少要求一个修饰键（裸键全局热键会吞正常打字，拒绝注册）。
+    """
+    if not hotkey_str:
+        return None
+    mods = 0
+    key = None
+    for part in hotkey_str.lower().split("+"):
+        p = part.strip().strip("<>")
+        if not p:
+            continue
+        if p in _MAC_MODS:
+            mods |= _MAC_MODS[p]
+        elif p in _MAC_KEYCODES and key is None:
+            key = _MAC_KEYCODES[p]
+        else:
+            return None
+    if key is None or mods == 0:
+        return None
+    return mods, key
+
+
+class _MacCarbonHotkey:
+    """Carbon 热键封装。事件经主线程 CFRunLoop 派发（与 Qt 事件循环同线程）。
+
+    CFUNCTYPE 回调必须保活（实例属性），否则回调后段错误。
+    """
+
+    _HITOOLBOX = (
+        "/System/Library/Frameworks/Carbon.framework/"
+        "Frameworks/HIToolbox.framework/HIToolbox"
+    )
+
+    def __init__(self, hotkey_str: str, on_trigger):
+        import ctypes
+
+        parsed = mac_hotkey_parse(hotkey_str)
+        if parsed is None:
+            raise ValueError(f"热键无法映射为 Carbon 键码: {hotkey_str}")
+        self._mods, self._code = parsed
+        self._on_trigger = on_trigger
+
+        self._lib = ctypes.CDLL(self._HITOOLBOX)
+        # 64 位下不设 restype 会把指针按 c_int 截断
+        self._lib.GetApplicationEventTarget.restype = ctypes.c_void_p
+        self._lib.InstallEventHandler.restype = ctypes.c_int
+        self._lib.RegisterEventHotKey.restype = ctypes.c_int
+        self._lib.UnregisterEventHotKey.restype = ctypes.c_int
+
+        target = self._lib.GetApplicationEventTarget()
+
+        class _EventHotKeyID(ctypes.Structure):
+            _fields_ = [("signature", ctypes.c_uint32), ("id", ctypes.c_uint32)]
+
+        class _EventTypeSpec(ctypes.Structure):
+            _fields_ = [("eventClass", ctypes.c_uint32), ("eventKind", ctypes.c_uint32)]
+
+        # signature 'znty' + id 1；kEventClassKeyboard='keyb'(0x6B657962)，HotKeyPressed=5
+        self._hk_id = _EventHotKeyID(0x7A6E7479, 1)
+        self._spec = _EventTypeSpec(0x6B657962, 5)
+        self._ref = ctypes.c_void_p()
+        self._handler_ref = ctypes.c_void_p()
+        self._handler = ctypes.CFUNCTYPE(
+            ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p
+        )(self._on_hotkey)
+
+        err = self._lib.InstallEventHandler(
+            target, self._handler, 1, ctypes.byref(self._spec), None,
+            ctypes.byref(self._handler_ref),
+        )
+        if err != 0:
+            raise OSError(f"InstallEventHandler 失败: {err}")
+        err = self._lib.RegisterEventHotKey(
+            self._code, self._mods, self._hk_id, target, 0, ctypes.byref(self._ref)
+        )
+        if err != 0:
+            raise OSError(f"RegisterEventHotKey 失败: {err}")
+
+    def _on_hotkey(self, next_handler, event, user_data):
+        try:
+            self._on_trigger()
+        except Exception:
+            logger.exception("mac 热键回调异常")
+        return 0  # noErr：事件已消费
+
+    def stop(self):
+        if self._ref:
+            try:
+                self._lib.UnregisterEventHotKey(self._ref)
+            except Exception:
+                pass
+            self._ref = ctypes.c_void_p()
+
+
 class HotkeyListener(QObject):
     """后台全局快捷键监听器，通过 Qt Signal 唤醒主线程"""
 
@@ -125,9 +247,17 @@ class HotkeyListener(QObject):
         super().__init__()
         self.hotkey_str = hotkey_str
         self.listener = None
+        self._carbon = None
 
     def start(self) -> bool:
         """启动全局热键。失败时返回 False，不抛出到主流程。"""
+        if sys.platform == "darwin":
+            try:
+                self._carbon = _MacCarbonHotkey(self.hotkey_str, self.on_activate)
+                logger.info("全局热键已注册（Carbon）: %s", self.hotkey_str)
+                return True
+            except Exception as e:
+                logger.warning("Carbon 热键注册失败，回退 pynput: %s", e)
         try:
             self.listener = keyboard.GlobalHotKeys({
                 self.hotkey_str: self.on_activate,
@@ -143,6 +273,12 @@ class HotkeyListener(QObject):
         self.triggered.emit()
 
     def stop(self):
+        if self._carbon is not None:
+            try:
+                self._carbon.stop()
+            except Exception:
+                pass
+            self._carbon = None
         if self.listener:
             try:
                 self.listener.stop()

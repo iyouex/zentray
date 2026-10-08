@@ -257,6 +257,15 @@ def main():
     app.setApplicationDisplayName("ZenTray")
     app.setDesktopFileName("zentray")
 
+    # macOS agent 形态：无 Dock 图标/主菜单栏（运行期等价 LSUIElement=1，设计 §0）
+    if sys.platform == "darwin":
+        try:
+            from zentray.ui.mac_tray import apply_mac_agent_behavior
+
+            apply_mac_agent_behavior()
+        except Exception:
+            logger.exception("macOS accessory 模式设置失败（不影响功能）")
+
     # 应用主图标（任务栏 / 对话框）
     try:
         from PySide6.QtGui import QIcon

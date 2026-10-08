@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import sys
 import weakref
 from pathlib import Path
 from typing import Any, Optional
@@ -41,6 +42,11 @@ if _HAS_WEBENGINE:
             s = url.toString()
             if s.startswith(("zentray://start_drag", "zentray://move")):
                 logger.debug("bridge nav: %s", s[:80])
+            if sys.platform == "darwin" and s.startswith(
+                ("zentray://start_drag", "zentray://move")
+            ):
+                # mac 原生标题栏拖拽：忽略前端自研拖拽桥（设计 §12.2）
+                return False
             if s.startswith("zentray://start_drag"):
                 # PySide6 6.11 已移除 QWebEnginePage.view()；_BridgePage 以 view 为父构造
                 view = self.parent()
