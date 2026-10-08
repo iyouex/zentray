@@ -15,7 +15,8 @@ logger = logging.getLogger(__name__)
 # 与 scripts/generate_pie_icons.py 保持一致；变更时强制刷新用户目录饼图
 # v4: 任务饼图无绿叶；番茄独立绘制（红果+绿萼，随进度填充）
 # v5: 新增休息饼图 break_*（茶绿纯色圆饼，无萼）
-PIE_ICON_VERSION = "5"
+# v6: 绘制引擎 PIL → QPainter（Qt 原生，包内可少带 Pillow ~15MB）
+PIE_ICON_VERSION = "6"
 
 
 def get_resource_path(relative_path: str) -> Path:
@@ -104,12 +105,23 @@ def _needs_pie_refresh(icon_dir: Path) -> bool:
 
 
 def _generate_pie_icons_into(icon_dir: Path) -> bool:
-    """用 Pillow 生成任务优先级饼图 + 番茄钟图标；失败返回 False。"""
+    """用 QPainter 生成任务优先级饼图 + 番茄钟图标；失败返回 False。
+
+    v6 起不依赖 Pillow（Qt 原生绘制），安装包可剔除 PIL 及 pillow.libs。
+    无 QGuiApplication 时临时起 offscreen 实例（pytest / main.py 先图标后
+    QApplication 的启动顺序都会走到该兜底），函数返回即销毁。
+    """
     try:
-        from PIL import Image, ImageDraw
+        from PySide6.QtCore import QRectF, Qt
+        from PySide6.QtGui import QColor, QGuiApplication, QPainter, QPen, QPixmap
     except ImportError:
-        logger.warning("Pillow 不可用，无法生成饼图图标")
+        logger.warning("PySide6 不可用，无法生成饼图图标")
         return False
+
+    app = QGuiApplication.instance()
+    if app is None:
+        # 局部引用，函数返回时销毁，不影响后续 QApplication 创建
+        QGuiApplication([sys.argv[0], "-platform", "offscreen"])
 
     colors = {
         "high": (239, 68, 68),
@@ -126,88 +138,87 @@ def _generate_pie_icons_into(icon_dir: Path) -> bool:
     outline_alpha = 230
     size = 32
 
-    def _draw_priority_pie(rgb, progress: int) -> "Image.Image":
-        """任务紧急程度饼图：纯色环/扇形，无绿点。"""
-        r, g, b = rgb
-        im = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-        draw = ImageDraw.Draw(im)
-        margin = 1
-        bbox = [margin, margin, size - 1 - margin, size - 1 - margin]
-        draw.ellipse(
-            bbox,
-            fill=(r, g, b, base_alpha),
-            outline=(r, g, b, outline_alpha),
-            width=2,
-        )
-        if progress >= 100:
-            draw.ellipse(
-                bbox,
-                fill=(r, g, b, 255),
-                outline=(r, g, b, 255),
-                width=2,
-            )
-        elif progress > 0:
-            start = -90.0
-            end = -90.0 + progress * 3.6
-            draw.pieslice(bbox, start=start, end=end, fill=(r, g, b, 255))
-            draw.ellipse(bbox, outline=(r, g, b, outline_alpha), width=2)
-        return im
+    def _canvas() -> tuple[QPixmap, QPainter]:
+        pm = QPixmap(size, size)
+        pm.fill(Qt.transparent)
+        p = QPainter(pm)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        return pm, p
 
-    def _draw_tomato(progress: int) -> "Image.Image":
+    def _draw_ellipse(p: QPainter, rect: QRectF, rgb, fill_a: int, line_a: int):
+        r, g, b = rgb
+        p.setPen(QPen(QColor(r, g, b, line_a), 2))
+        p.setBrush(QColor(r, g, b, fill_a))
+        p.drawEllipse(rect)
+
+    def _draw_priority_pie(rgb, progress: int) -> QPixmap:
+        """任务紧急程度饼图：纯色环/扇形，无绿点。"""
+        margin = 1
+        rect = QRectF(margin, margin, size - 1 - 2 * margin, size - 1 - 2 * margin)
+        pm, p = _canvas()
+        _draw_ellipse(p, rect, rgb, base_alpha, outline_alpha)
+        if progress >= 100:
+            _draw_ellipse(p, rect, rgb, 255, 255)
+        elif progress > 0:
+            # PIL pieslice 与 QPainter drawPie 同为「3 点钟方向起顺时针」，
+            # -90° 即 12 点钟；Qt 角度单位 1/16 度
+            r, g, b = rgb
+            p.setPen(Qt.NoPen)
+            p.setBrush(QColor(r, g, b, 255))
+            p.drawPie(rect, -90 * 16, int(progress * 3.6) * 16)
+            _draw_ellipse(p, rect, rgb, 0, outline_alpha)
+        p.end()
+        return pm
+
+    def _draw_tomato(progress: int) -> QPixmap:
         """
         番茄钟图标：圆形番茄果 + 顶部绿萼/小茎，
         果体随 progress 做饼状实心填充（与菜单 🍅 语义一致）。
         """
-        r, g, b = tomato_body
-        im = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-        draw = ImageDraw.Draw(im)
-        # 果体略下移，给绿萼留空
         margin_x, margin_top, margin_bot = 2, 5, 1
-        bbox = [margin_x, margin_top, size - 1 - margin_x, size - 1 - margin_bot]
-        draw.ellipse(
-            bbox,
-            fill=(r, g, b, base_alpha),
-            outline=(r, g, b, outline_alpha),
-            width=2,
+        rect = QRectF(
+            margin_x, margin_top,
+            size - 1 - 2 * margin_x, size - 1 - margin_top - margin_bot,
         )
+        pm, p = _canvas()
+        _draw_ellipse(p, rect, tomato_body, base_alpha, outline_alpha)
         if progress >= 100:
-            draw.ellipse(
-                bbox,
-                fill=(r, g, b, 255),
-                outline=(r, g, b, 255),
-                width=2,
-            )
+            _draw_ellipse(p, rect, tomato_body, 255, 255)
         elif progress > 0:
-            start = -90.0
-            end = -90.0 + progress * 3.6
-            draw.pieslice(bbox, start=start, end=end, fill=(r, g, b, 255))
-            draw.ellipse(bbox, outline=(r, g, b, outline_alpha), width=2)
+            r, g, b = tomato_body
+            p.setPen(Qt.NoPen)
+            p.setBrush(QColor(r, g, b, 255))
+            p.drawPie(rect, -90 * 16, int(progress * 3.6) * 16)
+            _draw_ellipse(p, rect, tomato_body, 0, outline_alpha)
 
         # 绿萼：中心小茎 + 两侧小叶（仅番茄）
         lr, lg, lb = tomato_leaf
         cx = size // 2
-        # 茎
-        draw.rectangle([cx - 1, 2, cx + 1, 7], fill=(lr, lg, lb, 255))
-        # 左叶 / 右叶
-        draw.ellipse([cx - 7, 2, cx - 1, 8], fill=(lr, lg, lb, 240))
-        draw.ellipse([cx + 1, 2, cx + 7, 8], fill=(lr, lg, lb, 240))
-        # 中上小叶
-        draw.ellipse([cx - 3, 1, cx + 3, 6], fill=(lr, lg, lb, 255))
-        return im
+        p.setPen(Qt.NoPen)
+        p.setBrush(QColor(lr, lg, lb, 255))
+        p.drawRect(QRectF(cx - 1, 2, 3, 6))
+        p.setBrush(QColor(lr, lg, lb, 240))
+        p.drawEllipse(QRectF(cx - 7, 2, 7, 7))
+        p.drawEllipse(QRectF(cx + 1, 2, 7, 7))
+        p.setBrush(QColor(lr, lg, lb, 255))
+        p.drawEllipse(QRectF(cx - 3, 1, 7, 6))
+        p.end()
+        return pm
 
     icon_dir.mkdir(parents=True, exist_ok=True)
     for priority, rgb in colors.items():
         for progress in range(0, 101, 10):
-            im = _draw_priority_pie(rgb, progress)
-            im.save(icon_dir / f"pie_{priority}_{progress}.png", "PNG")
+            _draw_priority_pie(rgb, progress).save(
+                str(icon_dir / f"pie_{priority}_{progress}.png"), "PNG"
+            )
 
     for progress in range(0, 101, 10):
-        im = _draw_tomato(progress)
-        im.save(icon_dir / f"tomato_{progress}.png", "PNG")
+        _draw_tomato(progress).save(str(icon_dir / f"tomato_{progress}.png"), "PNG")
 
     for progress in range(0, 101, 10):
-        im = _draw_priority_pie(break_color, progress)
-        im.save(icon_dir / f"break_{progress}.png", "PNG")
+        _draw_priority_pie(break_color, progress).save(
+            str(icon_dir / f"break_{progress}.png"), "PNG"
+        )
 
     try:
         _pie_version_path(icon_dir).write_text(PIE_ICON_VERSION + "\n", encoding="utf-8")

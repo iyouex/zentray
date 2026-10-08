@@ -81,6 +81,27 @@ _EXCLUDE_NAME_RES = [
         # 开发者工具资源（生产不需要）
         r"devtools",
         r"qtwebengine_devtools",
+        # GTK3 平台主题插件及其独占依赖链（~15MB）：UI 主体是 WebEngine Vue，
+        # 原生控件走 Qt 默认风格即可；链成员均已用 readelf 反向索引核实
+        # 无其他消费者（libsqlite/libgnutls/libcrypto 等各有 NSS/cups/python 消费者，不在此列）
+        r"libqgtk3",
+        r"libgtk-3\.so",
+        r"libgdk-3\.so",
+        r"libgdk_pixbuf",
+        r"libpango",
+        r"libcairo",
+        r"libepoxy\.so",
+        r"libatk",
+        r"libatspi",
+        r"libpixman-1",
+        r"libharfbuzz\.so\.0$",  # 仅根目录 GTK 侧副本；Qt 用自带 harfbuzz
+        r"libjpeg\.so\.8",
+        r"libthai",
+        r"libdatrie",
+        r"libgraphite2",
+        r"libfribidi",
+        r"libXcursor",
+        r"libXinerama",
         # 示例 / 文档
         r"/examples/",
         r"/doc/",
@@ -190,6 +211,12 @@ a = Analysis(
     # 排除不需要的重量级库以减小包体积
     excludes=[
         'tkinter',
+        # 饼图/番茄图标 v6 起用 QPainter 绘制，PIL 不再进包（省 PIL+pillow.libs ~15MB）
+        'PIL',
+        # cryptography 仅被 urllib3.contrib.pyopenssl 可选路径静态牵入（运行时从不触发），
+        # 省 _rust.abi3.so + cffi ~14MB
+        'cryptography',
+        'cffi',
         'matplotlib',
         'numpy',
         'pandas',
