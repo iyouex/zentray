@@ -356,3 +356,21 @@ def test_silent_hang_script_times_out(qapp, tmp_data_dir, monkeypatch):
         qapp.processEvents()
         time.sleep(0.05)
     assert finished and finished[0][1] is True
+def test_entry_command_platform_dispatch():
+    """A 类根因回归：entry 按后缀分派解释器，Windows 不再直跑 .sh。"""
+    import sys as _sys
+    from pathlib import Path as _Path
+    from zentray.plugins.runtime import _entry_command
+
+    py = _entry_command(_Path("plug/run.py"))
+    assert py[0] == _sys.executable and py[1].endswith("run.py")
+    sh = _entry_command(_Path("plug/run.sh"))
+    import shutil as _shutil
+    if _shutil.which("bash"):
+        assert _shutil.which("bash") in sh and sh[1].endswith("run.sh")
+    else:
+        import pytest as _pytest
+        with _pytest.raises(RuntimeError):
+            _entry_command(_Path("plug/run.sh"))
+    exe = _entry_command(_Path("plug/tool.bin"))
+    assert exe == [str(_Path("plug/tool.bin"))]

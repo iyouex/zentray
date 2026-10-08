@@ -17,6 +17,7 @@ PyInstaller 打包配置文件。
   ~460MB 到 /tmp；onedir 后由 dpkg-deb -Zxz -z9 统一压缩。
 """
 
+import os
 import re
 import sys
 
@@ -246,7 +247,12 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='resources/icons/app_icon.png',
+    # Windows 需 .ico（CI 构建前由 Pillow 从 png 生成）；其余平台沿用 png
+    icon=(
+        'resources/icons/app_icon.ico'
+        if sys.platform == 'win32' and os.path.exists('resources/icons/app_icon.ico')
+        else 'resources/icons/app_icon.png'
+    ),
 )
 
 coll = COLLECT(

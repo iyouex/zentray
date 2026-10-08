@@ -113,7 +113,7 @@ class TestTaskService:
         t, auto = task_service.set_subtask_status(task.id, task.subtasks[1]["id"], "done")
         assert auto is True
         assert not any(x.id == task.id for x in task_service.get_all_tasks())
-        log = (tmp_data_dir / "archive" / f"{datetime.date.today().isoformat()}.log").read_text()
+        log = (tmp_data_dir / "archive" / f"{datetime.date.today().isoformat()}.log").read_text(encoding="utf-8")
         assert "[状态: DONE]" in log and "自动完成 -" in log  # title + 空 details 的归档行
 
     def test_subtask_abandon_auto_completes_too(self, task_service):

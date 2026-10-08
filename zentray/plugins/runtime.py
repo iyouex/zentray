@@ -5,7 +5,9 @@ import json
 import logging
 import os
 import queue
+import shutil
 import subprocess
+import sys
 import threading
 import time
 from datetime import datetime
@@ -18,6 +20,25 @@ from zentray.config import DATA_DIR
 from zentray.core.models import Task
 from zentray.plugins.loader import LoadedPlugin
 from zentray.plugins.models import PluginType, resolve_param_values
+
+
+def _entry_command(entry_path: Path) -> List[str]:
+    """插件 entry 平台分派：.py 用当前解释器、.sh 用 bash，其余直跑。
+
+    Windows 直跑 .sh 会 WinError 193；找不到 bash 时给可操作的文案
+    而不是让 CreateProcess 抛系统级错误。
+    """
+    suffix = entry_path.suffix.lower()
+    if suffix == ".py":
+        return [sys.executable, str(entry_path)]
+    if suffix == ".sh":
+        bash = shutil.which("bash")
+        if bash:
+            return [bash, str(entry_path)]
+        raise RuntimeError(
+            "运行 .sh 插件需要 bash（Windows 请安装 Git Bash 并加入 PATH）"
+        )
+    return [str(entry_path)]
 
 
 def _read_param_presets(pid: str) -> dict:
@@ -115,9 +136,9 @@ class PluginRuntime(QObject):
                 return False, "脚本运行中，请稍候"
 
         m = plugin.manifest
-        cmd = [str(m.entry_path), action, *m.args]
         env = self._base_env(m)
         try:
+            cmd = _entry_command(m.entry_path) + [action, *m.args]
             completed = subprocess.run(
                 cmd,
                 cwd=str(m.work_path),
@@ -184,7 +205,7 @@ class PluginRuntime(QObject):
             # variadic 参数预设可为多值列表，逐个展开（保持声明顺序）
             [v for p in m.params for v in self._preset_or_default(m, p)]
         )
-        cmd = [str(m.entry_path), *m.args, *values]
+        cmd: List[str] = []  # 在 try 内分派（bash 缺失等要进 summary，不能炸线程）
         env = self._base_env(m)
         # 任务上下文最后注入（动态覆盖静态）；触发来源始终注入
         if task is not None:
@@ -206,6 +227,7 @@ class PluginRuntime(QObject):
 
         try:
             self.log_line.emit(f"⚡ 开始 {m.name}"[:50])
+            cmd = _entry_command(m.entry_path) + [*m.args, *values]
             with open(log_path, "w", encoding="utf-8") as logf:
                 logf.write(f"$ {' '.join(cmd)}\n")
                 self._proc = subprocess.Popen(

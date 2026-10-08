@@ -94,6 +94,20 @@ def query_events(
     return items
 
 
+def pomodoro_today_stats() -> tuple:
+    """今日 (番茄数, 专注分钟)：托盘菜单融合按钮与速览面板共用。"""
+    today = datetime.now().strftime("%Y-%m-%d")
+    count = minutes = 0
+    for ev in query_events(category="pomodoro", days=1, limit=500):
+        if (ev.get("time") or "")[:10] != today:
+            continue
+        if ev.get("action") != "pomodoro_done":
+            continue
+        count += 1
+        minutes += int((ev.get("meta") or {}).get("minutes") or 0)
+    return count, minutes
+
+
 def list_ai_reports(days: int = 90) -> List[dict]:
     """列出 reviews/ 下 AI 报告文件，带日期-类型-序号标签。"""
     reviews = DATA_DIR / "reviews"
