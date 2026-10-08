@@ -1,0 +1,43 @@
+name: build-macos
+
+# macOS 安装包构建（feature/mac-support）
+# 触发：push 到本分支（workflow_dispatch 仅默认分支可注册）
+# 产物：zentray_<ver>_macos_arm64.zip（.app 的 ditto zip，解压拖入 /Applications）→ release v0.7.2
+# 签名：ad-hoc（无开发者证书；首次打开需右键→打开）
+on:
+  push:
+    branches: [feature/mac-support]
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 安装依赖（含 macOS 平台层）
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[mac]" pyinstaller
+
+      - name: PyInstaller 打包 + ad-hoc 签名
+        # 不直接跑 scripts/build_mac.sh：其硬编码 python3，在 runner 上会落到系统
+        # Python 而非 setup-python 装好 PyInstaller 的环境
+        run: |
+          python -m PyInstaller zentray.spec --noconfirm
+          codesign --force --deep --sign - dist/ZenTray.app
+
+      - name: 打 zip 并上传到 release v0.7.2
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ver=$(grep -oP 'VERSION = "\K[^"]+' zentray/config.py)
+          zip="dist/zentray_${ver}_macos_arm64.zip"
+          ditto -c -k --keepParent dist/ZenTray.app "$zip"
+          gh release upload v0.7.2 "$zip" --clobber
