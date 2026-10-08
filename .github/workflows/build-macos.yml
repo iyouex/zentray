@@ -37,7 +37,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          ver=$(grep -oP 'VERSION = "\K[^"]+' zentray/config.py)
+          ver=$(sed -n 's/^VERSION = "\([^"]*\)".*/\1/p' zentray/config.py)
           zip="dist/zentray_${ver}_macos_arm64.zip"
           ditto -c -k --keepParent dist/ZenTray.app "$zip"
           gh release upload v0.7.2 "$zip" --clobber
