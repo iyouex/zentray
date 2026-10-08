@@ -27,9 +27,20 @@ def _entry_command(entry_path: Path) -> List[str]:
 
     Windows 直跑 .sh 会 WinError 193；找不到 bash 时给可操作的文案
     而不是让 CreateProcess 抛系统级错误。
+
+    PyInstaller 打包态 sys.executable 是 ZenTray GUI 二进制——单实例锁会把
+    启动插件变成「激活主窗口」，插件永远跑不起来；.py 改用系统解释器
+    （与 tray.py 托盘桥同策略；插件须仅依赖目标机解释器可用的库）。
     """
     suffix = entry_path.suffix.lower()
     if suffix == ".py":
+        if getattr(sys, "frozen", False):
+            py = shutil.which("python3") or shutil.which("python")
+            if py:
+                return [py, str(entry_path)]
+            raise RuntimeError(
+                "打包版运行 .py 插件需要系统 python3（未在 PATH 中找到）"
+            )
         return [sys.executable, str(entry_path)]
     if suffix == ".sh":
         bash = shutil.which("bash")
