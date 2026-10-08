@@ -26,11 +26,15 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[mac]" pyinstaller
 
-      - name: PyInstaller 打包 + ad-hoc 签名
+      - name: PyInstaller 打包 + 补 Helpers 符号链接 + ad-hoc 签名
         # 不直接跑 scripts/build_mac.sh：其硬编码 python3，在 runner 上会落到系统
-        # Python 而非 setup-python 装好 PyInstaller 的环境
+        # Python 而非 setup-python 装好 PyInstaller 的环境。
+        # QtWebEngineCore.framework 根补 Helpers→Versions/A/Helpers 符号链接
+        # （根下真实目录 codesign 报 unsealed；Qt 按根路径找 QtWebEngineProcess）。
         run: |
           python -m PyInstaller zentray.spec --noconfirm
+          fw="dist/ZenTray.app/Contents/Frameworks/PySide6/Qt/lib/QtWebEngineCore.framework"
+          ln -sfh Versions/A/Helpers "$fw/Helpers"
           codesign --force --deep --sign - dist/ZenTray.app
 
       - name: 校验 WebEngine 助手进程在包内（v0.7.4 曾缺失致启动 abort）
