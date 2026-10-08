@@ -2,7 +2,7 @@ name: build-windows
 
 # Windows 安装包构建（feature/win-taskbar-center）
 # 触发：push 到本分支（workflow_dispatch 仅默认分支可注册）
-# 产物：zentray_<ver>_windows_x64.zip（onedir 全目录 zip，免安装解压即用）→ release v0.7.2
+# 产物：zentray_<ver>_windows_x64.zip（onedir 全目录 zip，免安装解压即用）→ release v$ver
 on:
   push:
     branches: [feature/win-taskbar-center]
@@ -33,18 +33,15 @@ jobs:
       - name: PyInstaller 打包
         run: pyinstaller zentray.spec --noconfirm
 
-      - name: 打 zip（版本号取自 zentray/config.py）
+      - name: 打 zip 并上传到 release v$ver（版本号取自 zentray/config.py）
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           $ver = (Select-String -Path zentray/config.py -Pattern 'VERSION = "([^"]+)"').Matches[0].Groups[1].Value
           $zip = "zentray_${ver}_windows_x64.zip"
           Compress-Archive -Path dist/ZenTray -DestinationPath "dist/$zip"
-          "ZIP_NAME=$zip" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-
-      - name: 上传到 release v$ver
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release upload "v$ver" "dist/${env:ZIP_NAME}" --clobber
+          gh release upload "v$ver" "dist/$zip" --clobber
 
       - uses: actions/upload-artifact@v4
         if: always()
