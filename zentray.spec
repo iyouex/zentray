@@ -213,6 +213,10 @@ a = Analysis(
         'tkinter',
         # 饼图/番茄图标 v6 起用 QPainter 绘制，PIL 不再进包（省 PIL+pillow.libs ~15MB）
         'PIL',
+        # cryptography 仅被 urllib3.contrib.pyopenssl 可选路径静态牵入（运行时从不触发），
+        # 省 _rust.abi3.so + cffi ~14MB
+        'cryptography',
+        'cffi',
         'matplotlib',
         'numpy',
         'pandas',
