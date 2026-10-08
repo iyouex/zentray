@@ -866,6 +866,20 @@
                 </div>
               </a-card>
 
+              <a-card class="sys-card" :bordered="false" title="系统日历">
+                <div class="sys-row">
+                  <div>
+                    <div class="sys-title">把任务添加到系统日历</div>
+                    <div class="sys-desc">
+                      将带截止日期/提醒的活跃任务导出为日历事件（.ics），用系统日历应用打开，确认后写入系统日历。
+                    </div>
+                  </div>
+                  <a-button type="primary" :loading="calendarExporting" @click="onCalendarExport">
+                    导出任务到系统日历
+                  </a-button>
+                </div>
+              </a-card>
+
               <!-- Windows 任务栏中央按钮（设计 §3.0）；后端探测不到时整卡隐藏 -->
               <a-card v-if="taskbarLabelVisible !== null" class="sys-card" :bordered="false" title="任务栏显示（Windows）">
                 <div class="sys-row">
@@ -1110,6 +1124,7 @@ import {
   importBackup,
   installPluginPath,
   installPluginZip,
+  exportTasksCalendar,
   listBackups,
   listPluginRuns,
   listPlugins,
@@ -1148,6 +1163,7 @@ const includeOptions = ref([])
 const exportInclude = ref([])
 const exportLoading = ref(false)
 const archivePackLoading = ref(false)
+const calendarExporting = ref(false)
 const lastExportPath = ref('')
 const importPath = ref('')
 const importLoading = ref(false)
@@ -1945,6 +1961,19 @@ async function loadSystemStatus() {
   } catch (e) {
     // 系统 API 不可用时不影响其它设置
     autostartHint.value = e?.message || '无法读取系统状态'
+  }
+}
+
+/** 导出活跃任务为 .ics 并唤起系统日历应用（用户确认后写入系统日历） */
+async function onCalendarExport() {
+  calendarExporting.value = true
+  try {
+    const data = await exportTasksCalendar()
+    Message.success(`已生成 ${data.count} 条日历事件，请在系统日历应用中确认导入`)
+  } catch (e) {
+    Message.error(e?.response?.data?.error || e?.message || '导出失败')
+  } finally {
+    calendarExporting.value = false
   }
 }
 
