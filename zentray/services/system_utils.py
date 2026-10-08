@@ -2,6 +2,7 @@
 """
 系统级工具：单例锁、空闲检测、全局快捷键监听。
 """
+import ctypes
 import sys
 import logging
 
@@ -178,8 +179,6 @@ class _MacCarbonHotkey:
     )
 
     def __init__(self, hotkey_str: str, on_trigger):
-        import ctypes
-
         parsed = mac_hotkey_parse(hotkey_str)
         if parsed is None:
             raise ValueError(f"热键无法映射为 Carbon 键码: {hotkey_str}")
