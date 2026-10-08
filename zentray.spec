@@ -256,6 +256,21 @@ a = Analysis(
 a.binaries = _filter_toc(a.binaries)
 a.datas = _filter_toc(a.datas)
 
+if sys.platform == 'darwin':
+    # PyInstaller 的 PySide6 钩子只收 QtWebEngineCore 的 dylib，不带
+    # Helpers/ 里的 QtWebEngineProcess.app —— 主窗口是 WebEngine，启动即
+    # abort（v0.7.4 macOS 实测）。整棵 Helpers 子树收入 datas，路径对齐
+    # Qt 默认搜索位（Contents/Frameworks/PySide6/Qt/lib/...framework/Helpers）。
+    import PySide6
+    _helpers = os.path.join(
+        os.path.dirname(PySide6.__file__),
+        'Qt', 'lib', 'QtWebEngineCore.framework', 'Helpers',
+    )
+    if os.path.isdir(_helpers):
+        a.datas += Tree(_helpers, prefix='PySide6/Qt/lib/QtWebEngineCore.framework/Helpers')
+    else:
+        raise SystemExit(f'[zentray.spec] 缺 QtWebEngineProcess 助手目录: {_helpers}')
+
 pyz = PYZ(a.pure, a.zipped_data)
 
 # ---------- 可执行文件（onedir：EXE 壳 + COLLECT 目录树） ----------

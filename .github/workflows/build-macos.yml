@@ -33,6 +33,10 @@ jobs:
           python -m PyInstaller zentray.spec --noconfirm
           codesign --force --deep --sign - dist/ZenTray.app
 
+      - name: 校验 WebEngine 助手进程在包内（v0.7.4 曾缺失致启动 abort）
+        run: |
+          test -x "dist/ZenTray.app/Contents/Frameworks/PySide6/Qt/lib/QtWebEngineCore.framework/Helpers/QtWebEngineProcess.app/Contents/MacOS/QtWebEngineProcess"
+
       - name: 打 zip 并上传到 release v$ver
         env:
           GH_TOKEN: ${{ github.token }}
