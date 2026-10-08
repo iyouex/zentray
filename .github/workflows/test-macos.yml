@@ -1,8 +1,10 @@
 name: test-macos
 
 # macOS 平台层自动化测试（feature/mac-support）
-# 触发：手动 workflow_dispatch
+# 触发：push 到本分支（workflow_dispatch 仅默认分支可注册，feature 分支用 push 触发）
 on:
+  push:
+    branches: [feature/mac-support]
   workflow_dispatch:
 
 jobs:
