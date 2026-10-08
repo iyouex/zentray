@@ -41,10 +41,10 @@ jobs:
           Compress-Archive -Path dist/ZenTray -DestinationPath "dist/$zip"
           "ZIP_NAME=$zip" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
-      - name: 上传到 release v0.7.2
+      - name: 上传到 release v$ver
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload v0.7.2 "dist/${env:ZIP_NAME}" --clobber
+        run: gh release upload "v$ver" "dist/${env:ZIP_NAME}" --clobber
 
       - uses: actions/upload-artifact@v4
         if: always()
