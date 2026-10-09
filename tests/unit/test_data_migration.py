@@ -1,4 +1,5 @@
 """跨设备迁移：导出 / 导入替换 round-trip。"""
+
 from __future__ import annotations
 
 import json
@@ -107,6 +108,220 @@ def test_list_include_options():
     assert env["default"] is False
 
 
+# —— 选择性恢复：include 子键 + 分区替换 + 预览 ——
+
+
+def _seed_rich(data_dir: Path) -> None:
+    """分区测试数据：一次性/周期任务、多节设置、plan/review 复盘、跨月归档、双插件。"""
+    data_dir.mkdir(parents=True, exist_ok=True)
+    (data_dir / "active_tasks.json").write_text(
+        json.dumps(
+            [
+                {"id": "a1", "title": "一次性-备份", "task_type": "one-time"},
+                {"id": "a2", "title": "一次性-备份2", "task_type": "one-time"},
+                {
+                    "id": "p1",
+                    "title": "周期-备份",
+                    "task_type": "periodic_instance",
+                    "template_id": "tpl-x",
+                },
+            ],
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (data_dir / "periodic_templates.json").write_text(
+        json.dumps([{"id": "tpl-x", "title": "模板X"}], ensure_ascii=False),
+        encoding="utf-8",
+    )
+    (data_dir / "settings.json").write_text(
+        json.dumps({"ai": {"model": "gpt"}, "backup": {"keep": 3}, "polling": {"interval": 5}}),
+        encoding="utf-8",
+    )
+    (data_dir / "activity.jsonl").write_text("{}\n", encoding="utf-8")
+    arch = data_dir / "archive"
+    arch.mkdir()
+    (arch / "2026-01-05.log").write_text("jan\n", encoding="utf-8")
+    (arch / "2026-02-10.log").write_text("feb\n", encoding="utf-8")
+    rev = data_dir / "reviews"
+    rev.mkdir()
+    (rev / "plan-2026-01-01.md").write_text("plan\n", encoding="utf-8")
+    (rev / "review-2026-01-01.md").write_text("review\n", encoding="utf-8")
+    for name in ("foo", "bar"):
+        d = data_dir / "plugins" / name
+        d.mkdir(parents=True)
+        (d / "plugin.json").write_text(f'{{"name": "{name}"}}', encoding="utf-8")
+    (data_dir / ".env").write_text("AI_API_KEY=secret\n", encoding="utf-8")
+
+
+def _all_keys() -> list:
+    return list(mig.INCLUDE_MAP.keys())
+
+
+def test_parse_include_entries():
+    assert mig._parse_include_entry("tasks") == ("tasks", None)
+    assert mig._parse_include_entry("tasks:one-time") == ("tasks", "one-time")
+    assert mig._parse_include_entry("tasks:bogus") is None  # 未知 task_type
+    assert mig._parse_include_entry("settings:ai") == ("settings", "ai")
+    assert mig._parse_include_entry("archive:2026-08") == ("archive", "2026-08")
+    assert mig._parse_include_entry("archive:20268") is None  # 非月份
+    assert mig._parse_include_entry("plugins:My-Dir") == ("plugins", "My-Dir")  # 大小写保留
+    assert mig._parse_include_entry("history:sub") is None  # 不支持子键的类别
+    # 裸键吞并同键子键；去重
+    assert mig.parse_include_entries(["tasks:one-time", "tasks", "tasks:one-time"]) == [
+        ("tasks", None)
+    ]
+
+
+def test_import_tasks_partition(tmp_path: Path):
+    backup_root = tmp_path / "backup"
+    live = tmp_path / "live"
+    _seed_rich(backup_root)
+    _seed_rich(live)
+    # 本地：一次性不同、周期不同
+    (live / "active_tasks.json").write_text(
+        json.dumps(
+            [
+                {"id": "L1", "title": "一次性-本地", "task_type": "one-time"},
+                {
+                    "id": "L2",
+                    "title": "周期-本地",
+                    "task_type": "periodic_instance",
+                    "template_id": "tpl-y",
+                },
+            ],
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    exported = mig.create_export_zip(["tasks"], data_dir=backup_root)
+    assert exported.ok
+
+    result = mig.import_replace(
+        exported.path, ["tasks:one-time"], data_dir=live, make_safety_backup=False
+    )
+    assert result.ok, result.message
+    assert result.include == ["tasks:one-time"]
+    tasks = json.loads((live / "active_tasks.json").read_text(encoding="utf-8"))
+    ids = {t["id"] for t in tasks}
+    # 一次性整块换成备份的；周期实例保留本地
+    assert ids == {"a1", "a2", "L2"}
+    assert result.details["tasks"] == "replaced_partition"
+
+
+def test_import_settings_partition(tmp_path: Path):
+    backup_root = tmp_path / "backup"
+    live = tmp_path / "live"
+    _seed_rich(backup_root)
+    _seed_rich(live)
+    # 本地设置：ai 不同、多一个 appearance 节
+    (live / "settings.json").write_text(
+        json.dumps({"ai": {"model": "local"}, "appearance": {"skin": "neo"}}),
+        encoding="utf-8",
+    )
+    exported = mig.create_export_zip(["settings"], data_dir=backup_root)
+    assert exported.ok
+
+    result = mig.import_replace(
+        exported.path, ["settings:ai"], data_dir=live, make_safety_backup=False
+    )
+    assert result.ok, result.message
+    settings = json.loads((live / "settings.json").read_text(encoding="utf-8"))
+    assert settings["ai"] == {"model": "gpt"}  # 勾选节替换
+    assert settings["appearance"] == {"skin": "neo"}  # 未勾选节保持
+    assert "backup" not in settings and "polling" not in settings  # 未勾选节不带入
+
+
+def test_import_dir_partitions(tmp_path: Path):
+    backup_root = tmp_path / "backup"
+    live = tmp_path / "live"
+    _seed_rich(backup_root)
+    _seed_rich(live)
+    # 本地插件：foo 内容不同 + 多一个 baz；复盘/归档内容改写以验证分区边界
+    (live / "plugins" / "foo" / "plugin.json").write_text('{"name": "local-foo"}', encoding="utf-8")
+    (live / "plugins" / "baz").mkdir(parents=True, exist_ok=True)
+    (live / "plugins" / "baz" / "plugin.json").write_text("{}", encoding="utf-8")
+    (live / "reviews" / "plan-2026-01-01.md").write_text("local-plan", encoding="utf-8")
+    (live / "reviews" / "review-2026-01-01.md").write_text("local-review", encoding="utf-8")
+    (live / "archive" / "2026-01-05.log").write_text("local-jan\n", encoding="utf-8")
+    (live / "archive" / "2026-02-10.log").write_text("local-feb\n", encoding="utf-8")
+    exported = mig.create_export_zip(["plugins", "reviews", "archive"], data_dir=backup_root)
+    assert exported.ok
+
+    result = mig.import_replace(
+        exported.path,
+        ["plugins:foo", "reviews:plan", "archive:2026-01"],
+        data_dir=live,
+        make_safety_backup=False,
+    )
+    assert result.ok, result.message
+    # plugins:foo 换成备份内容，未勾选的 bar/baz 均保持本地不动
+    foo = (live / "plugins" / "foo" / "plugin.json").read_text(encoding="utf-8")
+    assert foo == '{"name": "foo"}'
+    bar = (live / "plugins" / "bar" / "plugin.json").read_text(encoding="utf-8")
+    assert bar == '{"name": "bar"}'
+    assert (live / "plugins" / "baz" / "plugin.json").exists()
+    # reviews:plan 替换为备份内容，review 保持本地
+    assert (live / "reviews" / "plan-2026-01-01.md").read_text(encoding="utf-8") == "plan\n"
+    assert (live / "reviews" / "review-2026-01-01.md").read_text(encoding="utf-8") == "local-review"
+    # archive:2026-01 替换，2026-02 保持本地
+    assert (live / "archive" / "2026-01-05.log").read_text(encoding="utf-8") == "jan\n"
+    assert (live / "archive" / "2026-02-10.log").read_text(encoding="utf-8") == "local-feb\n"
+    assert set(result.include) == {"plugins:foo", "reviews:plan", "archive:2026-01"}
+
+
+def test_import_bare_key_subsumes_subkey(tmp_path: Path):
+    backup_root = tmp_path / "backup"
+    live = tmp_path / "live"
+    _seed_rich(backup_root)
+    _seed_rich(live)
+    exported = mig.create_export_zip(["tasks"], data_dir=backup_root)
+    result = mig.import_replace(
+        exported.path,
+        ["tasks", "tasks:one-time"],
+        data_dir=live,
+        make_safety_backup=False,
+    )
+    assert result.ok
+    tasks = json.loads((live / "active_tasks.json").read_text(encoding="utf-8"))
+    assert {t["id"] for t in tasks} == {"a1", "a2", "p1"}  # 整文件替换
+    assert result.include == ["tasks"]
+
+
+def test_preview_import(tmp_path: Path):
+    backup_root = tmp_path / "backup"
+    _seed_rich(backup_root)
+    exported = mig.create_export_zip(_all_keys(), data_dir=backup_root)
+    assert exported.ok
+
+    data = mig.preview_import(exported.path)
+    assert data["ok"], data.get("message")
+    cats = {c["key"]: c for c in data["categories"]}
+    assert cats["tasks"]["counts"] == {"one-time": 2, "periodic_instance": 1}
+    assert cats["tasks"]["templates"] == [{"template_id": "tpl-x", "title": "模板X", "count": 1}]
+    assert cats["templates"]["count"] == 1
+    assert cats["settings"]["sections"] == ["ai", "backup", "polling"]
+    assert cats["reviews"]["counts"]["plan"] == 1
+    assert cats["reviews"]["counts"]["review"] == 1
+    assert cats["archive"]["months"] == [
+        {"month": "2026-01", "files": 1},
+        {"month": "2026-02", "files": 1},
+    ]
+    assert cats["plugins"]["plugins"] == ["bar", "foo"]
+    assert cats["env"]["present"] is True
+    assert data["manifest"]["include"]  # manifest 摘要带出
+
+    # 缺密码 / 错密码
+    enc = mig.create_export_zip(["tasks"], data_dir=backup_root, password="pw")
+    assert enc.ok
+    no_pw = mig.preview_import(enc.path)
+    assert not no_pw["ok"] and no_pw["needs_password"]
+    bad = mig.preview_import(enc.path, password="wrong")
+    assert not bad["ok"] and "密码错误" in bad["message"]
+    good = mig.preview_import(enc.path, password="pw")
+    assert good["ok"]
+
+
 # —— 加密（AES-256）/ 另存为 / 快照 / 轮转 ——
 
 
@@ -212,9 +427,7 @@ def test_prune_only_auto_prefix(tmp_path: Path):
     bdir = tmp_path / "bk"
     # 显式 out_path：秒级时间戳在同秒内会同名互覆
     for i in range(3):
-        mig.create_export_zip(
-            data_dir=root, out_path=bdir / f"{mig.AUTO_PREFIX}-{i}.zip"
-        )
+        mig.create_export_zip(data_dir=root, out_path=bdir / f"{mig.AUTO_PREFIX}-{i}.zip")
     manual = mig.create_export_zip(data_dir=root, out_path=bdir / "zentray-backup-m.zip")
     assert manual.ok
     # keep=0 不轮转

@@ -1,14 +1,16 @@
 """跨设备数据迁移：导出 / 导入（替换）/ 归档打包 / 自动备份轮转。"""
+
 from __future__ import annotations
 
 import json
 import logging
+import re
 import shutil
 import zipfile
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Sequence, Set
+from typing import Dict, List, Optional, Sequence, Set, Tuple, Union
 
 import pyzipper
 
@@ -51,6 +53,31 @@ DEFAULT_INCLUDE: List[str] = [
     "reviews",
 ]
 
+# —— 选择性恢复：include 子键（key:sub）——
+# tasks 按 task_type 分区 / settings 按顶层节 / reviews 按文件名前缀；
+# archive 按月份（YYYY-MM，动态）/ plugins 按插件目录名（动态，对包内容校验）
+SETTINGS_SECTIONS: List[str] = [
+    "polling",
+    "pomodoro",
+    "nightly",
+    "notification",
+    "ai",
+    "categories",
+    "quick_add",
+    "appearance",
+    "backup",
+    "ops",
+]
+TASK_TYPES: List[str] = ["one-time", "periodic_instance"]
+REVIEW_PREFIXES: List[str] = ["plan", "review"]
+
+_MONTH_RE = re.compile(r"^\d{4}-\d{2}$")
+_STATIC_SUBKEYS: Dict[str, Set[str]] = {
+    "tasks": set(TASK_TYPES),
+    "settings": set(SETTINGS_SECTIONS),
+    "reviews": set(REVIEW_PREFIXES),
+}
+
 EXPORTS_DIR_NAME = "exports"
 
 
@@ -84,6 +111,7 @@ def exports_dir(data_dir: Optional[Path] = None) -> Path:
 
 
 def normalize_include(include: Optional[Sequence[str]]) -> List[str]:
+    """导出侧：仅接受裸键（整类备份）。"""
     if not include:
         return list(DEFAULT_INCLUDE)
     seen: Set[str] = set()
@@ -94,6 +122,50 @@ def normalize_include(include: Optional[Sequence[str]]) -> List[str]:
             seen.add(key)
             out.append(key)
     return out or list(DEFAULT_INCLUDE)
+
+
+def _parse_include_entry(raw: str) -> Optional[Tuple[str, Optional[str]]]:
+    """'tasks' → ('tasks', None)；'tasks:one-time' → ('tasks', 'one-time')。
+    plugins（目录名）/archive（月份）子键只做形状校验，存在性对包内容动态校验。"""
+    text = str(raw or "").strip()
+    if not text:
+        return None
+    if ":" in text:
+        key, _, sub = text.partition(":")
+        key = key.strip().lower()
+        sub = sub.strip()
+        if not key or not sub:
+            return None
+    else:
+        key, sub = text.lower(), None
+    if key not in INCLUDE_MAP:
+        return None
+    if sub is not None:
+        if key in _STATIC_SUBKEYS and sub not in _STATIC_SUBKEYS[key]:
+            return None
+        if key == "archive" and not _MONTH_RE.match(sub):
+            return None
+        if key not in _STATIC_SUBKEYS and key not in ("archive", "plugins"):
+            return None
+    return key, sub
+
+
+def parse_include_entries(include: Optional[Sequence[str]]) -> List[Tuple[str, Optional[str]]]:
+    """导入侧：解析 (key, sub) 列表，去重；裸键吞并同键子键。"""
+    out: List[Tuple[str, Optional[str]]] = []
+    seen: Set[Tuple[str, Optional[str]]] = set()
+    for raw in include or []:
+        entry = _parse_include_entry(raw)
+        if entry is None or entry in seen:
+            continue
+        seen.add(entry)
+        out.append(entry)
+    bare = {k for k, s in out if s is None}
+    return [e for e in out if e[1] is None or e[0] not in bare]
+
+
+def _fmt_entry(key: str, sub: Optional[str]) -> str:
+    return f"{key}:{sub}" if sub is not None else key
 
 
 def _stamp() -> str:
@@ -222,6 +294,113 @@ def read_manifest(zip_path: Path, password: Optional[str] = None) -> Optional[di
     return None
 
 
+def _probe_encrypted(src: Path, password: Optional[str]) -> Optional[str]:
+    """加密包密码探针；返回错误 message 或 None（未加密直通）。
+    pyzipper 带 HMAC 校验，错密码抛 RuntimeError 而非解出脏数据。"""
+    if not is_encrypted_zip(src):
+        return None
+    if not password:
+        return "备份已加密，请输入密码"
+    try:
+        with pyzipper.AESZipFile(src, "r") as zf:
+            zf.setpassword(password.encode("utf-8"))
+            member = next((n for n in zf.namelist() if not n.endswith("/")), None)
+            if member:
+                zf.read(member)
+    except RuntimeError:
+        return "密码错误或备份文件损坏"
+    return None
+
+
+def _entry_in_zip(entry: Tuple[str, Optional[str]], names: Set[str]) -> bool:
+    key, sub = entry
+    rel = INCLUDE_MAP[key]
+    if sub is None:
+        return rel in names or any(n.startswith(rel.rstrip("/") + "/") for n in names)
+    if key in ("tasks", "settings"):
+        return rel in names
+    if key in ("reviews", "archive"):
+        return any(n.startswith(f"{rel}/{sub}-") for n in names)
+    # plugins：目录成员
+    return any(n.startswith(f"{rel}/{sub}/") for n in names)
+
+
+def _replace_tasks_partition(zf, root: Path, rel: str, types: Set[str]) -> str:
+    """分区替换：勾选类型的任务整块换成备份内容，其余类型保持本地。"""
+    backup = json.loads(zf.read(rel).decode("utf-8"))
+    local_path = root / rel
+    local: list = []
+    if local_path.exists():
+        try:
+            local = json.loads(local_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return "local_read_error"  # 本地损坏时不盲目覆盖
+    keep = [t for t in local if (t.get("task_type") or "one-time") not in types]
+    picked = [t for t in backup if (t.get("task_type") or "one-time") in types]
+    local_path.write_text(json.dumps(keep + picked, ensure_ascii=False, indent=2), encoding="utf-8")
+    return "replaced_partition"
+
+
+def _replace_settings_partition(zf, root: Path, rel: str, sections: List[str]) -> str:
+    backup = json.loads(zf.read(rel).decode("utf-8"))
+    applied = [s for s in sections if s in backup]
+    if not applied:
+        return "missing_in_zip"
+    local_path = root / rel
+    local: dict = {}
+    if local_path.exists():
+        try:
+            local = json.loads(local_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return "local_read_error"
+    local.update({s: backup[s] for s in applied})
+    local_path.write_text(json.dumps(local, ensure_ascii=False, indent=2), encoding="utf-8")
+    return "replaced_partition"
+
+
+def _replace_dir_partition(zf, root: Path, rel: str, subs: Sequence[str], *, exact: bool) -> str:
+    """目录分区替换：plugins 按目录名精确匹配；reviews/archive 按前缀 sub- 匹配。"""
+
+    def _hit(name: str) -> bool:
+        first = name[len(rel) + 1 :].split("/", 1)[0]
+        if exact:
+            return first in set(subs)
+        return any(first.startswith(s + "-") for s in subs)
+
+    def _rm(p: Path) -> None:
+        if p.is_dir():
+            shutil.rmtree(p, ignore_errors=True)
+        else:
+            try:
+                p.unlink()
+            except OSError:
+                pass
+
+    members = [
+        n for n in zf.namelist() if n.startswith(rel + "/") and not n.endswith("/") and _hit(n)
+    ]
+    base = root / rel
+    if base.is_dir():
+        for p in base.iterdir():
+            if _hit(f"{rel}/{p.name}"):
+                _rm(p)
+    for name in members:
+        target = root / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with zf.open(name) as src_f, open(target, "wb") as out_f:
+            shutil.copyfileobj(src_f, out_f)
+    return "replaced_partition"
+
+
+def _import_partition(zf, root: Path, key: str, subs: List[str]) -> str:
+    rel = INCLUDE_MAP[key]
+    if key == "tasks":
+        return _replace_tasks_partition(zf, root, rel, set(subs))
+    if key == "settings":
+        return _replace_settings_partition(zf, root, rel, subs)
+    return _replace_dir_partition(zf, root, rel, subs, exact=(key == "plugins"))
+
+
 def import_replace(
     zip_path: str | Path,
     include: Optional[Sequence[str]] = None,
@@ -232,6 +411,7 @@ def import_replace(
 ) -> MigrationResult:
     """
     替换模式导入：按 include 覆盖 DATA_DIR 对应文件。
+    支持子键（tasks:one-time 等）做分区替换；裸键仍为整类替换。
     导入前默认对当前数据做安全备份（明文）。
     """
     root = Path(data_dir) if data_dir else DATA_DIR
@@ -240,23 +420,9 @@ def import_replace(
         return MigrationResult(ok=False, message=f"备份文件不存在: {src}")
 
     # 检测顺序：flag_bits 加密位 → 密码 → manifest（加密包的 manifest 本身是密文）
-    encrypted = is_encrypted_zip(src)
-    if encrypted and not password:
-        return MigrationResult(ok=False, message="备份已加密，请输入密码", path=str(src))
-    if encrypted:
-        # 密码探针：读任一成员（pyzipper 带 HMAC 校验，错密码抛 RuntimeError 而非解出脏数据）
-        try:
-            with pyzipper.AESZipFile(src, "r") as zf:
-                zf.setpassword(password.encode("utf-8"))
-                member = next(
-                    (n for n in zf.namelist() if not n.endswith("/")), None
-                )
-                if member:
-                    zf.read(member)
-        except RuntimeError:
-            return MigrationResult(
-                ok=False, message="密码错误或备份文件损坏", path=str(src)
-            )
+    probe = _probe_encrypted(src, password)
+    if probe:
+        return MigrationResult(ok=False, message=probe, path=str(src))
 
     try:
         with pyzipper.AESZipFile(src, "r") as zf:
@@ -275,26 +441,28 @@ def import_replace(
             message=f"不支持的备份格式: {manifest.get('format')}",
         )
 
-    # 决定导入键：请求 ∩ 包内实际存在
+    # 决定导入项：请求 ∩ 包内实际存在（裸键或子键）
     if include:
-        keys = normalize_include(include)
+        entries = parse_include_entries(include)
     elif manifest and manifest.get("include"):
-        keys = normalize_include(manifest["include"])
+        entries = parse_include_entries(manifest["include"])
     else:
-        keys = list(DEFAULT_INCLUDE)
+        entries = [(k, None) for k in DEFAULT_INCLUDE]
+    entries = entries or [(k, None) for k in DEFAULT_INCLUDE]
 
-    available: List[str] = []
-    for key in keys:
-        rel = INCLUDE_MAP[key]
-        if rel in names or any(n.startswith(rel.rstrip("/") + "/") for n in names):
-            available.append(key)
+    available = [e for e in entries if _entry_in_zip(e, names)]
     if not available:
-        return MigrationResult(ok=False, message="备份中没有可导入的数据项", include=keys)
+        return MigrationResult(
+            ok=False,
+            message="备份中没有可导入的数据项",
+            include=[_fmt_entry(k, s) for k, s in entries],
+        )
 
     safety_path: Optional[str] = None
     if make_safety_backup:
+        # 安全备份按父键整类快照（子键恢复也保留完整本地现场）
         safety = create_export_zip(
-            available,
+            sorted({k for k, _ in available}),
             data_dir=root,
             prefix="zentray-pre-import",
         )
@@ -308,7 +476,8 @@ def import_replace(
         with pyzipper.AESZipFile(src, "r") as zf:
             if password:
                 zf.setpassword(password.encode("utf-8"))
-            for key in available:
+            # 裸键整类替换
+            for key, _ in [e for e in available if e[1] is None]:
                 rel = INCLUDE_MAP[key]
                 dest = root / rel
                 # 清理目标
@@ -319,9 +488,7 @@ def import_replace(
 
                 # 提取
                 members = [
-                    n
-                    for n in zf.namelist()
-                    if n == rel or n.startswith(rel.rstrip("/") + "/")
+                    n for n in zf.namelist() if n == rel or n.startswith(rel.rstrip("/") + "/")
                 ]
                 if not members:
                     details[key] = "missing_in_zip"
@@ -347,11 +514,19 @@ def import_replace(
                         shutil.copyfileobj(src_f, out_f)
                 details[key] = "replaced_dir"
 
+            # 子键分区替换（同键合并执行）
+            parts: Dict[str, List[str]] = {}
+            for k, s in available:
+                if s is not None:
+                    parts.setdefault(k, []).append(s)
+            for key, subs in parts.items():
+                details[key] = _import_partition(zf, root, key, subs)
+
         return MigrationResult(
             ok=True,
             message="导入成功（替换）。建议刷新任务列表或重启应用。",
             path=str(src),
-            include=available,
+            include=[_fmt_entry(k, s) for k, s in available],
             safety_backup=safety_path,
             details=details,
         )
@@ -360,10 +535,132 @@ def import_replace(
         return MigrationResult(
             ok=False,
             message=f"导入失败: {e}",
-            include=available,
+            include=[_fmt_entry(k, s) for k, s in available],
             safety_backup=safety_path,
             details=details,
         )
+
+
+def _safe_json(data: Optional[bytes]) -> Optional[Union[list, dict]]:
+    if data is None:
+        return None
+    try:
+        return json.loads(data.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        return None
+
+
+def _preview_categories(names: Set[str], blobs: Dict[str, bytes]) -> List[dict]:
+    """包内各类/子类计数，供前端渲染选择性恢复勾选树。"""
+    templates = _safe_json(blobs.get("periodic_templates.json"))
+    tpl_title = {t.get("id"): t.get("title", "") for t in (templates or []) if isinstance(t, dict)}
+
+    out: List[dict] = []
+    for key, rel in INCLUDE_MAP.items():
+        present = rel in names or any(n.startswith(rel.rstrip("/") + "/") for n in names)
+        info: dict = {"key": key, "present": present}
+        if present:
+            if key == "tasks":
+                tasks = _safe_json(blobs.get(rel)) or []
+                counts = {"one-time": 0, "periodic_instance": 0}
+                by_tpl: Dict[str, int] = {}
+                for t in tasks:
+                    if not isinstance(t, dict):
+                        continue
+                    tt = t.get("task_type") or "one-time"
+                    if tt in counts:
+                        counts[tt] += 1
+                    if tt == "periodic_instance":
+                        tid = str(t.get("template_id") or "(无模板)")
+                        by_tpl[tid] = by_tpl.get(tid, 0) + 1
+                info["counts"] = counts
+                info["templates"] = [
+                    {"template_id": tid, "title": tpl_title.get(tid, ""), "count": c}
+                    for tid, c in sorted(by_tpl.items())
+                ]
+            elif key == "templates":
+                info["count"] = len(_safe_json(blobs.get(rel)) or [])
+            elif key == "settings":
+                data = _safe_json(blobs.get(rel))
+                info["sections"] = sorted(data.keys()) if isinstance(data, dict) else []
+            elif key == "reviews":
+                counts: Dict[str, int] = {p: 0 for p in REVIEW_PREFIXES}
+                counts["other"] = 0
+                for n in names:
+                    if not n.startswith("reviews/"):
+                        continue
+                    first = n[len("reviews/") :].split("/")[0]
+                    if first.startswith("plan-"):
+                        counts["plan"] += 1
+                    elif first.startswith("review-"):
+                        counts["review"] += 1
+                    elif first:
+                        counts["other"] += 1
+                info["counts"] = counts
+            elif key == "archive":
+                months: Dict[str, int] = {}
+                for n in names:
+                    if not n.startswith("archive/") or n.endswith("/"):
+                        continue
+                    month = n[len("archive/") :][:7]
+                    if _MONTH_RE.match(month):
+                        months[month] = months.get(month, 0) + 1
+                info["months"] = [{"month": m, "files": c} for m, c in sorted(months.items())]
+            elif key == "plugins":
+                dirs = {
+                    n[len("plugins/") :].split("/")[0]
+                    for n in names
+                    if n.startswith("plugins/") and not n.endswith("/")
+                }
+                info["plugins"] = sorted(d for d in dirs if d)
+        out.append(info)
+    return out
+
+
+def preview_import(zip_path: str | Path, *, password: Optional[str] = None) -> dict:
+    """导入预览（只读）：包内各类/子类计数 + manifest 摘要。"""
+    src = Path(zip_path).expanduser().resolve()
+    if not src.is_file():
+        return {"ok": False, "message": f"备份文件不存在: {src}"}
+
+    probe = _probe_encrypted(src, password)
+    if probe:
+        return {"ok": False, "message": probe, "needs_password": True}
+
+    try:
+        with pyzipper.AESZipFile(src, "r") as zf:
+            if password:
+                zf.setpassword(password.encode("utf-8"))
+            names = set(zf.namelist())
+            blobs: Dict[str, bytes] = {}
+            for rel in (
+                "active_tasks.json",
+                "periodic_templates.json",
+                "settings.json",
+            ):
+                if rel in names:
+                    blobs[rel] = zf.read(rel)
+    except zipfile.BadZipFile:
+        return {"ok": False, "message": "不是有效的 zip 文件"}
+    except Exception as e:
+        return {"ok": False, "message": f"无法打开备份: {e}"}
+
+    manifest = read_manifest(src, password=password)
+    return {
+        "ok": True,
+        "path": str(src),
+        "encrypted": is_encrypted_zip(src),
+        "manifest": (
+            {
+                "created_at": manifest.get("created_at"),
+                "app_version": manifest.get("app_version"),
+                "include": manifest.get("include") or [],
+            }
+            if manifest
+            else None
+        ),
+        "categories": _preview_categories(names, blobs),
+    }
 
 
 def backup_dir_from_settings() -> Path:
@@ -417,18 +714,18 @@ def list_backups(*, backup_dir: Optional[Path] = None) -> List[dict]:
                 "name": p.name,
                 "path": str(p),
                 "size": st.st_size,
-                "mtime": datetime.fromtimestamp(st.st_mtime).isoformat(
-                    timespec="seconds"
-                ),
+                "mtime": datetime.fromtimestamp(st.st_mtime).isoformat(timespec="seconds"),
                 "encrypted": encrypted,
                 "kind": _kind_of(p.name),
-                "manifest": {
-                    "created_at": manifest.get("created_at"),
-                    "app_version": manifest.get("app_version"),
-                    "include": manifest.get("include") or [],
-                }
-                if manifest
-                else None,
+                "manifest": (
+                    {
+                        "created_at": manifest.get("created_at"),
+                        "app_version": manifest.get("app_version"),
+                        "include": manifest.get("include") or [],
+                    }
+                    if manifest
+                    else None
+                ),
             }
         )
     return items

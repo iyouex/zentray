@@ -2,6 +2,7 @@
 """
 API 处理函数 —— 仅转调既有服务，不重写业务规则。
 """
+
 from __future__ import annotations
 
 import json
@@ -240,14 +241,8 @@ def handle_request(
             return _install_plugin_zip(body or {})
         if method == "POST" and path == "/api/plugins/preview-zip":
             return _preview_plugin_zip(body or {})
-        if (
-            method == "POST"
-            and path.startswith("/api/plugins/")
-            and path.endswith("/authorize")
-        ):
-            return _authorize_plugin(
-                path[len("/api/plugins/") : -len("/authorize")], body or {}
-            )
+        if method == "POST" and path.startswith("/api/plugins/") and path.endswith("/authorize"):
+            return _authorize_plugin(path[len("/api/plugins/") : -len("/authorize")], body or {})
         if method == "GET" and path == "/api/plugins":
             return 200, _plugins_list()
         if method == "POST" and path == "/api/plugins/validate":
@@ -301,6 +296,8 @@ def handle_request(
             return _system_export(body or {})
         if method == "POST" and path == "/api/system/import":
             return _system_import(body or {})
+        if method == "POST" and path == "/api/system/import-preview":
+            return _system_import_preview(body or {})
         if method == "POST" and path == "/api/system/archive/pack":
             return _system_archive_pack()
         if method == "POST" and path == "/api/system/calendar-export":
@@ -328,9 +325,7 @@ def _task_sub(method: str, rest: str, body: dict) -> tuple[int, dict]:
             snooze = int(body.get("snooze_minutes") or 10)
         except (TypeError, ValueError):
             snooze = 10
-        task = ts.handle_reminder_action(
-            parts[0], action, str(body.get("fire_key") or ""), snooze
-        )
+        task = ts.handle_reminder_action(parts[0], action, str(body.get("fire_key") or ""), snooze)
         if task is None:
             return 404, {"error": "task not found"}
         _ctx.on_changed()
@@ -393,7 +388,11 @@ def _category_names() -> list:
     for p in cats.primary_list or []:
         names.append(p.name)
         for s in p.secondaries or []:
-            names.append(f"{p.name}{cats.level_separator}{s.name}" if cats.level_separator else f"{p.name}-{s.name}")
+            names.append(
+                f"{p.name}{cats.level_separator}{s.name}"
+                if cats.level_separator
+                else f"{p.name}-{s.name}"
+            )
     return names
 
 
@@ -909,21 +908,21 @@ def _extract_plugin_zip(body: dict) -> tuple[Optional[Path], Optional[Path], Opt
     if zp.suffix.lower() != ".zip":
         return None, None, {"ok": False, "error": "仅支持 .zip 包"}
     if not _path_in_allowed_roots(zp):
-        return None, None, {
-            "ok": False,
-            "error": "路径不在允许范围内（用户主目录 / 数据目录 / 项目或内置插件目录）",
-        }
+        return (
+            None,
+            None,
+            {
+                "ok": False,
+                "error": "路径不在允许范围内（用户主目录 / 数据目录 / 项目或内置插件目录）",
+            },
+        )
 
-    tmp_base = (
-        DATA_DIR / "tmp" / f"plugin_install_{zp.stem}_{int(time.time() * 1000)}"
-    ).resolve()
+    tmp_base = (DATA_DIR / "tmp" / f"plugin_install_{zp.stem}_{int(time.time() * 1000)}").resolve()
     tmp_base.mkdir(parents=True, exist_ok=True)
     # 逐成员解压 + zip-slip 防护
     with zipfile.ZipFile(zp) as zf:
         for member in zf.infolist():
-            if member.filename.startswith(("/", "\\")) or ".." in Path(
-                member.filename
-            ).parts:
+            if member.filename.startswith(("/", "\\")) or ".." in Path(member.filename).parts:
                 return None, None, {"ok": False, "error": f"非法 zip 成员: {member.filename}"}
             dest = (tmp_base / member.filename).resolve()
             try:
@@ -937,7 +936,7 @@ def _extract_plugin_zip(body: dict) -> tuple[Optional[Path], Optional[Path], Opt
                 with zf.open(member) as src, open(dest, "wb") as dst:
                     shutil.copyfileobj(src, dst)
                 # 恢复可执行位（open("wb") 按默认 umask 落盘，丢了 +x）
-                if ((member.external_attr >> 16) & 0o111):
+                if (member.external_attr >> 16) & 0o111:
                     try:
                         dest.chmod(dest.stat().st_mode | 0o111)
                     except OSError:
@@ -946,16 +945,18 @@ def _extract_plugin_zip(body: dict) -> tuple[Optional[Path], Optional[Path], Opt
     # 定位 plugin.yaml：根目录或唯一一级子目录
     root_dir = tmp_base
     if not (root_dir / "plugin.yaml").is_file():
-        subs = [
-            d for d in tmp_base.iterdir() if d.is_dir() and (d / "plugin.yaml").is_file()
-        ]
+        subs = [d for d in tmp_base.iterdir() if d.is_dir() and (d / "plugin.yaml").is_file()]
         if len(subs) == 1:
             root_dir = subs[0]
         else:
-            return None, None, {
-                "ok": False,
-                "error": "zip 中未找到 plugin.yaml（根目录或唯一一级子目录）",
-            }
+            return (
+                None,
+                None,
+                {
+                    "ok": False,
+                    "error": "zip 中未找到 plugin.yaml（根目录或唯一一级子目录）",
+                },
+            )
     return tmp_base, root_dir, None
 
 
@@ -1000,9 +1001,7 @@ def _install_plugin_zip(body: dict) -> tuple[int, dict]:
                 "error": "校验未通过",
                 "errors": list(result.errors),
             }
-        return _install_validated_dir(
-            root_dir, result.manifest, bool(body.get("overwrite"))
-        )
+        return _install_validated_dir(root_dir, result.manifest, bool(body.get("overwrite")))
     finally:
         shutil.rmtree(tmp_base, ignore_errors=True)
 
@@ -1060,8 +1059,7 @@ def _build_run_md(report: dict, log_text: str) -> str:
         import datetime as _dt
 
         sec = (
-            _dt.datetime.fromisoformat(r["time"])
-            - _dt.datetime.fromisoformat(r["started_at"])
+            _dt.datetime.fromisoformat(r["time"]) - _dt.datetime.fromisoformat(r["started_at"])
         ).total_seconds()
         if sec >= 0:
             dur = f"{sec:.0f} 秒" if sec < 60 else f"{int(sec // 60)} 分 {sec % 60:.0f} 秒"
@@ -1209,9 +1207,7 @@ def _run_plugin(plugin_id: str, body: dict) -> tuple[int, dict]:
         except Exception:
             presets = None
         param_values = resolve_param_values(m_params, presets, raw_params)
-    started = runtime.run_script(
-        plug, pomodoro_active=False, task=task, param_values=param_values
-    )
+    started = runtime.run_script(plug, pomodoro_active=False, task=task, param_values=param_values)
     if not started:
         return 409, {"error": "无法启动脚本"}
     return 200, {"ok": True, "id": plugin_id, "started": True}
@@ -1277,8 +1273,7 @@ def _glance_state() -> tuple[int, dict]:
     if rot is not None:
         try:
             reports = [
-                {"key": r.get("key") or "", "text": r.get("text") or ""}
-                for r in rot.active()
+                {"key": r.get("key") or "", "text": r.get("text") or ""} for r in rot.active()
             ]
         except Exception:
             logger.exception("速览面板读取报告轮播失败")
@@ -1554,6 +1549,18 @@ def _system_import(body: dict) -> tuple[int, dict]:
     return 400, result.to_dict()
 
 
+def _system_import_preview(body: dict) -> tuple[int, dict]:
+    """选择性恢复预览：包内各类/子类计数（只读）。"""
+    from zentray.services import data_migration as mig
+
+    path = (body.get("path") or "").strip()
+    if not path:
+        return 400, {"error": "path 必填（本机 zip 绝对路径）"}
+    result = mig.preview_import(path, password=(body.get("password") or "").strip() or None)
+    code = 200 if result.get("ok") else 400
+    return code, result
+
+
 def _system_archive_pack() -> tuple[int, dict]:
     from zentray.services import data_migration as mig
 
@@ -1612,19 +1619,22 @@ def _build_tasks_ics(tasks) -> str:
                 deadline = None
         if deadline and rem_time:
             start = f"{str(deadline).replace('-', '')}T{rem_time.replace(':', '')}00"
-            end_t = (_dt.datetime.combine(
-                _dt.date.fromisoformat(str(deadline)),
-                _dt.time.fromisoformat(rem_time),
-            ) + _dt.timedelta(minutes=30)).strftime("%Y%m%dT%H%M%S")
+            end_t = (
+                _dt.datetime.combine(
+                    _dt.date.fromisoformat(str(deadline)),
+                    _dt.time.fromisoformat(rem_time),
+                )
+                + _dt.timedelta(minutes=30)
+            ).strftime("%Y%m%dT%H%M%S")
         elif deadline:
             start = str(deadline).replace("-", "")
             end_t = None
         elif rem_time:
             # 无截止日但开了提醒：今天起 30 分钟事件
             today = _dt.date.today()
-            start = (
-                _dt.datetime.combine(today, _dt.time.fromisoformat(rem_time))
-            ).strftime("%Y%m%dT%H%M%S")
+            start = (_dt.datetime.combine(today, _dt.time.fromisoformat(rem_time))).strftime(
+                "%Y%m%dT%H%M%S"
+            )
             end_t = (
                 _dt.datetime.combine(today, _dt.time.fromisoformat(rem_time))
                 + _dt.timedelta(minutes=30)
@@ -1715,8 +1725,7 @@ def _complete_setup(form: dict) -> None:
             "enabled": True,
             "wxpusher_app_token": (form.get("wx_token") or "").strip()
             or sm.notification.wxpusher_app_token,
-            "wxpusher_uid": (form.get("wx_uid") or "").strip()
-            or sm.notification.wxpusher_uid,
+            "wxpusher_uid": (form.get("wx_uid") or "").strip() or sm.notification.wxpusher_uid,
         }
     if form.get("ai_key") or form.get("ai_base") or form.get("ai_model"):
         patch["ai"] = {
