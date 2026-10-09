@@ -207,6 +207,28 @@
                   <a-button size="small" type="outline" @click="addSub">➕ 添加子任务</a-button>
                 </div>
               </a-form-item>
+              <!-- 附件/链接：仅一次性任务（模板无此字段）；详情页缩略/跳转打开 -->
+              <a-form-item v-if="!isTemplate && form.mode !== 'periodic'" label="附件 / 链接">
+                <div class="slots-box">
+                  <div v-for="(a, idx) in form.attachments" :key="idx" class="slot-row">
+                    <span class="att-chip" :title="a">{{ attIcon(a) }} {{ attLabel(a) }}</span>
+                    <a-button size="mini" status="danger" @click="form.attachments.splice(idx, 1)">删</a-button>
+                  </div>
+                  <div class="slot-row">
+                    <a-button size="small" type="outline" :loading="picking" @click="addAttachmentFile">
+                      📎 添加文件
+                    </a-button>
+                    <a-input-search
+                      v-model="newLink"
+                      size="small"
+                      placeholder="粘贴 https:// 链接，回车添加"
+                      style="flex: 1"
+                      search-button
+                      @search="addAttachmentLink"
+                    />
+                  </div>
+                </div>
+              </a-form-item>
               <a-form-item>
                 <a-checkbox v-model="form.reminder_enabled">弹窗提醒</a-checkbox>
               </a-form-item>
@@ -353,10 +375,12 @@ import {
   getTask,
   getTemplate,
   listPlugins,
+  pickPath,
   runPlugin,
   updateTask,
   updateTemplate,
 } from '@/api/client'
+import { attIcon, attLabel } from '@/utils/attachments'
 import NumberSpinner from '@/components/NumberSpinner.vue'
 import TimeSpinner from '@/components/TimeSpinner.vue'
 
@@ -728,6 +752,31 @@ function removeSub(idx) {
   form.subtasks.splice(idx, 1)
 }
 
+// ---- 附件/链接（存字符串：http(s)=链接，其余=本地路径） ----
+const picking = ref(false)
+const newLink = ref('')
+
+async function addAttachmentFile() {
+  picking.value = true
+  try {
+    const r = await pickPath('file', { title: '选择附件', filter: '所有文件 (*)' })
+    if (r?.path && !form.attachments.includes(r.path)) form.attachments.push(r.path)
+  } finally {
+    picking.value = false
+  }
+}
+
+function addAttachmentLink() {
+  const v = newLink.value.trim()
+  if (!v) return
+  if (!/^https?:\/\//i.test(v)) {
+    Message.warning('链接需以 http:// 或 https:// 开头')
+    return
+  }
+  if (!form.attachments.includes(v)) form.attachments.push(v)
+  newLink.value = ''
+}
+
 function loadReminder(rem) {
   if (!rem?.enabled) {
     form.reminder_enabled = false
@@ -789,7 +838,7 @@ function buildPayload() {
     details: form.details || '',
     reminder,
     auto_abandon_on_overdue: form.auto_abandon_on_overdue,
-    attachments: [],
+    attachments: (form.attachments || []).slice(),
     subtasks: (form.subtasks || [])
       .filter((s) => (s.title || '').trim())
       .map((s) => ({ id: s.id, title: s.title.trim(), status: s.status || 'active' })),
@@ -995,6 +1044,7 @@ onMounted(async () => {
         form.task_type = t.task_type || 'one-time'
         form.template_id = t.template_id
         form.mode = 'one-time'
+        form.attachments = Array.isArray(t.attachments) ? t.attachments.slice() : []
         form.subtasks = (t.subtasks || []).map((s) => ({ ...s }))
         form.plugin_id = t.plugin_id || null
         loadReminder(t.reminder)
@@ -1032,6 +1082,15 @@ onMounted(async () => {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+}
+.att-chip {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--color-text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .slot-label {
   font-size: 13px;

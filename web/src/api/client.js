@@ -227,7 +227,7 @@ export async function deleteBackup(path) {
  * 原生路径选择（Qt WebEngine 桥）。kind: 'dir' | 'file' | 'save'。
  * 返回 { kind, id, path, cancelled }；纯浏览器 dev（无注入 api 基址）直接取消。
  */
-export function pickPath(kind, { title = '', startDir = '', defaultName = '' } = {}) {
+export function pickPath(kind, { title = '', startDir = '', defaultName = '', filter = '' } = {}) {
   if (!resolveApiBase()) {
     return Promise.resolve({ kind, id: '', path: '', cancelled: true })
   }
@@ -241,10 +241,21 @@ export function pickPath(kind, { title = '', startDir = '', defaultName = '' } =
     }
     window.addEventListener('zentray:pick-result', handler)
     const payload = encodeURIComponent(
-      JSON.stringify({ id, title, start_dir: startDir, default_name: defaultName })
+      JSON.stringify({ id, title, start_dir: startDir, default_name: defaultName, filter })
     )
     window.location.href = `zentray://pick-${kind}?payload=${payload}`
   })
+}
+
+/** 任务附件：本地图片缩略图直链（后端只放行图片后缀） */
+export function attachmentThumbUrl(path) {
+  return `${resolveApiBase()}/api/attachments/thumb?path=${encodeURIComponent(path)}`
+}
+
+/** 任务附件/链接：URL 系统浏览器打开，本地路径系统默认应用打开 */
+export async function openAttachment(value) {
+  const { data } = await http.post('/api/attachments/open', { value })
+  return data
 }
 
 /** 首次配置向导完成 */
