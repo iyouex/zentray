@@ -102,6 +102,9 @@ def handle_request(
         if method == "GET" and path == "/api/meta":
             return 200, _meta()
 
+        if method == "POST" and path == "/api/attachments/open":
+            return _attachment_open(body)
+
         if method == "GET" and path == "/api/tasks":
             return 200, {"items": [_task_dict(t) for t in _ctx.task_service.get_all_tasks()]}
 
@@ -1100,6 +1103,38 @@ def _open_with_system(path: Path) -> None:
             subprocess.Popen(["xdg-open", str(path)])
     except Exception:
         logger.exception("系统打开失败: %s", path)
+
+
+def _attachment_open(body: dict) -> tuple[int, dict]:
+    """任务附件/链接打开：URL 走系统浏览器，本地路径走系统默认应用。"""
+    import webbrowser
+
+    value = str(body.get("value") or "").strip()
+    if not value:
+        return 400, {"error": "value 必填"}
+    if "://" in value:
+        if not webbrowser.open(value):
+            return 500, {"error": "打开链接失败"}
+        return 200, {"ok": True}
+    path = Path(value).expanduser()
+    if not path.is_file():
+        return 404, {"error": "文件不存在"}
+    _open_with_system(path)
+    return 200, {"ok": True}
+
+
+_THUMB_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".svg", ".ico"}
+
+
+def serve_attachment_thumb(query: dict) -> tuple[int, str, bytes]:
+    """本地图片字节（任务详情缩略图直用）。仅放行图片后缀，防变任意文件读取。"""
+    import mimetypes
+
+    p = Path(str(query.get("path") or "")).expanduser()
+    if p.suffix.lower() not in _THUMB_EXTS or not p.is_file():
+        return 404, "text/plain; charset=utf-8", b"not found"
+    ctype = mimetypes.guess_type(str(p))[0] or "application/octet-stream"
+    return 200, ctype, p.read_bytes()
 
 
 def _plugin_run_open(body: dict) -> tuple[int, dict]:

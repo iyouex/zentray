@@ -131,9 +131,8 @@ if _HAS_WEBENGINE:
                 if kind == "dir":
                     path = QFileDialog.getExistingDirectory(parent, title, start)
                 elif kind == "file":
-                    path, _ = QFileDialog.getOpenFileName(
-                        parent, title, start, "备份文件 (*.zip);;所有文件 (*)"
-                    )
+                    flt = str(payload.get("filter") or "备份文件 (*.zip);;所有文件 (*)")
+                    path, _ = QFileDialog.getOpenFileName(parent, title, start, flt)
                 else:
                     name = str(payload.get("default_name") or "")
                     start_path = str(Path(start) / name) if start and name else (start or name)
