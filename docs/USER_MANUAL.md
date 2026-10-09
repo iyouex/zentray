@@ -9,7 +9,7 @@
 
 1. [产品是什么](#1-产品是什么)
 2. [通用概念](#2-通用概念)
-3. [安装（Ubuntu / Debian）](#3-安装ubuntu--debian)
+3. [安装](#3-安装)
 4. [日常使用](#4-日常使用)
 5. [设置](#5-设置)
 6. [插件](#6-插件)
@@ -75,33 +75,46 @@
 | 系统 | 路径 |
 |------|------|
 | Linux | `~/.local/share/ZenTray/` |
+| Windows / macOS | `~/.ZenTray/` |
 
 主要：`active_tasks.json`、`settings.json`、`periodic_templates.json`、`archive/`、`reviews/`、`icons/`、`zentray.log`。
 
 ---
 
-## 3. 安装（Ubuntu / Debian）
+## 3. 安装
 
-### 安装前
+### Ubuntu / Debian
+
+#### 安装前
 
 - [ ] amd64 桌面环境  
 - [ ] 建议：AppIndicator（`gir1.2-ayatanaappindicator3-0.1`、`python3-gi`）  
 - [ ] 可选：`libnotify-bin`
 
-### 安装
+#### 安装
 
 ```bash
 sudo apt install -y ./zentray_*_amd64.deb
 zentray
 ```
 
-### 注意
+#### 注意
 
 - 仅图标无文字：安装/启用 AppIndicator 支持。  
 - 再点桌面图标：只刷新托盘，不新开进程。  
 - Wayland 下热键可能不可用，请用托盘菜单。
 
-> 其他平台（Windows / macOS）支持已从代码中移除，托盘层保留扩展点，恢复开发时按平台加回实现即可。
+### Windows
+
+- 包：`zentray_*_windows_x64.zip`（x64，免安装）。解压到任意目录，运行 `ZenTray/ZenTray.exe`。
+- 未签名：SmartScreen 提示时选「更多信息 → 仍要运行」。
+- 数据目录 `~/.ZenTray/`；开机自启走 HKCU Run（设置 → 🖥️ 系统）。
+
+### macOS
+
+- 包：`zentray_*_macos_arm64.zip`（仅 arm64）。解压得 `ZenTray.app`，拖入「应用程序」。
+- 未公证：首次打开被 Gatekeeper 拦属预期——系统设置 → 隐私与安全性 → 仍要打开；或终端执行 `xattr -dr com.apple.quarantine /Applications/ZenTray.app`。
+- 数据目录 `~/.ZenTray/`；全局热键走 Carbon，开机自启走 SMAppService（设置 → 🖥️ 系统）。
 
 ---
 
@@ -164,7 +177,7 @@ zentray
 | **📋 任务** | 各优先级停留秒数、模式；逾期轮播与前缀；分类管理（标题括号/分隔符、二级开关、一二级增删改） |
 | **🍅 番茄钟** | 时长与节奏预设（经典 25/5、深度 50/10、超长 90/20）、延长；短休/长休/长休间隔；自动休息/自动专注；每日目标；托盘右侧显示倒计时/文案；菜单专注按钮融合文案（占位符 {focus}/{today}/{count}） |
 | **🧩 插件** | 总开关（含**脚本完成通知渠道**多选与**运行报告托盘轮播**开关时长，默认开 60 分钟）；三大折叠块：**插件列表**（默认展开：排序/调度规则/参数预设/授权/运行/编辑/删除/说明）、**导入插件**（列表下方，默认收起；zip/目录，预览校验后安装）、**运行历史**（运行ID/起止/日志/报告） |
-| **🖥️ 系统** | 外观（主题/动效/形状风格）、开机自启 |
+| **🖥️ 系统** | 外观（主题/皮肤 Neo·Aurora·霓虹·黏土/动效/形状风格）、开机自启、**系统日历**（活跃任务导出 .ics：截止日=全天事件、开启提醒=定时事件，经系统日历应用确认写入） |
 | **💾 备份** | 五卡片：备份存储目录、手动即时备份、自动周期备份策略、从备份文件恢复、历史备份快照 |
 | **📜 历史** | 只读单页：日期侧栏 + 合并时间轴 + 详情 |
 
