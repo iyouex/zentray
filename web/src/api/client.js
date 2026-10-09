@@ -205,6 +205,14 @@ export async function importBackup(path, { include, safety_backup = true, passwo
   return data
 }
 
+/** 导入预览（只读）：包内各类/子类计数，供选择性恢复渲染勾选树 */
+export async function importPreview(path, { password } = {}) {
+  const body = { path }
+  if (password) body.password = password
+  const { data } = await http.post('/api/system/import-preview', body)
+  return data
+}
+
 /** 仅打包 archive/ */
 export async function packArchive() {
   const { data } = await http.post('/api/system/archive/pack')
