@@ -374,3 +374,19 @@ def test_entry_command_platform_dispatch():
             _entry_command(_Path("plug/run.sh"))
     exe = _entry_command(_Path("plug/tool.bin"))
     assert exe == [str(_Path("plug/tool.bin"))]
+def test_entry_command_frozen_uses_system_python(monkeypatch):
+    """frozen 打包态 sys.executable 是 GUI 二进制，.py 须改用系统解释器。"""
+    import shutil as _shutil
+    from pathlib import Path as _Path
+    from zentray.plugins.runtime import _entry_command
+
+    monkeypatch.setattr("sys.frozen", True, raising=False)
+    py = _entry_command(_Path("plug/run.py"))
+    expect = _shutil.which("python3") or _shutil.which("python")
+    if expect:
+        assert py[0] == expect and py[1].endswith("run.py")
+    else:
+        import pytest as _pytest
+
+        with _pytest.raises(RuntimeError):
+            _entry_command(_Path("plug/run.py"))

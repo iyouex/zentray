@@ -65,3 +65,16 @@ def test_hotkey_default_per_platform(monkeypatch, tmp_path):
     finally:
         monkeypatch.undo()
         importlib.reload(cfg)
+
+
+def test_mac_carbon_hotkey_register_and_stop():
+    # darwin 实注册（v0.7.4 曾因缺 argtypes 指针截断 SIGSEGV）；
+    # 其他平台该类不可构造，跳过
+    if sys.platform != "darwin":
+        import pytest
+
+        pytest.skip("仅 darwin 实测 Carbon 注册")
+    from zentray.services.system_utils import _MacCarbonHotkey
+
+    hk = _MacCarbonHotkey("<alt>+<space>", lambda: None)
+    hk.stop()

@@ -170,6 +170,12 @@ export async function getSystemStatus() {
 }
 
 /** 即时开关开机自启 */
+/** 任务导出 .ics 并用系统日历应用打开 */
+export async function exportTasksCalendar() {
+  const { data } = await http.post('/api/system/calendar-export', {})
+  return data
+}
+
 export async function setAutostart(enabled) {
   const { data } = await http.post('/api/system/autostart', { enabled: !!enabled })
   return data
