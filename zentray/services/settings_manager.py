@@ -73,14 +73,16 @@ class NightlySettings:
 
 @dataclass
 class NotifyChannel:
-    """通知渠道。type: app_popup | wxpusher"""
+    """通知渠道。type: app_popup | wxpusher | feishu_bot"""
 
     id: str = ""
-    type: str = "app_popup"  # app_popup | wxpusher
+    type: str = "app_popup"  # app_popup | wxpusher | feishu_bot
     name: str = ""
     enabled: bool = True
     wxpusher_app_token: str = ""
     wxpusher_uid: str = ""
+    feishu_webhook: str = ""
+    feishu_secret: str = ""
 
     def __post_init__(self):
         if not self.id:
@@ -89,6 +91,7 @@ class NotifyChannel:
             self.name = {
                 "app_popup": "应用弹窗",
                 "wxpusher": "WxPusher",
+                "feishu_bot": "飞书机器人",
             }.get(self.type, self.type)
 
     def to_dict(self) -> dict:
@@ -103,6 +106,8 @@ class NotifyChannel:
             enabled=bool(data.get("enabled", True)),
             wxpusher_app_token=data.get("wxpusher_app_token") or "",
             wxpusher_uid=data.get("wxpusher_uid") or "",
+            feishu_webhook=data.get("feishu_webhook") or "",
+            feishu_secret=data.get("feishu_secret") or "",
         )
 
 
@@ -110,17 +115,18 @@ def default_notify_channels() -> List[NotifyChannel]:
     return [
         NotifyChannel(type="app_popup", name="应用弹窗", enabled=True),
         NotifyChannel(type="wxpusher", name="WxPusher", enabled=False),
+        NotifyChannel(type="feishu_bot", name="飞书机器人", enabled=False),
     ]
 
 
 def sanitize_channel_types(raw) -> List[str]:
-    """渠道类型白名单清洗：只留 app_popup/wxpusher，去重保序。"""
+    """渠道类型白名单清洗：只留 app_popup/wxpusher/feishu_bot，去重保序。"""
     if not isinstance(raw, (list, tuple)):
         return []
     seen: list = []
     for x in raw:
         v = str(x or "").strip()
-        if v in ("app_popup", "wxpusher") and v not in seen:
+        if v in ("app_popup", "wxpusher", "feishu_bot") and v not in seen:
             seen.append(v)
     return seen
 
@@ -137,6 +143,9 @@ class NotificationSettings:
 
     def wxpusher_channels(self) -> List[NotifyChannel]:
         return [c for c in self.channels if c.type == "wxpusher" and c.enabled]
+
+    def feishu_bot_channels(self) -> List[NotifyChannel]:
+        return [c for c in self.channels if c.type == "feishu_bot" and c.enabled]
 
     def app_popup_enabled(self) -> bool:
         return any(c.type == "app_popup" and c.enabled for c in self.channels)
@@ -494,6 +503,11 @@ class SettingsManager:
             n.channels.insert(
                 0, NotifyChannel(type="app_popup", name="应用弹窗", enabled=True)
             )
+        # 确保有 feishu_bot（老 settings 升级自动多出该卡，默认关）
+        if not any(c.type == "feishu_bot" for c in n.channels):
+            n.channels.append(
+                NotifyChannel(type="feishu_bot", name="飞书机器人", enabled=False)
+            )
 
     def _sync_notif_channels_to_legacy(self) -> None:
         n = self._settings.notification
@@ -840,6 +854,9 @@ class SettingsManager:
             return True
         for c in n.wxpusher_channels():
             if c.wxpusher_app_token and c.wxpusher_uid:
+                return True
+        for c in n.feishu_bot_channels():
+            if c.feishu_webhook:
                 return True
         # 旧字段
         return bool(n.enabled and n.wxpusher_app_token and n.wxpusher_uid)

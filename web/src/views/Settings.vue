@@ -182,6 +182,31 @@
                       开启后，计划/复盘完成时会通过<strong>托盘系统通知</strong>弹出提醒。
                     </a-alert>
                   </div>
+                  <a-form
+                    v-else-if="ch.type === 'feishu_bot'"
+                    layout="vertical"
+                    size="small"
+                    class="ch-body"
+                  >
+                    <a-form-item label="Webhook">
+                      <a-input
+                        v-model="ch.feishu_webhook"
+                        placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/..."
+                        :disabled="!ch.enabled"
+                      />
+                    </a-form-item>
+                    <a-form-item label="签名密钥">
+                      <a-input
+                        v-model="ch.feishu_secret"
+                        placeholder="签名密钥（未开启签名校验可留空）"
+                        :disabled="!ch.enabled"
+                      />
+                    </a-form-item>
+                    <a-alert type="info">
+                      需在<strong>飞书群内</strong>接收（群设置-群机器人-添加自定义机器人获取
+                      Webhook）；建议在飞书侧开启签名校验并填入密钥。
+                    </a-alert>
+                  </a-form>
                   <a-form v-else layout="vertical" size="small" class="ch-body">
                     <a-form-item label="App Token">
                       <a-input
@@ -515,9 +540,10 @@
                   <a-checkbox-group v-model="form.ops.notify_channels" @change="onOpsChannelsChange">
                     <a-checkbox value="app_popup">应用弹窗</a-checkbox>
                     <a-checkbox value="wxpusher">WxPusher</a-checkbox>
+                    <a-checkbox value="feishu_bot">飞书机器人</a-checkbox>
                   </a-checkbox-group>
                   <div class="plugin-desc" style="margin-top: 4px">
-                    可多选，至少保留一项（随「保存设置」生效）；WxPusher 需在 设置 → 🔔 通知 中启用才实际推送
+                    可多选，至少保留一项（随「保存设置」生效）；WxPusher / 飞书机器人需在 设置 → 🔔 通知 中启用才实际推送
                   </div>
                 </a-form-item>
               </a-card>
@@ -1882,11 +1908,19 @@ function defaultChannels() {
       wxpusher_app_token: '',
       wxpusher_uid: '',
     },
+    {
+      id: 'ch_feishu_bot',
+      type: 'feishu_bot',
+      name: '飞书机器人',
+      enabled: false,
+      feishu_webhook: '',
+      feishu_secret: '',
+    },
   ]
 }
 
 /**
- * 始终只保留 app_popup + wxpusher 各一条（合并旧数据）
+ * 始终只保留 app_popup + wxpusher + feishu_bot 各一条（合并旧数据）
  */
 function ensureFixedChannels(notification) {
   const list = notification?.channels || []
@@ -1906,14 +1940,19 @@ function ensureFixedChannels(notification) {
       }
     }
   }
+  let fs = list.find((c) => c.type === 'feishu_bot')
+  if (!fs) fs = defaultChannels().find((c) => c.type === 'feishu_bot')
   app.id = app.id || 'ch_app_popup'
   app.name = '应用弹窗'
   app.type = 'app_popup'
   wx.id = wx.id || 'ch_wxpusher'
   wx.name = 'WxPusher'
   wx.type = 'wxpusher'
+  fs.id = fs.id || 'ch_feishu_bot'
+  fs.name = '飞书机器人'
+  fs.type = 'feishu_bot'
   // 写回 form，保证引用一致
-  notification.channels = [app, wx]
+  notification.channels = [app, wx, fs]
   return notification.channels
 }
 
@@ -2455,7 +2494,7 @@ function normalizeLoaded(s) {
   if (!form.ops.param_presets) form.ops.param_presets = {}
   // 空 = 跟随全局（后端语义）；界面上物化为全选
   if (!Array.isArray(form.ops.notify_channels) || !form.ops.notify_channels.length) {
-    form.ops.notify_channels = ['app_popup', 'wxpusher']
+    form.ops.notify_channels = ['app_popup', 'wxpusher', 'feishu_bot']
   }
   opsUserDir.value = form.ops.user_plugins_dir || ''
   if (!form.polling) form.polling = emptyForm().polling

@@ -1,9 +1,10 @@
-"""统一通知客户端：多渠道（应用弹窗 + WxPusher）。"""
+"""统一通知客户端：多渠道（应用弹窗 + WxPusher + 飞书机器人）。"""
 from __future__ import annotations
 
 import logging
 from typing import Any, Dict, List, Optional
 
+from zentray.services.feishu_bot import FeishuBotService
 from zentray.services.wxpusher import WxPusherService
 
 logger = logging.getLogger(__name__)
@@ -74,6 +75,20 @@ class NotificationClient:
             results["channels"][ch.id or ch.name] = r
             code = r.get("code")
             if code == 1000 or code == 0:
+                any_ok = True
+
+        # 飞书群机器人（多条同理）
+        for ch in n.feishu_bot_channels() if (sel is None or "feishu_bot" in sel) else []:
+            bot = FeishuBotService(webhook=ch.feishu_webhook, secret=ch.feishu_secret)
+            if not bot.is_configured():
+                results["channels"][ch.id or ch.name] = {
+                    "status": "error",
+                    "message": "未配置 Webhook",
+                }
+                continue
+            r = bot.send_message(content=content, summary=title)
+            results["channels"][ch.id or ch.name] = r
+            if r.get("code") == 0:
                 any_ok = True
 
         # 兼容旧单字段
