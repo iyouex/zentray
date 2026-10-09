@@ -1,5 +1,8 @@
 import axios from 'axios'
 
+/** 已注入基址缓存：列表内 router.push 会丢 api query，记住首次取到的值 */
+let _injectedApiBase = ''
+
 /** 从 hash query 或 location 解析 API 基址（WebEngine 宿主会注入） */
 export function resolveApiBase() {
   try {
@@ -8,9 +11,13 @@ export function resolveApiBase() {
     if (qi >= 0) {
       const qs = new URLSearchParams(hash.slice(qi + 1))
       const api = qs.get('api')
-      if (api) return api.replace(/\/$/, '')
+      if (api) {
+        _injectedApiBase = api.replace(/\/$/, '')
+        return _injectedApiBase
+      }
     }
   } catch (_) {}
+  if (_injectedApiBase) return _injectedApiBase
   // 开发代理
   return ''
 }
