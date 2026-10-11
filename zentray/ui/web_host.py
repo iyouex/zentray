@@ -114,7 +114,9 @@ if _HAS_WEBENGINE:
                         payload = json.loads(unquote(raw))
                     except Exception:
                         payload = {"raw": raw}
-                self.result_received.emit(payload)
+                # 必须推迟到事件循环：回调内同步 emit→reject→_park→destroy 会
+                # 重入 WebEngine（同 pick- 分支），插件运行后页面繁忙时关窗假死
+                QTimer.singleShot(0, lambda: self.result_received.emit(payload))
                 return False
             return super().acceptNavigationRequest(url, nav_type, is_main_frame)
 
