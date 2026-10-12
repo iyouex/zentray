@@ -38,6 +38,27 @@ if _HAS_WEBENGINE:
 
         result_received = Signal(object)
 
+        def javaScriptConsoleMessage(self, level, message, line, source):  # noqa: N802
+            """console 关窗通道（主通道）：页面失焦时 Chromium 会无限期挂起
+            zentray://close 导航（插件报告通知气泡夺焦后点 X 假死，实测
+            91s 不投递），console 消息不经导航管线、不受焦点影响。"""
+            msg = str(message or "")
+            if not msg.startswith("zentray:close:"):
+                return
+            try:
+                payload = json.loads(msg[len("zentray:close:"):])
+            except Exception:
+                payload = {}
+            if not isinstance(payload, dict):
+                payload = {}
+            # 同导航分支：回调内同步 emit 会重入 WebEngine，推迟到事件循环；
+            # 先回写 ACK 让前端知道 console 通道已接手，不再走导航兜底
+            def _ack_and_close():
+                self.runJavaScript("window.__zentrayCloseAck__=1")
+                self.result_received.emit(payload)
+
+            QTimer.singleShot(0, _ack_and_close)
+
         def acceptNavigationRequest(self, url, nav_type, is_main_frame):  # noqa: N802
             s = url.toString()
             if s.startswith(("zentray://start_drag", "zentray://move")):
@@ -323,6 +344,8 @@ class VueDialog(QDialog):
 
     def _on_bridge_result(self, payload: object) -> None:
         logger.debug("bridge result: %s", payload)
+        if self.result_payload is not None:
+            return  # console+导航双通道防重入：已收过一次关闭信号
         self.result_payload = payload
         if isinstance(payload, dict) and payload.get("cancelled"):
             self.reject()

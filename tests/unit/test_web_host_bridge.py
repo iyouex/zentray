@@ -46,6 +46,16 @@ def test_bridge_page_constructed_with_view_as_parent():
     assert "_BridgePage(self.view)" in _SRC
 
 
+def test_console_close_channel_present():
+    """关窗主通道走 console 拦截：页面失焦时 Chromium 会无限期挂起
+    zentray://close 导航（插件报告通知气泡夺焦后点 X 假死，实测 91s
+    不投递），console 消息不经导航管线、不受焦点影响。"""
+    assert "def javaScriptConsoleMessage" in _SRC
+    assert '"zentray:close:"' in _SRC
+    assert "__zentrayCloseAck__" in _SRC, "宿主须回写 ACK，前端据此跳过导航兜底"
+    assert "if self.result_payload is not None:" in _SRC, "console+导航双通道须防重入"
+
+
 def test_open_vue_route_single_active_policy():
     """开新 Vue 面板必须先 reject 旧的：被最小化遗忘的旧面板与新面板并存时，
     两者的混合 DPI 尺寸恢复会互相触发合成器 configure，形成无限减半拉锯。"""
