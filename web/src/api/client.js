@@ -324,8 +324,18 @@ export async function aiSuggest(focusId = '') {
 
 /** 关闭宿主窗口并回传结果（Qt WebEngine） */
 export function closeHost(payload = {}) {
-  const json = encodeURIComponent(JSON.stringify(payload || {}))
-  window.location.href = `zentray://close?payload=${json}`
+  const json = JSON.stringify(payload || {})
+  // 主通道走 console（宿主 javaScriptConsoleMessage 拦截并回写
+  // __zentrayCloseAck__）：页面失焦时 Chromium 会无限期挂起自定义协议
+  // 导航（通知气泡夺焦后关窗假死）。旧宿主无 console 拦截、无 ACK，
+  // 400ms 后退回导航兜底；有 ACK 则不再发导航，避免关窗后残留迟到的
+  // close 导航误关下次重开的面板
+  console.log(`zentray:close:${json}`)
+  setTimeout(() => {
+    if (!window.__zentrayCloseAck__) {
+      window.location.href = `zentray://close?payload=${encodeURIComponent(json)}`
+    }
+  }, 400)
 }
 
 export function cancelHost() {
