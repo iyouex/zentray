@@ -31,6 +31,24 @@ except Exception as e:  # frozen 包缺库时曾静默回退原生对话框，�
     QWebEnginePage = object  # type: ignore
 
 
+def apply_host_height(dlg: "QDialog", height: int) -> None:
+    """浮层窗口高度随页面内容自适应（quick-add AI 预览等）。
+
+    同步更新 _chrome_size：Resize 守卫按它恢复合成器折半，若沿用开窗时的
+    旧高度，预览展开后被守卫拽回 96px。
+    """
+    app = QApplication.instance()
+    screen = app.primaryScreen() if app else None
+    max_h = int((screen.availableGeometry().height() if screen else 1040) * 0.92)
+    h = max(dlg.minimumHeight(), min(height, max_h))
+    if abs(h - dlg.height()) < 2:
+        return
+    # 先更新 _chrome_size 再 resize：Resize 事件在 resize() 内同步投递，
+    # 守卫若仍持旧目标会把收窗误判为合成器折半并强制重映射
+    setattr(dlg, "_chrome_size", (dlg.width(), h))
+    dlg.resize(dlg.width(), h)
+
+
 if _HAS_WEBENGINE:
 
     class _BridgePage(QWebEnginePage):
@@ -39,10 +57,23 @@ if _HAS_WEBENGINE:
         result_received = Signal(object)
 
         def javaScriptConsoleMessage(self, level, message, line, source):  # noqa: N802
-            """console 关窗通道（主通道）：页面失焦时 Chromium 会无限期挂起
-            zentray://close 导航（插件报告通知气泡夺焦后点 X 假死，实测
-            91s 不投递），console 消息不经导航管线、不受焦点影响。"""
+            """console 通道：关窗（zentray:close:，主通道）与浮层高度自适应
+            （zentray:size:）。页面失焦时 Chromium 会无限期挂起 zentray://close
+            导航（插件报告通知气泡夺焦后点 X 假死，实测 91s 不投递），console
+            消息不经导航管线、不受焦点影响。"""
             msg = str(message or "")
+            if msg.startswith("zentray:size:"):
+                # 浮层内容高度回传（quick-add AI 预览展开）：窗口随之增高/回落，
+                # 否则定高 96px 下预览只能靠滚动条看
+                try:
+                    h = int(json.loads(msg[len("zentray:size:"):]).get("h") or 0)
+                except Exception:
+                    h = 0
+                view = self.parent()
+                dlg = view.window() if view else None
+                if h > 0 and dlg is not None:
+                    QTimer.singleShot(0, lambda: apply_host_height(dlg, h))
+                return
             if not msg.startswith("zentray:close:"):
                 return
             try:
