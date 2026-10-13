@@ -315,6 +315,10 @@ def handle_request(
             return _system_archive_pack()
         if method == "POST" and path == "/api/system/calendar-export":
             return _system_calendar_export()
+        if method == "POST" and path == "/api/feishu-sync/test":
+            return _feishu_sync_test()
+        if method == "POST" and path == "/api/feishu-sync/resync":
+            return _feishu_sync_resync()
         if method == "GET" and path == "/api/system/backups":
             return _system_backups()
         if method == "POST" and path == "/api/system/backups/delete":
@@ -511,6 +515,7 @@ def _settings_dict() -> dict:
         "backup": asdict(s.backup),
         "ops": asdict(s.ops),
         "update": asdict(s.update),
+        "feishu_sync": asdict(s.feishu_sync),
     }
 
 
@@ -1761,6 +1766,22 @@ def _system_calendar_export() -> tuple[int, dict]:
     out.write_text(ics, encoding="utf-8")
     _open_with_system(out)
     return 200, {"ok": True, "count": count, "file": str(out)}
+
+
+def _feishu_sync_test() -> tuple[int, dict]:
+    """设置页「测试连接」：实时调飞书开放平台，错误原文回显。"""
+    from zentray.services.feishu_sync import FeishuSyncService
+
+    ok, msg = FeishuSyncService.instance().test_connection()
+    return (200 if ok else 400), {"ok": ok, "message": msg}
+
+
+def _feishu_sync_resync() -> tuple[int, dict]:
+    """设置页「立即全量同步」：清引用后整表重推。"""
+    from zentray.services.feishu_sync import FeishuSyncService
+
+    count = FeishuSyncService.instance().resync_all(_ctx.task_service)
+    return 200, {"ok": True, "queued": count}
 
 
 def _system_backup_delete(body: dict) -> tuple[int, dict]:

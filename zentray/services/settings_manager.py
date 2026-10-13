@@ -226,6 +226,25 @@ class UpdateSettings:
 
 
 @dataclass
+class FeishuSyncSettings:
+    """飞书单向同步（ZenTray → 飞书开放平台自建应用）。
+    与通知用的飞书机器人 webhook 无关；配置步骤见 docs/FEISHU_SYNC.md。"""
+
+    enabled: bool = False
+    app_id: str = ""
+    app_secret: str = ""
+    sync_calendar: bool = True
+    sync_tasks: bool = True
+    # 用户 open_id（ou_ 开头）：自动订阅日历 + 任务负责人，留空则只写入应用自身
+    feishu_user_id: str = ""
+    # 运行时回写：日历/清单 id 与最近一次同步状态（不进设置页）
+    calendar_id: str = ""
+    task_list_guid: str = ""
+    last_error: str = ""
+    last_sync_at: str = ""
+
+
+@dataclass
 class AIApiProfile:
     """命名模型接入配置；同时仅 active_api_id 对应的一个生效。"""
 
@@ -442,6 +461,7 @@ class AppSettings:
     backup: BackupSettings = field(default_factory=BackupSettings)
     ops: OpsSettings = field(default_factory=OpsSettings)
     update: UpdateSettings = field(default_factory=UpdateSettings)
+    feishu_sync: FeishuSyncSettings = field(default_factory=FeishuSyncSettings)
 
 
 class SettingsManager:
@@ -703,6 +723,20 @@ class SettingsManager:
             self._settings.update = UpdateSettings(
                 proxy=str(u.get("proxy") or "").strip(),
             )
+        if "feishu_sync" in data:
+            f = data["feishu_sync"] or {}
+            self._settings.feishu_sync = FeishuSyncSettings(
+                enabled=bool(f.get("enabled", False)),
+                app_id=str(f.get("app_id") or "").strip(),
+                app_secret=str(f.get("app_secret") or "").strip(),
+                sync_calendar=bool(f.get("sync_calendar", True)),
+                sync_tasks=bool(f.get("sync_tasks", True)),
+                feishu_user_id=str(f.get("feishu_user_id") or "").strip(),
+                calendar_id=str(f.get("calendar_id") or "").strip(),
+                task_list_guid=str(f.get("task_list_guid") or "").strip(),
+                last_error=str(f.get("last_error") or ""),
+                last_sync_at=str(f.get("last_sync_at") or ""),
+            )
 
         # 用 review 回写 nightly 兼容
         self._sync_nightly_from_review()
@@ -804,6 +838,7 @@ class SettingsManager:
             "backup": asdict(self._settings.backup),
             "ops": asdict(self._settings.ops),
             "update": asdict(self._settings.update),
+            "feishu_sync": asdict(self._settings.feishu_sync),
         }
         with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
@@ -851,6 +886,10 @@ class SettingsManager:
     @property
     def update(self) -> UpdateSettings:
         return self._settings.update
+
+    @property
+    def feishu_sync(self) -> FeishuSyncSettings:
+        return self._settings.feishu_sync
 
     def get_ops_user_plugins_dir(self) -> Path:
         """用户插件目录（绝对路径）。"""

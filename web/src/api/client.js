@@ -183,6 +183,22 @@ export async function exportTasksCalendar() {
   return data
 }
 
+/** 飞书同步：测试连接（实时调开放平台，失败返回 400 + message） */
+export async function feishuSyncTest() {
+  try {
+    const { data } = await http.post('/api/feishu-sync/test', {})
+    return data
+  } catch (e) {
+    return e?.response?.data || { ok: false, message: e?.message || '连接失败' }
+  }
+}
+
+/** 飞书同步：清引用整表重推；返回入队条数 */
+export async function feishuSyncResync() {
+  const { data } = await http.post('/api/feishu-sync/resync', {})
+  return data
+}
+
 export async function setAutostart(enabled) {
   const { data } = await http.post('/api/system/autostart', { enabled: !!enabled })
   return data

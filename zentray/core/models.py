@@ -32,6 +32,9 @@ class Task:
     subtasks: List[dict] = field(default_factory=list)
     # 关联插件 id（运行入口见任务列表/编辑页）
     plugin_id: Optional[str] = None
+    # 飞书同步回写的远端对象 id（ZenTray → 飞书单向；空=尚未推送）
+    feishu_event_id: Optional[str] = None
+    feishu_task_id: Optional[str] = None
 
     def __post_init__(self):
         if self.attachments is None:
