@@ -221,6 +221,16 @@ def handle_request(
         if method == "POST" and path == "/api/reminders/check-conflicts":
             return _check_reminder_conflicts(body)
 
+        # —— 应用内自更新：检查 / 下载 / 进度 / 安装重启 ——
+        if method == "GET" and path == "/api/updates/check":
+            return _updates_check()
+        if method == "POST" and path == "/api/updates/download":
+            return _updates_download(body or {})
+        if method == "GET" and path == "/api/updates/status":
+            return _updates_status()
+        if method == "POST" and path == "/api/updates/install":
+            return _updates_install()
+
         if method == "POST" and path == "/api/pomodoro/start":
             return _pomodoro_start(body)
 
@@ -500,6 +510,7 @@ def _settings_dict() -> dict:
         "appearance": asdict(s.appearance),
         "backup": asdict(s.backup),
         "ops": asdict(s.ops),
+        "update": asdict(s.update),
     }
 
 
@@ -534,6 +545,47 @@ def _check_reminder_conflicts(body: dict) -> tuple[int, dict]:
         "has_conflict": bool(conflicts),
         "conflicts": conflicts,
     }
+
+
+def _updates_check() -> tuple[int, dict]:
+    """查 GitHub latest release（代理取自设置 update.proxy）。"""
+    from zentray.services.settings_manager import SettingsManager
+    from zentray.services.updater import UpdaterService
+
+    try:
+        result = UpdaterService.instance().check(SettingsManager().update.proxy)
+        return 200, result
+    except Exception as e:
+        return 502, {"error": str(e)}
+
+
+def _updates_download(body: dict) -> tuple[int, dict]:
+    from zentray.services.updater import UpdaterService
+
+    url = str(body.get("url") or "")
+    version = str(body.get("version") or "").strip().lstrip("v")
+    if not url or not version:
+        return 400, {"error": "url 与 version 必填"}
+    try:
+        UpdaterService.instance().start_download(url, version)
+        return 200, {"started": True}
+    except Exception as e:
+        return 400, {"error": str(e)}
+
+
+def _updates_status() -> tuple[int, dict]:
+    from zentray.services.updater import UpdaterService
+
+    return 200, UpdaterService.instance().status()
+
+
+def _updates_install() -> tuple[int, dict]:
+    from zentray.services.updater import UpdaterService
+
+    try:
+        return 200, UpdaterService.instance().install_and_restart()
+    except Exception as e:
+        return 500, {"error": str(e)}
 
 
 def _scanned_loader():

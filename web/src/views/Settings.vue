@@ -906,6 +906,52 @@
                 </div>
               </a-card>
 
+              <a-card class="sys-card" :bordered="false" title="软件更新">
+                <div class="sys-row">
+                  <div>
+                    <div class="sys-title">检查并安装新版本（当前 v{{ appVersion || '…' }}）</div>
+                    <div class="sys-desc">
+                      检查 GitHub Releases 新版本，下载安装包后在应用内完成安装并重启
+                      （Linux 将弹出系统认证，Windows/macOS 自动替换文件后重启）。
+                    </div>
+                    <div v-if="upd.result && !upd.result.has_update" class="sys-hint muted">
+                      已是最新版本 v{{ upd.result.version }}
+                    </div>
+                    <div v-if="upd.result && upd.result.has_update" class="sys-hint">
+                      发现新版本 <strong>v{{ upd.result.version }}</strong>
+                      （{{ (upd.result.asset_size / 1048576).toFixed(1) }}MB）
+                      <a :href="upd.result.notes_url" target="_blank" rel="noreferrer">发布说明</a>
+                    </div>
+                    <div v-if="upd.error" class="sys-hint" style="color: #f53f3f">{{ upd.error }}</div>
+                    <a-progress
+                      v-if="upd.state === 'downloading'"
+                      :percent="upd.progress"
+                      size="small"
+                      style="max-width: 320px; margin-top: 4px"
+                    />
+                  </div>
+                  <div class="upd-actions">
+                    <a-button :loading="upd.checking" @click="onUpdatesCheck">检查更新</a-button>
+                    <a-button
+                      v-if="upd.result && upd.result.has_update && upd.state !== 'downloading' && upd.state !== 'ready'"
+                      type="primary"
+                      @click="onUpdatesDownload"
+                    >
+                      下载更新
+                    </a-button>
+                    <a-button v-if="upd.state === 'ready'" type="primary" status="warning" @click="onUpdatesInstall">
+                      安装并重启
+                    </a-button>
+                  </div>
+                </div>
+                <div class="sys-row" style="margin-top: 8px">
+                  <div class="sys-desc">
+                    下载代理（访问 GitHub 失败时填写，如 http://127.0.0.1:7897；留空 = 直连），随「保存设置」生效。
+                  </div>
+                  <a-input v-model="form.update.proxy" placeholder="http://127.0.0.1:7897" style="max-width: 240px" />
+                </div>
+              </a-card>
+
               <!-- Windows 任务栏中央按钮（设计 §3.0）；后端探测不到时整卡隐藏 -->
               <a-card v-if="taskbarLabelVisible !== null" class="sys-card" :bordered="false" title="任务栏显示（Windows）">
                 <div class="sys-row">
@@ -1172,6 +1218,7 @@ import {
   installPluginPath,
   installPluginZip,
   exportTasksCalendar,
+  getMeta,
   listBackups,
   listPluginRuns,
   listPlugins,
@@ -1184,6 +1231,10 @@ import {
   saveSettings,
   setAutostart,
   updatePlugin,
+  updatesCheck,
+  updatesDownload,
+  updatesInstall,
+  updatesStatus,
   validatePluginPath,
 } from '@/api/client'
 import { applyAppearance, applyTheme } from '@/theme'
@@ -1842,6 +1893,7 @@ function emptyForm() {
       report_tray_enabled: true,
       report_tray_minutes: 60,
     },
+    update: { proxy: '' },
   }
 }
 
@@ -2039,6 +2091,63 @@ async function onCalendarExport() {
   } finally {
     calendarExporting.value = false
   }
+}
+
+/** —— 软件更新：检查 → 下载（轮询进度）→ 安装并重启 —— */
+const appVersion = ref('')
+const upd = reactive({ checking: false, state: 'idle', progress: 0, error: '', result: null })
+let updTimer = null
+
+async function onUpdatesCheck() {
+  upd.checking = true
+  upd.error = ''
+  try {
+    upd.result = await updatesCheck()
+  } catch (e) {
+    upd.error = e?.response?.data?.error || e?.message || '检查失败'
+  } finally {
+    upd.checking = false
+  }
+}
+
+async function onUpdatesDownload() {
+  if (!upd.result || !upd.result.asset_url) return
+  upd.error = ''
+  upd.state = 'downloading'
+  try {
+    await updatesDownload({ url: upd.result.asset_url, version: upd.result.version })
+    clearInterval(updTimer)
+    updTimer = setInterval(async () => {
+      try {
+        const s = await updatesStatus()
+        upd.state = s.state
+        upd.progress = s.progress
+        if (s.error) upd.error = s.error
+        if (s.state === 'ready' || s.state === 'error') clearInterval(updTimer)
+      } catch {
+        clearInterval(updTimer)
+      }
+    }, 500)
+  } catch (e) {
+    upd.state = 'idle'
+    upd.error = e?.response?.data?.error || e?.message || '下载启动失败'
+  }
+}
+
+function onUpdatesInstall() {
+  Modal.confirm({
+    title: '安装并重启 ZenTray？',
+    content: '安装完成后应用将自动重启（Linux 会先弹出系统认证窗口）。',
+    okText: '安装并重启',
+    onOk: async () => {
+      try {
+        await updatesInstall()
+        Message.info('正在安装，应用即将重启…')
+      } catch (e) {
+        upd.error = e?.response?.data?.error || e?.message || '安装失败'
+      }
+    },
+  })
 }
 
 async function onAutostartChange(val) {
@@ -2547,6 +2656,7 @@ onMounted(async () => {
   try {
     const s = await getSettings()
     normalizeLoaded(s)
+    getMeta().then(m => { appVersion.value = m.version }).catch(() => {})
     onThemePreview()
     await loadSystemStatus()
   } catch (e) {
@@ -2894,6 +3004,12 @@ body.zt-skin-clay .nav-main :deep(.arco-menu-item.arco-menu-selected) {
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
+}
+.upd-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
 }
 .sys-title {
   font-weight: 600;

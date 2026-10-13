@@ -415,3 +415,27 @@ export async function deletePlugin(id) {
   const { data } = await http.delete(`/api/plugins/${id}`)
   return data
 }
+
+/** 检查 GitHub Release 新版本（代理取设置 update.proxy） */
+export async function updatesCheck() {
+  const { data } = await http.get('/api/updates/check')
+  return data
+}
+
+/** 开始下载更新包（后台线程，进度走 updatesStatus 轮询） */
+export async function updatesDownload(body) {
+  const { data } = await http.post('/api/updates/download', body)
+  return data
+}
+
+/** 下载进度/状态轮询 */
+export async function updatesStatus() {
+  const { data } = await http.get('/api/updates/status')
+  return data
+}
+
+/** 安装并重启（平台分派：Linux pkexec / Win bat / macOS sh） */
+export async function updatesInstall() {
+  const { data } = await http.post('/api/updates/install')
+  return data
+}
