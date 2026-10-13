@@ -196,7 +196,7 @@ def _on_reminder_due(runtime: AppRuntime, batch: list) -> None:
         from zentray.ui.dialog_utils import run_modal_loop
 
         task_service = injector.get(TaskService)
-        handled, _payload = try_vue_reminders(batch)
+        handled, payload = try_vue_reminders(batch)
         if not handled:
             # Qt 回退：逐个顺序弹，本地应用动作
             for task, fire_key in batch:
@@ -234,6 +234,16 @@ def _on_reminder_due(runtime: AppRuntime, batch: list) -> None:
                     continue
                 rem = apply_reminder_action(task, "dismiss", fire_key)
                 task_service.update_task_reminder(task.id, rem)
+            # 「跳转」：甲板整窗已关（未处理卡上方统一 dismiss），开任务列表直达选中
+            if (
+                runtime.controller
+                and isinstance(payload, dict)
+                and payload.get("action") == "jump"
+                and payload.get("task_id")
+            ):
+                from zentray.ui.vue_commands import try_vue_task_list
+
+                try_vue_task_list(runtime.controller, str(payload["task_id"]))
         if runtime.controller:
             runtime.controller.update_display()
     finally:
