@@ -309,9 +309,9 @@ API：
 
 | 路径 | id | 说明 |
 |------|-----|------|
-| `bundled_plugins/net-cleanup/` | `net-cleanup` | **网络清理**：刷新 DNS/路由缓存、打印代理环境变量（Linux），api_version 1 |
-| `bundled_plugins/task-report/` | `task-report` | **任务报告**：任务完成触发，回显任务上下文并 `write_back` 写回备注，api_version 2 |
-| `bundled_plugins/param-demo/` | `param-demo` | **参数演示**：两个命名入参，点击即见参数弹窗；摘要回显所填值并写 `plugin_data` 历史演示数据目录，api_version 2 |
+| `bundled_plugins/ai-news-digest/` | `ai-news-digest` | **AI 资讯日报**：聚合 HN 与主流媒体 RSS 生成带图 HTML 日报，标题中英对照、可选 AI 摘要，daily 触发 + 命名入参 `top_n`，api_version 2 |
+| `bundled_plugins/email-digest/` | `email-digest` | **邮箱日报**：多邮箱 IMAP 只读汇总为一份日报（password/XOAUTH2 双轨），daily 触发 + `write_back`，api_version 2 |
+| `bundled_plugins/text-toolbox/` | `text-toolbox` | **文本工具箱**：本地文本工具页（JSON/SQL、文本比对、时间工具、加解密等），service 型 + `env` 注入端口，api_version 1 |
 
 启用「插件」后，托盘「🧩 插件」**面板入口**可见（GNOME 托盘无向右弹出的子菜单，
 插件面板为双标签运行台：「插件」=分类筛选+调参运行，「记录」=运行历史+执行报告

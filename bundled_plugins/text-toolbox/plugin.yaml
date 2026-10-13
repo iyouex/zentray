@@ -1,0 +1,10 @@
+id: text-toolbox
+name: 文本工具箱
+version: 0.3.1
+type: service
+api_version: 1
+entry: text_toolbox.py
+category: 工具
+env:
+  TEXT_TOOLBOX_PORT: "18767"
+description: 启动本地文本工具页：JSON/SQL 处理、文本比对合并、时间工具（万年历含当日任务、时间戳互转、日期计算、格式化）、随机字符串、哈希/编码/加解密。
