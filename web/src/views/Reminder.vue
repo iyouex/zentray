@@ -1,5 +1,5 @@
 <template>
-  <div class="page reminder-page">
+  <div ref="rootRef" class="page reminder-page">
     <div class="page-header">
       <h2>⏰ 任务提醒（{{ cards.length }}）</h2>
     </div>
@@ -28,11 +28,25 @@
             <a-button size="small" type="primary" status="success" :loading="c.acting" @click="act(c, 'done')">
               ✅ 完成
             </a-button>
-            <a-button size="small" type="outline" :loading="c.acting" @click="act(c, 'snooze')">
-              😴 稍后 10 分钟
-            </a-button>
+            <a-dropdown-button size="small" type="outline" :disabled="c.acting" @click="act(c, 'snooze', 10)">
+              😴 稍后 10 分钟 ▾
+              <template #content>
+                <a-doption @click="act(c, 'snooze', 60)">1 小时后</a-doption>
+                <a-doption @click="act(c, 'snooze', minutesToEod())">当天 23:59</a-doption>
+                <a-doption @click="c.customOpen = true">自定义…</a-doption>
+              </template>
+            </a-dropdown-button>
             <a-button size="small" type="outline" :loading="c.acting" @click="act(c, 'dismiss')">
               忽略
+            </a-button>
+            <a-button size="small" type="text" :loading="c.acting" @click="jump(c)">↗ 跳转</a-button>
+          </div>
+          <div v-if="c.customOpen" class="rcard-custom">
+            稍后
+            <a-input-number v-model="c.customMin" :min="1" :max="1440" size="small" style="width: 96px" />
+            分钟
+            <a-button size="small" type="primary" :loading="c.acting" @click="act(c, 'snooze', c.customMin || 30)">
+              确定
             </a-button>
           </div>
         </div>
@@ -43,10 +57,10 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { Message } from '@arco-design/web-vue'
-import { closeHost, listTasks, reminderAction } from '@/api/client'
+import { closeHost, listTasks, reminderAction, reportHostHeight } from '@/api/client'
 import { categoryColor } from '@/theme'
 
 const route = useRoute()
@@ -62,13 +76,13 @@ function timeOf(c) {
 }
 
 /** 逐卡即时动作：落库后卡片离场；甲板清空自动关窗（未处理卡由宿主扫尾 dismiss） */
-async function act(c, action) {
+async function act(c, action, snoozeMin = 10) {
   c.acting = true
   try {
     await reminderAction(c.id, {
       action,
       fire_key: c.fireKey || '',
-      snooze_minutes: 10,
+      snooze_minutes: snoozeMin,
     })
     cards.value = cards.value.filter((x) => x.id !== c.id)
     if (!cards.value.length) closeHost({ action: 'deck-cleared' })
@@ -76,6 +90,18 @@ async function act(c, action) {
     c.acting = false
     Message.error(e?.message || '操作失败')
   }
+}
+
+/** 当天档：距 23:59 的分钟数（前端折算，后端只收 snooze_minutes） */
+function minutesToEod() {
+  const eod = new Date()
+  eod.setHours(23, 59, 59, 0)
+  return Math.max(1, Math.ceil((eod.getTime() - Date.now()) / 60000))
+}
+
+/** 跳转：整个甲板关窗（本卡与其余未处理卡由宿主统一 dismiss），宿主开任务列表直达选中 */
+function jump(c) {
+  closeHost({ action: 'jump', task_id: c.id })
 }
 
 onMounted(async () => {
@@ -86,7 +112,7 @@ onMounted(async () => {
     cards.value = ids
       .map((id, i) => {
         const task = all.find((t) => t.id === id)
-        return task ? { id, fireKey: keys[i] || '', acting: false, task } : null
+        return task ? { id, fireKey: keys[i] || '', acting: false, task, customOpen: false, customMin: 30 } : null
       })
       .filter(Boolean)
     // 全部已不存在（提前完成等）：直接关窗
@@ -97,6 +123,32 @@ onMounted(async () => {
     loading.value = false
   }
 })
+
+/** 高度自适应：卡片增减即上报内容高，宿主同步调窗（开窗仍用 120+n*170 预估）。
+ * 页面根有 min-height:100% 不可直接量（会随视口自放大），量到 deck 底边为止 */
+const rootRef = ref(null)
+let lastReportedH = 0
+let deckEl = null
+const resizeObserver = new ResizeObserver(syncHeight)
+function syncHeight() {
+  const root = rootRef.value
+  const deck = root?.querySelector('.deck')
+  if (!root || !deck) return
+  if (deck !== deckEl) {
+    deckEl = deck
+    resizeObserver.observe(deck)
+  }
+  const h = Math.ceil(
+    deck.getBoundingClientRect().bottom - root.getBoundingClientRect().top +
+    parseFloat(getComputedStyle(root).paddingBottom),
+  )
+  if (h > 0 && h !== lastReportedH) {
+    lastReportedH = h
+    reportHostHeight(h)
+  }
+}
+watch(() => cards.value.length, () => nextTick(syncHeight))
+onBeforeUnmount(() => resizeObserver.disconnect())
 </script>
 
 <style scoped>
@@ -152,6 +204,15 @@ onMounted(async () => {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  align-items: center;
+}
+.rcard-custom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--color-text-2);
 }
 /* 卡片离场 */
 .rm-card-leave-active {
