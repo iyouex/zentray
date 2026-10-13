@@ -100,6 +100,25 @@ class AppRuntime(QObject):
                 logger.exception("停止 worker 失败")
 
 
+def _sync_quick_add_hotkey(runtime: AppRuntime, qa, initial: bool = False) -> None:
+    """按设置启停/换键全局热键（initial=True 为启动注册，同键位不重建）。"""
+    want = (qa.hotkey or HOTKEY_QUICK_ADD) if qa.enabled else None
+    cur = getattr(runtime, "hotkey", None)
+    if not initial and cur is not None and cur.hotkey_str == want:
+        return
+    if cur is not None:
+        cur.stop()
+    runtime.hotkey = None
+    if want is None:
+        if not initial:
+            logger.info("闪电添加热键已按设置停用")
+        return
+    runtime.hotkey = HotkeyListener(want)
+    runtime.hotkey.triggered.connect(runtime.on_quick_add)
+    if not runtime.hotkey.start():
+        logger.warning("全局热键不可用（权限/Wayland？），仍可通过任务列表新建任务")
+
+
 def _start_plugin_trigger_worker_if_needed(runtime: AppRuntime) -> None:
     """插件总开关开启时启动定时触发 worker（事件触发不走 worker）。"""
     from zentray.plugins import triggers
@@ -453,6 +472,9 @@ def main():
         task_repo = injector.get(TaskRepository)
         _start_nightly_if_needed(runtime, task_repo)
         _start_plugin_trigger_worker_if_needed(runtime)
+        from zentray.services.settings_manager import SettingsManager as _SM
+
+        _sync_quick_add_hotkey(runtime, _SM().quick_add)
 
     runtime.controller.apply_settings = apply_settings_with_workers
 
@@ -472,14 +494,13 @@ def main():
     logger.info("静默启动完成：仅顶栏托盘 + 任务标题轮播")
 
     task_service = injector.get(TaskService)
-    # 闪电添加：优先 Vue 浮层，否则 Qt Overlay
+    # 闪电添加：优先 Vue 浮层，否则 Qt Overlay；热键开关/键位由设置控制
     runtime.overlay = QuickAddOverlay(task_service=task_service)
     runtime.overlay.task_added.connect(runtime.controller.reload_data)
 
-    runtime.hotkey = HotkeyListener(HOTKEY_QUICK_ADD)
-    runtime.hotkey.triggered.connect(runtime.on_quick_add)
-    if not runtime.hotkey.start():
-        logger.warning("全局热键不可用（权限/Wayland？），仍可通过任务列表新建任务")
+    from zentray.services.settings_manager import SettingsManager as _SM
+
+    _sync_quick_add_hotkey(runtime, _SM().quick_add, initial=True)
 
     # 向导「打开任务列表试试」：全部就绪后首个事件循环周期执行（复用二次点击唤醒路径）
     if _open_tasks_after_start:

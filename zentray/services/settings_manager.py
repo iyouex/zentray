@@ -156,6 +156,8 @@ class NotificationSettings:
 
 @dataclass
 class QuickAddSettings:
+    enabled: bool = True
+    hotkey: str = ""  # 空 = 平台默认（config.HOTKEY_QUICK_ADD：win/linux <ctrl>+<alt>+t，mac <alt>+<space>）
     default_category: str = "工作"
     default_priority: str = "medium"
 
@@ -610,8 +612,10 @@ class SettingsManager:
         if "categories" in data:
             self._settings.categories = CategorySettings.from_dict(data["categories"])
         if "quick_add" in data:
-            q = data["quick_add"]
+            q = data["quick_add"] or {}
             self._settings.quick_add = QuickAddSettings(
+                enabled=bool(q.get("enabled", True)),
+                hotkey=str(q.get("hotkey") or ""),
                 default_category=q.get("default_category", "工作"),
                 default_priority=q.get("default_priority", "medium"),
             )
