@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import zipfile
 from pathlib import Path
 
@@ -438,3 +439,33 @@ def test_prune_only_auto_prefix(tmp_path: Path):
     assert removed == 1
     assert len(list(bdir.glob(f"{mig.AUTO_PREFIX}-*.zip"))) == 2
     assert Path(manual.path).exists()
+
+
+def test_import_plugins_restores_exec_bit(tmp_path: Path):
+    """恢复落盘不得丢可执行位：插件 entry 校验（manifest.py）要求 os.X_OK。"""
+    backup_root = tmp_path / "backup"
+    live = tmp_path / "live"
+    live.mkdir()
+    for d in (backup_root, live):
+        (d / "plugins" / "foo").mkdir(parents=True)
+        (d / "plugins" / "foo" / "plugin.yaml").write_text("id: foo\n", encoding="utf-8")
+        entry = d / "plugins" / "foo" / "run.sh"
+        entry.write_text("#!/bin/sh\n", encoding="utf-8")
+        entry.chmod(0o755)
+    exported = mig.create_export_zip(["plugins"], data_dir=backup_root)
+    assert exported.ok
+
+    # 裸键整类替换
+    ok = mig.import_replace(exported.path, ["plugins"], data_dir=live, make_safety_backup=False)
+    assert ok.ok, ok.message
+    entry = live / "plugins" / "foo" / "run.sh"
+    assert entry.is_file()
+    assert os.access(entry, os.X_OK), "恢复后 entry 丢可执行位，插件将校验失败"
+
+    # 子键分区替换同路径
+    (entry).chmod(0o644)
+    ok = mig.import_replace(
+        exported.path, ["plugins:foo"], data_dir=live, make_safety_backup=False
+    )
+    assert ok.ok, ok.message
+    assert os.access(live / "plugins" / "foo" / "run.sh", os.X_OK)

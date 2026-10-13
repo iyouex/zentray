@@ -172,6 +172,19 @@ def _stamp() -> str:
     return datetime.now().strftime("%Y%m%d_%H%M%S")
 
 
+def _extract_member(zf, name: str, target: Path) -> None:
+    """落盘单个成员并恢复可执行位（open("wb") 按 umask 落盘丢 +x，
+    插件 entry 校验要求可执行——同 api/handlers._extract_plugin_zip）。"""
+    info = zf.getinfo(name)
+    with zf.open(name) as src_f, open(target, "wb") as out_f:
+        shutil.copyfileobj(src_f, out_f)
+    if (info.external_attr >> 16) & 0o111:
+        try:
+            target.chmod(target.stat().st_mode | 0o111)
+        except OSError:
+            pass
+
+
 def _add_path_to_zip(zf: zipfile.ZipFile, src: Path, arcname: str) -> None:
     if src.is_file():
         zf.write(src, arcname)
@@ -387,8 +400,7 @@ def _replace_dir_partition(zf, root: Path, rel: str, subs: Sequence[str], *, exa
     for name in members:
         target = root / name
         target.parent.mkdir(parents=True, exist_ok=True)
-        with zf.open(name) as src_f, open(target, "wb") as out_f:
-            shutil.copyfileobj(src_f, out_f)
+        _extract_member(zf, name, target)
     return "replaced_partition"
 
 
@@ -497,8 +509,7 @@ def import_replace(
                 # 单文件
                 if rel in members and not rel.endswith("/"):
                     dest.parent.mkdir(parents=True, exist_ok=True)
-                    with zf.open(rel) as src_f, open(dest, "wb") as out_f:
-                        shutil.copyfileobj(src_f, out_f)
+                    _extract_member(zf, rel, dest)
                     details[key] = "replaced_file"
                     continue
 
@@ -510,8 +521,7 @@ def import_replace(
                         continue
                     target = root / name
                     target.parent.mkdir(parents=True, exist_ok=True)
-                    with zf.open(name) as src_f, open(target, "wb") as out_f:
-                        shutil.copyfileobj(src_f, out_f)
+                    _extract_member(zf, name, target)
                 details[key] = "replaced_dir"
 
             # 子键分区替换（同键合并执行）
