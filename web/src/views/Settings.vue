@@ -268,6 +268,59 @@
               <span class="hint-sm">快捷键格式如 &lt;ctrl&gt;+&lt;alt&gt;+t（macOS 如 &lt;alt&gt;+&lt;space&gt;）；随「保存设置」生效；与系统/输入法同键位冲突时换组合。</span>
             </section>
 
+            <section class="compact-block">
+              <div class="compact-head">飞书同步</div>
+              <div class="field-table">
+                <div class="field-line">
+                  <span class="field-k">启用飞书同步</span>
+                  <a-switch v-model="form.feishu_sync.enabled" />
+                </div>
+                <span class="hint-sm">
+                  把任务单向推送到飞书「ZenTray」日历与任务清单（完成/删除自动撤下，不回读）；
+                  需飞书开放平台自建应用，<a class="doc-link" @click.prevent="openFeishuDoc">配置步骤见文档</a>。
+                  改动随「保存设置」生效。
+                </span>
+                <template v-if="form.feishu_sync.enabled">
+                  <div class="field-line">
+                    <span class="field-k">App ID</span>
+                    <a-input v-model="form.feishu_sync.app_id" placeholder="cli_a…（自建应用凭证）" style="max-width: 220px" />
+                  </div>
+                  <div class="field-line">
+                    <span class="field-k">App Secret</span>
+                    <a-input-password v-model="form.feishu_sync.app_secret" placeholder="自建应用密钥" style="max-width: 220px" allow-clear />
+                  </div>
+                  <div class="field-line">
+                    <span class="field-k">同步日程到日历</span>
+                    <a-switch v-model="form.feishu_sync.sync_calendar" size="small" />
+                  </div>
+                  <div class="field-line">
+                    <span class="field-k">同步任务到清单</span>
+                    <a-switch v-model="form.feishu_sync.sync_tasks" size="small" />
+                  </div>
+                  <div class="field-line">
+                    <span class="field-k">接收人 Open ID</span>
+                    <a-input v-model="form.feishu_sync.feishu_user_id" placeholder="可选，用于日历共享/任务指派" style="max-width: 220px" allow-clear />
+                  </div>
+                  <div class="field-line">
+                    <span class="field-k">连接与同步</span>
+                    <a-space size="small">
+                      <a-button size="small" :loading="feishuTesting" :disabled="!form.feishu_sync.app_id || !form.feishu_sync.app_secret" @click="onFeishuTest">
+                        测试连接
+                      </a-button>
+                      <a-button size="small" :loading="feishuResyncing" @click="onFeishuResync">
+                        全量重同步
+                      </a-button>
+                    </a-space>
+                  </div>
+                  <div v-if="feishuStatusText" class="field-line">
+                    <span class="field-k">同步状态</span>
+                    <span class="hint-sm" :style="form.feishu_sync.last_error ? 'color: #f53f3f' : ''">{{ feishuStatusText }}</span>
+                  </div>
+                </template>
+              </div>
+              <span v-if="form.feishu_sync.enabled" class="hint-sm">「测试连接 / 全量重同步」会先保存本卡片配置再执行；全量重同步不清远端旧对象，需要干净重来时先在飞书侧清空 ZenTray 日历/清单。</span>
+            </section>
+
             <div class="compact-page">
               <section class="compact-block">
                 <div class="compact-head">轮播设置</div>
@@ -1249,6 +1302,8 @@ import {
   deleteBackup,
   deletePlugin,
   exportBackup,
+  feishuSyncResync,
+  feishuSyncTest,
   getPluginRunLog,
   getSettings,
   getSystemStatus,
@@ -1261,6 +1316,7 @@ import {
   listBackups,
   listPluginRuns,
   listPlugins,
+  openAttachment,
   openPluginReport,
   packArchive,
   openTaskbarSettings,
@@ -1295,6 +1351,55 @@ const notifyExpandKeys = ref([])
 function goNewTask() {
   router.push('/tasks/new?from=list')
 }
+
+// —— 飞书同步（任务页卡片）——
+const feishuTesting = ref(false)
+const feishuResyncing = ref(false)
+const FEISHU_DOC_URL = 'https://github.com/iyouex/zentray/blob/staging/docs/FEISHU_SYNC.md'
+
+function openFeishuDoc() {
+  openAttachment(FEISHU_DOC_URL).catch(() => {})
+}
+
+/** 测试/重同步读的是已保存配置：先局部保存本卡片再执行（同 saveOpsPatch 惯例，只动本节避免覆盖后台写入的状态） */
+async function saveFeishuSection() {
+  await saveSettings({ feishu_sync: { ...form.feishu_sync } })
+}
+
+async function onFeishuTest() {
+  feishuTesting.value = true
+  try {
+    await saveFeishuSection()
+    const r = await feishuSyncTest()
+    form.feishu_sync.last_error = r.ok ? '' : (r.message || '连接失败')
+    if (r.ok) Message.success(r.message || '连接成功')
+    else Message.error(r.message || '连接失败')
+  } catch (e) {
+    Message.error(e?.response?.data?.error || e?.message || '保存或测试失败')
+  } finally {
+    feishuTesting.value = false
+  }
+}
+
+async function onFeishuResync() {
+  feishuResyncing.value = true
+  try {
+    await saveFeishuSection()
+    const r = await feishuSyncResync()
+    Message.success(`已入队 ${r.queued ?? 0} 条任务重推，稍后在飞书查看`)
+  } catch (e) {
+    Message.error(e?.response?.data?.error || e?.message || '重同步失败')
+  } finally {
+    feishuResyncing.value = false
+  }
+}
+
+const feishuStatusText = computed(() => {
+  const f = form.feishu_sync
+  if (f.last_error) return `最近错误：${f.last_error}`
+  if (f.last_sync_at) return `上次同步：${f.last_sync_at}`
+  return ''
+})
 
 // —— 系统页 ——
 const autostartEnabled = ref(false)
@@ -1919,6 +2024,18 @@ function emptyForm() {
       primary_list: [],
     },
     quick_add: { enabled: true, hotkey: '', default_category: '工作', default_priority: 'medium' },
+    feishu_sync: {
+      enabled: false,
+      app_id: '',
+      app_secret: '',
+      sync_calendar: true,
+      sync_tasks: true,
+      feishu_user_id: '',
+      calendar_id: '',
+      task_list_guid: '',
+      last_error: '',
+      last_sync_at: '',
+    },
     appearance: {
       theme: 'system',
       autostart: false,
@@ -2325,6 +2442,8 @@ const importTree = computed(() => {
     appearance: '外观',
     backup: '备份',
     ops: '插件运行时',
+    update: '软件更新',
+    feishu_sync: '飞书同步',
   }
   const nodes = []
   for (const c of data.categories || []) {
@@ -2631,6 +2750,7 @@ function normalizeLoaded(s) {
     form.categories.wrap_right = ']'
   }
   if (!form.quick_add) form.quick_add = emptyForm().quick_add
+  if (!form.feishu_sync) form.feishu_sync = emptyForm().feishu_sync
   // 备份：normalize 时补默认 + 钳制（trigger_hour 0 点合法，不能用 || 兜底）
   const bk = { ...emptyForm().backup, ...(s.backup || {}) }
   if (![1, 3, 7].includes(bk.interval_days)) bk.interval_days = 1
@@ -2980,6 +3100,13 @@ body.zt-skin-clay .nav-main :deep(.arco-menu-item.arco-menu-selected) {
   font-size: 12px;
   color: var(--color-text-3);
   line-height: 1.4;
+}
+.doc-link {
+  color: var(--color-primary);
+  cursor: pointer;
+}
+.doc-link:hover {
+  text-decoration: underline;
 }
 /* 番茄钟节奏预设标签：可点击回填 */
 .pomo-preset {

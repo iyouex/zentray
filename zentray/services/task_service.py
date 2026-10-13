@@ -127,6 +127,7 @@ class TaskService:
             )
         except Exception:
             pass
+        self._enqueue_feishu(task, "upsert")
         return task
 
     def create_template(self, data: dict) -> PeriodicTemplate:
@@ -254,6 +255,7 @@ class TaskService:
                     )
                 except Exception:
                     pass
+                self._enqueue_feishu(updated, "upsert")
                 return updated
         return None
 
@@ -299,6 +301,7 @@ class TaskService:
             except Exception:
                 pass
             self._dispatch_plugin_event("task_done", task)
+            self._enqueue_feishu(task, "done")
 
     @staticmethod
     def _dispatch_plugin_event(event: str, task) -> None:
@@ -307,6 +310,16 @@ class TaskService:
             from zentray.plugins import triggers
 
             triggers.dispatch_event(event, task)
+        except Exception:
+            pass
+
+    @staticmethod
+    def _enqueue_feishu(task, action: str) -> None:
+        """飞书同步入队挂点（upsert/done/deleted）。未启用/未配置时队列自行丢弃。"""
+        try:
+            from zentray.services.feishu_sync import FeishuSyncService
+
+            FeishuSyncService.instance().enqueue(task, action)
         except Exception:
             pass
 
@@ -329,6 +342,7 @@ class TaskService:
                 )
             except Exception:
                 pass
+            self._enqueue_feishu(task, "deleted")
 
     def add_subtask(self, task_id: str, title: str) -> Optional[Task]:
         """为任务追加一个子任务（status=active）。"""
@@ -398,6 +412,7 @@ class TaskService:
             except Exception:
                 pass
             self._dispatch_plugin_event("task_done", res["t"])
+            self._enqueue_feishu(res["t"], "done")
         else:
             self._refresh_scheduler()
         return res["t"], bool(res.get("auto"))
@@ -565,5 +580,6 @@ class TaskService:
                 t.reminder = reminder
                 tasks[i] = t
                 self.task_repo.save_all(tasks)
+                self._enqueue_feishu(t, "upsert")
                 return t
         return None
