@@ -215,6 +215,13 @@ class OpsSettings:
     notify_channels: List[str] = field(default_factory=list)
 
 
+@dataclass
+class UpdateSettings:
+    """应用内自更新。proxy 空 = 直连/环境变量（GUI 进程读不到系统代理时手动填）。"""
+
+    proxy: str = ""
+
+
 
 @dataclass
 class AIApiProfile:
@@ -432,6 +439,7 @@ class AppSettings:
     appearance: AppearanceSettings = field(default_factory=AppearanceSettings)
     backup: BackupSettings = field(default_factory=BackupSettings)
     ops: OpsSettings = field(default_factory=OpsSettings)
+    update: UpdateSettings = field(default_factory=UpdateSettings)
 
 
 class SettingsManager:
@@ -686,6 +694,12 @@ class SettingsManager:
 
             )
 
+        if "update" in data:
+            u = data["update"] or {}
+            self._settings.update = UpdateSettings(
+                proxy=str(u.get("proxy") or "").strip(),
+            )
+
         # 用 review 回写 nightly 兼容
         self._sync_nightly_from_review()
 
@@ -785,6 +799,7 @@ class SettingsManager:
             "appearance": asdict(self._settings.appearance),
             "backup": asdict(self._settings.backup),
             "ops": asdict(self._settings.ops),
+            "update": asdict(self._settings.update),
         }
         with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
@@ -828,6 +843,10 @@ class SettingsManager:
     @property
     def ops(self) -> OpsSettings:
         return self._settings.ops
+
+    @property
+    def update(self) -> UpdateSettings:
+        return self._settings.update
 
     def get_ops_user_plugins_dir(self) -> Path:
         """用户插件目录（绝对路径）。"""
