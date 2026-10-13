@@ -239,6 +239,35 @@
               </div>
             </section>
 
+            <section class="compact-block">
+              <div class="compact-head">闪电添加</div>
+              <div class="field-table">
+                <div class="field-line">
+                  <span class="field-k">启用全局快捷键</span>
+                  <a-switch v-model="form.quick_add.enabled" />
+                </div>
+                <template v-if="form.quick_add.enabled">
+                  <div class="field-line">
+                    <span class="field-k">快捷键</span>
+                    <a-input v-model="form.quick_add.hotkey" placeholder="<ctrl>+<alt>+t（留空 = 默认）" style="max-width: 220px" />
+                  </div>
+                  <div class="field-line">
+                    <span class="field-k">默认分类</span>
+                    <a-input v-model="form.quick_add.default_category" style="max-width: 220px" />
+                  </div>
+                  <div class="field-line">
+                    <span class="field-k">默认优先级</span>
+                    <a-select v-model="form.quick_add.default_priority" style="width: 120px">
+                      <a-option value="high">高</a-option>
+                      <a-option value="medium">中</a-option>
+                      <a-option value="low">低</a-option>
+                    </a-select>
+                  </div>
+                </template>
+              </div>
+              <span class="hint-sm">快捷键格式如 &lt;ctrl&gt;+&lt;alt&gt;+t（macOS 如 &lt;alt&gt;+&lt;space&gt;）；随「保存设置」生效；与系统/输入法同键位冲突时换组合。</span>
+            </section>
+
             <div class="compact-page">
               <section class="compact-block">
                 <div class="compact-head">轮播设置</div>
@@ -1889,7 +1918,7 @@ function emptyForm() {
       level_separator: '-',
       primary_list: [],
     },
-    quick_add: { default_category: '工作', default_priority: 'medium' },
+    quick_add: { enabled: true, hotkey: '', default_category: '工作', default_priority: 'medium' },
     appearance: {
       theme: 'system',
       autostart: false,
