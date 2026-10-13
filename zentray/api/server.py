@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import parse_qs, unquote, urlparse
 
-from zentray.api.handlers import handle_request
+from zentray.api.handlers import handle_request, serve_attachment_thumb
 from zentray.resources import get_resource_path
 
 logger = logging.getLogger(__name__)
@@ -83,6 +83,16 @@ class _Handler(BaseHTTPRequestHandler):
         qs = {k: (v[0] if v else "") for k, v in parse_qs(parsed.query).items()}
 
         if path.startswith("/api/"):
+            # 附件缩略图：二进制响应，走单独分支（其余 API 一律 JSON）
+            if method == "GET" and path == "/api/attachments/thumb":
+                code, ctype, blob = serve_attachment_thumb(qs)
+                self.send_response(code)
+                self._cors()
+                self.send_header("Content-Type", ctype)
+                self.send_header("Content-Length", str(len(blob)))
+                self.end_headers()
+                self.wfile.write(blob)
+                return
             body = self._read_body() if method in ("POST", "PUT") else None
             code, data = handle_request(method, path, body, query=qs)
             payload = json.dumps(data, ensure_ascii=False).encode("utf-8")

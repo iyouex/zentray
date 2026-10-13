@@ -1,5 +1,8 @@
 import axios from 'axios'
 
+/** 已注入基址缓存：列表内 router.push 会丢 api query，记住首次取到的值 */
+let _injectedApiBase = ''
+
 /** 从 hash query 或 location 解析 API 基址（WebEngine 宿主会注入） */
 export function resolveApiBase() {
   try {
@@ -8,9 +11,13 @@ export function resolveApiBase() {
     if (qi >= 0) {
       const qs = new URLSearchParams(hash.slice(qi + 1))
       const api = qs.get('api')
-      if (api) return api.replace(/\/$/, '')
+      if (api) {
+        _injectedApiBase = api.replace(/\/$/, '')
+        return _injectedApiBase
+      }
     }
   } catch (_) {}
+  if (_injectedApiBase) return _injectedApiBase
   // 开发代理
   return ''
 }
@@ -205,6 +212,14 @@ export async function importBackup(path, { include, safety_backup = true, passwo
   return data
 }
 
+/** 导入预览（只读）：包内各类/子类计数，供选择性恢复渲染勾选树 */
+export async function importPreview(path, { password } = {}) {
+  const body = { path }
+  if (password) body.password = password
+  const { data } = await http.post('/api/system/import-preview', body)
+  return data
+}
+
 /** 仅打包 archive/ */
 export async function packArchive() {
   const { data } = await http.post('/api/system/archive/pack')
@@ -227,7 +242,7 @@ export async function deleteBackup(path) {
  * 原生路径选择（Qt WebEngine 桥）。kind: 'dir' | 'file' | 'save'。
  * 返回 { kind, id, path, cancelled }；纯浏览器 dev（无注入 api 基址）直接取消。
  */
-export function pickPath(kind, { title = '', startDir = '', defaultName = '' } = {}) {
+export function pickPath(kind, { title = '', startDir = '', defaultName = '', filter = '' } = {}) {
   if (!resolveApiBase()) {
     return Promise.resolve({ kind, id: '', path: '', cancelled: true })
   }
@@ -241,10 +256,21 @@ export function pickPath(kind, { title = '', startDir = '', defaultName = '' } =
     }
     window.addEventListener('zentray:pick-result', handler)
     const payload = encodeURIComponent(
-      JSON.stringify({ id, title, start_dir: startDir, default_name: defaultName })
+      JSON.stringify({ id, title, start_dir: startDir, default_name: defaultName, filter })
     )
     window.location.href = `zentray://pick-${kind}?payload=${payload}`
   })
+}
+
+/** 任务附件：本地图片缩略图直链（后端只放行图片后缀） */
+export function attachmentThumbUrl(path) {
+  return `${resolveApiBase()}/api/attachments/thumb?path=${encodeURIComponent(path)}`
+}
+
+/** 任务附件/链接：URL 系统浏览器打开，本地路径系统默认应用打开 */
+export async function openAttachment(value) {
+  const { data } = await http.post('/api/attachments/open', { value })
+  return data
 }
 
 /** 首次配置向导完成 */
@@ -298,8 +324,18 @@ export async function aiSuggest(focusId = '') {
 
 /** 关闭宿主窗口并回传结果（Qt WebEngine） */
 export function closeHost(payload = {}) {
-  const json = encodeURIComponent(JSON.stringify(payload || {}))
-  window.location.href = `zentray://close?payload=${json}`
+  const json = JSON.stringify(payload || {})
+  // 主通道走 console（宿主 javaScriptConsoleMessage 拦截并回写
+  // __zentrayCloseAck__）：页面失焦时 Chromium 会无限期挂起自定义协议
+  // 导航（通知气泡夺焦后关窗假死）。旧宿主无 console 拦截、无 ACK，
+  // 400ms 后退回导航兜底；有 ACK 则不再发导航，避免关窗后残留迟到的
+  // close 导航误关下次重开的面板
+  console.log(`zentray:close:${json}`)
+  setTimeout(() => {
+    if (!window.__zentrayCloseAck__) {
+      window.location.href = `zentray://close?payload=${encodeURIComponent(json)}`
+    }
+  }, 400)
 }
 
 export function cancelHost() {

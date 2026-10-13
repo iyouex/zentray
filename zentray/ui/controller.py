@@ -486,7 +486,8 @@ class TrayController(QObject):
                 status[:120],
                 on_click=self._make_report_opener(run_id, mark_key=key),
             )
-        if not sel or "wxpusher" in sel:
+        push_channels = [c for c in ("wxpusher", "feishu_bot") if not sel or c in sel]
+        if push_channels:
             # 后台线程推送：HTTP timeout 10s，不能卡托盘主线程
             import threading
 
@@ -497,10 +498,10 @@ class TrayController(QObject):
                     NotificationClient.from_settings().send(
                         f"脚本: {name}",
                         (report.get("result_text") or status)[:500],
-                        channels=["wxpusher"],
+                        channels=push_channels,
                     )
                 except Exception:
-                    logger.exception("插件报告 WxPusher 推送失败: %s", plugin_id)
+                    logger.exception("插件报告推送失败: %s", plugin_id)
 
             threading.Thread(target=_push, daemon=True).start()
         # 通知未被点击查看：报告提示进入顶栏轮播，到期自动退出

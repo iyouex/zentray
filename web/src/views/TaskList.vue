@@ -207,6 +207,29 @@
               </p>
               <p v-if="currentTask.details" class="details">{{ currentTask.details }}</p>
 
+              <!-- 附件/链接：图片缩略图；链接跳浏览器；文本/Office/其他跳系统默认应用 -->
+              <div v-if="currentTask.attachments?.length" class="atts">
+                <template v-for="(a, i) in currentTask.attachments" :key="i">
+                  <img
+                    v-if="attKind(a) === 'image' && !badThumbs.has(a)"
+                    class="att-thumb"
+                    :src="attachmentThumbUrl(a)"
+                    :title="openHint(a)"
+                    alt=""
+                    @error="addBadThumb(a)"
+                    @click="onOpenAttachment(a)"
+                  />
+                  <a-tag
+                    v-else
+                    class="att-chip"
+                    :title="openHint(a)"
+                    @click="onOpenAttachment(a)"
+                  >
+                    {{ attIcon(a) }} {{ attLabel(a) }}
+                  </a-tag>
+                </template>
+              </div>
+
               <!-- 子任务 -->
               <div v-if="currentTask.subtasks?.length" class="subtasks">
                 <div class="sub-head">
@@ -370,6 +393,7 @@ import {
   abandonTask,
   addSubtask,
   aiSuggest,
+  attachmentThumbUrl,
   cancelHost,
   closeHost,
   deleteTemplate,
@@ -379,6 +403,7 @@ import {
   listTemplates,
   listPlugins,
   markDone,
+  openAttachment,
   runPlugin,
   selectTask,
   setSubtaskStatus,
@@ -387,6 +412,7 @@ import {
   updateTask,
   updateTemplate,
 } from '@/api/client'
+import { attIcon, attKind, attLabel, openHint } from '@/utils/attachments'
 import { categoryColor } from '@/theme'
 import { gsap, Flip, EASE, DUR, motionOff, isReduced } from '@/motion'
 
@@ -455,6 +481,21 @@ function formatTime(t) {
 function subCount(item) {
   const subs = item?.subtasks || []
   return { done: subs.filter((s) => s.status === 'done').length, total: subs.length }
+}
+
+// ---- 附件/链接：缩略图加载失败降级为 chip；点击系统应用/浏览器打开 ----
+const badThumbs = ref(new Set())
+
+function addBadThumb(path) {
+  badThumbs.value = new Set(badThumbs.value).add(path)
+}
+
+async function onOpenAttachment(value) {
+  try {
+    await openAttachment(value)
+  } catch (e) {
+    Message.error(e?.response?.data?.error || e?.message || '打开失败')
+  }
 }
 
 // ---- 三视图数据：活跃任务（一次性 + 周期实例）/ 周期模板 / 历史任务 ----
@@ -1032,6 +1073,24 @@ async function applySuggest(i) {
   overflow: hidden;
   white-space: pre-line;
   word-break: break-word;
+}
+.atts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+.att-thumb {
+  width: 84px;
+  height: 84px;
+  object-fit: cover;
+  border-radius: var(--zt-radius-card, 10px);
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+}
+.att-chip {
+  cursor: pointer;
+  max-width: 100%;
 }
 .filter-row {
   display: flex;

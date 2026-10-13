@@ -182,6 +182,31 @@
                       开启后，计划/复盘完成时会通过<strong>托盘系统通知</strong>弹出提醒。
                     </a-alert>
                   </div>
+                  <a-form
+                    v-else-if="ch.type === 'feishu_bot'"
+                    layout="vertical"
+                    size="small"
+                    class="ch-body"
+                  >
+                    <a-form-item label="Webhook">
+                      <a-input
+                        v-model="ch.feishu_webhook"
+                        placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/..."
+                        :disabled="!ch.enabled"
+                      />
+                    </a-form-item>
+                    <a-form-item label="签名密钥">
+                      <a-input
+                        v-model="ch.feishu_secret"
+                        placeholder="签名密钥（未开启签名校验可留空）"
+                        :disabled="!ch.enabled"
+                      />
+                    </a-form-item>
+                    <a-alert type="info">
+                      需在<strong>飞书群内</strong>接收（群设置-群机器人-添加自定义机器人获取
+                      Webhook）；建议在飞书侧开启签名校验并填入密钥。
+                    </a-alert>
+                  </a-form>
                   <a-form v-else layout="vertical" size="small" class="ch-body">
                     <a-form-item label="App Token">
                       <a-input
@@ -515,9 +540,10 @@
                   <a-checkbox-group v-model="form.ops.notify_channels" @change="onOpsChannelsChange">
                     <a-checkbox value="app_popup">应用弹窗</a-checkbox>
                     <a-checkbox value="wxpusher">WxPusher</a-checkbox>
+                    <a-checkbox value="feishu_bot">飞书机器人</a-checkbox>
                   </a-checkbox-group>
                   <div class="plugin-desc" style="margin-top: 4px">
-                    可多选，至少保留一项（随「保存设置」生效）；WxPusher 需在 设置 → 🔔 通知 中启用才实际推送
+                    可多选，至少保留一项（随「保存设置」生效）；WxPusher / 飞书机器人需在 设置 → 🔔 通知 中启用才实际推送
                   </div>
                 </a-form-item>
               </a-card>
@@ -1010,6 +1036,7 @@
                     @clear="importNeedsPassword = false"
                   />
                   <a-button @click="onPickBackupFile">选择文件</a-button>
+                  <a-button :loading="previewLoading" @click="loadImportPreview">预览内容</a-button>
                   <a-button type="primary" status="warning" :loading="importLoading" @click="onImportBackup">
                     恢复
                   </a-button>
@@ -1018,6 +1045,25 @@
                   <span class="bk-policy-k">备份密码</span>
                   <a-input-password v-model="importPassword" placeholder="该备份已加密" style="width: 240px" allow-clear />
                 </div>
+                <template v-if="importPreviewData">
+                  <div class="sys-section-label" style="margin-top: 12px">选择要恢复的内容</div>
+                  <a-tree
+                    v-model:checked-keys="importChecked"
+                    :data="importTree"
+                    :default-expanded-keys="importTreeExpanded"
+                    checkable
+                    :selectable="false"
+                    size="small"
+                  />
+                  <p v-if="importTplHint" class="sys-hint muted">{{ importTplHint }}</p>
+                  <p class="sys-hint muted">
+                    勾选父项 = 整类替换；勾选子项 = 仅替换对应分区，其余保持本地现状。
+                  </p>
+                  <p v-if="importPreviewData.manifest" class="sys-hint muted">
+                    备份时间 {{ importPreviewData.manifest.created_at || '未知' }} ·
+                    生成版本 v{{ importPreviewData.manifest.app_version || '?' }}
+                  </p>
+                </template>
                 <a-alert type="warning" style="margin-top: 10px">
                   恢复为<strong>替换</strong>模式：覆盖本地所选数据；操作前会自动写入安全备份。
                 </a-alert>
@@ -1122,6 +1168,7 @@ import {
   getSettings,
   getSystemStatus,
   importBackup,
+  importPreview,
   installPluginPath,
   installPluginZip,
   exportTasksCalendar,
@@ -1177,6 +1224,10 @@ const encryptEnabled = ref(false)
 const backupPassword = ref('')
 const importNeedsPassword = ref(false)
 const importPassword = ref('')
+// 选择性恢复：预览数据 + 勾选树选中项（key 或 key:sub）
+const importPreviewData = ref(null)
+const importChecked = ref([])
+const previewLoading = ref(false)
 const saveAsLoading = ref(false)
 const savedBackupDir = ref('')
 
@@ -1857,11 +1908,19 @@ function defaultChannels() {
       wxpusher_app_token: '',
       wxpusher_uid: '',
     },
+    {
+      id: 'ch_feishu_bot',
+      type: 'feishu_bot',
+      name: '飞书机器人',
+      enabled: false,
+      feishu_webhook: '',
+      feishu_secret: '',
+    },
   ]
 }
 
 /**
- * 始终只保留 app_popup + wxpusher 各一条（合并旧数据）
+ * 始终只保留 app_popup + wxpusher + feishu_bot 各一条（合并旧数据）
  */
 function ensureFixedChannels(notification) {
   const list = notification?.channels || []
@@ -1881,14 +1940,19 @@ function ensureFixedChannels(notification) {
       }
     }
   }
+  let fs = list.find((c) => c.type === 'feishu_bot')
+  if (!fs) fs = defaultChannels().find((c) => c.type === 'feishu_bot')
   app.id = app.id || 'ch_app_popup'
   app.name = '应用弹窗'
   app.type = 'app_popup'
   wx.id = wx.id || 'ch_wxpusher'
   wx.name = 'WxPusher'
   wx.type = 'wxpusher'
+  fs.id = fs.id || 'ch_feishu_bot'
+  fs.name = '飞书机器人'
+  fs.type = 'feishu_bot'
   // 写回 form，保证引用一致
-  notification.channels = [app, wx]
+  notification.channels = [app, wx, fs]
   return notification.channels
 }
 
@@ -2091,6 +2155,114 @@ async function onChangeBackupDir() {
   form.backup.dir = r.path
 }
 
+/** 选择性恢复勾选树：父=整类替换，子=分区替换 */
+const importTree = computed(() => {
+  const data = importPreviewData.value
+  if (!data) return []
+  const labels = Object.fromEntries(includeOptions.value.map((o) => [o.key, o.label]))
+  const secLabels = {
+    polling: '轮询',
+    pomodoro: '番茄钟',
+    nightly: '夜间复盘',
+    notification: '通知',
+    ai: 'AI',
+    categories: '分类',
+    quick_add: '快捷添加',
+    appearance: '外观',
+    backup: '备份',
+    ops: '插件运行时',
+  }
+  const nodes = []
+  for (const c of data.categories || []) {
+    if (!c.present) continue
+    const label = labels[c.key] || c.key
+    let children
+    if (c.key === 'tasks') {
+      children = [
+        { key: 'tasks:one-time', title: `一次性任务（${c.counts?.['one-time'] || 0}）` },
+        { key: 'tasks:periodic_instance', title: `周期任务实例（${c.counts?.periodic_instance || 0}）` },
+      ]
+    } else if (c.key === 'settings') {
+      children = (c.sections || []).map((s) => ({ key: `settings:${s}`, title: secLabels[s] || s }))
+    } else if (c.key === 'reviews') {
+      children = [
+        { key: 'reviews:plan', title: `AI 计划（${c.counts?.plan || 0}）` },
+        { key: 'reviews:review', title: `AI 复盘（${c.counts?.review || 0}）` },
+      ]
+    } else if (c.key === 'archive') {
+      children = (c.months || []).map((m) => ({ key: `archive:${m.month}`, title: `${m.month}（${m.files} 个文件）` }))
+    } else if (c.key === 'plugins') {
+      children = (c.plugins || []).map((p) => ({ key: `plugins:${p}`, title: p }))
+    }
+    const title = c.key === 'templates' && c.count != null ? `${label}（${c.count}）` : label
+    nodes.push({ key: c.key, title, children })
+  }
+  return nodes
+})
+
+const importTreeExpanded = computed(() =>
+  importTree.value.filter((n) => n.children?.length).map((n) => n.key)
+)
+
+/** 周期任务按模板分布（仅展示，不提供勾选） */
+const importTplHint = computed(() => {
+  const t = (importPreviewData.value?.categories || []).find((c) => c.key === 'tasks')
+  const parts = (t?.templates || []).map((x) => `${x.title || x.template_id}×${x.count}`)
+  return parts.length ? `周期任务按模板：${parts.join('、')}` : ''
+})
+
+/** 树选中项 → include 列表：父选中=整类，否则取勾中的子项 */
+function selectionFromChecked(checked) {
+  const set = new Set(checked)
+  const out = []
+  for (const node of importTree.value) {
+    if (set.has(node.key)) {
+      out.push(node.key)
+      continue
+    }
+    for (const k of node.children || []) if (set.has(k.key)) out.push(k.key)
+  }
+  return out
+}
+
+async function loadImportPreview() {
+  const path = (importPath.value || '').trim()
+  if (!path) {
+    Message.warning('请先选择或填写备份 zip 路径')
+    return false
+  }
+  previewLoading.value = true
+  try {
+    const data = await importPreview(path, {
+      password: importNeedsPassword.value ? importPassword.value || undefined : undefined,
+    })
+    if (!data?.ok) {
+      const msg = data?.message || data?.error || '预览失败'
+      Message.error(msg)
+      // 服务端判定缺密码/密码错误：展开密码框让用户补
+      if (msg.includes('密码')) importNeedsPassword.value = true
+      importPreviewData.value = null
+      return false
+    }
+    importPreviewData.value = data
+    // 默认全选（与原整包恢复心智一致），用户再按需收窄
+    importChecked.value = (data.categories || []).filter((c) => c.present).map((c) => c.key)
+    return true
+  } catch (e) {
+    Message.error(e?.response?.data?.message || e?.response?.data?.error || e?.message || '预览失败')
+    return false
+  } finally {
+    previewLoading.value = false
+  }
+}
+
+// 路径变化后旧预览作废（手输/清空/重选）
+watch(importPath, (v) => {
+  if (importPreviewData.value && (v || '').trim() !== importPreviewData.value.path) {
+    importPreviewData.value = null
+  }
+})
+
 /** 原生文件选择器挑备份 zip；若快照表里是加密包，预置密码框 */
 async function onPickBackupFile() {
   const r = await pickPath('file', { title: '选择备份文件', startDir: backupDirDisplay.value })
@@ -2100,6 +2272,7 @@ async function onPickBackupFile() {
   }
   importPath.value = r.path
   importNeedsPassword.value = snapshots.value.some((s) => s.path === r.path && s.encrypted)
+  loadImportPreview()
 }
 
 async function onPackArchive() {
@@ -2125,12 +2298,21 @@ async function onImportBackup() {
     Message.warning('请填写本机备份 zip 路径')
     return
   }
+  // 未预览（如手输路径直接点恢复）先出勾选树
+  if (!importPreviewData.value) {
+    if (!(await loadImportPreview())) return
+  }
+  const sel = selectionFromChecked(importChecked.value)
+  if (!sel.length) {
+    Message.warning('请勾选要恢复的内容')
+    return
+  }
   const ok = await new Promise((resolve) => {
     Modal.confirm({
       draggable: true,
       title: '确认导入（替换）',
       content:
-        '将用备份覆盖本地对应数据，并先自动生成安全备份。导入后建议刷新任务或重启应用。是否继续？',
+        `将用备份替换所选 ${sel.length} 项内容（勾选子项时仅替换对应分区，其余保持现状），并先自动生成安全备份。是否继续？`,
       okText: '导入',
       okButtonProps: { status: 'warning' },
       onOk: () => resolve(true),
@@ -2142,7 +2324,7 @@ async function onImportBackup() {
   lastImportMsg.value = ''
   try {
     const data = await importBackup(path, {
-      include: exportInclude.value.length ? exportInclude.value : undefined,
+      include: sel,
       safety_backup: true,
       password: importNeedsPassword.value ? importPassword.value || undefined : undefined,
     })
@@ -2192,12 +2374,13 @@ function loadBackupPage() {
   loadBackups()
 }
 
-/** 快照行「恢复」：回填路径 + 密码态，走 onImportBackup 的确认流程 */
+/** 快照行「恢复」：回填路径 + 密码态，出预览勾选树 */
 function restoreSnapshot(record) {
   importPath.value = record.path
   importNeedsPassword.value = !!record.encrypted
   importPassword.value = ''
-  onImportBackup()
+  importPreviewData.value = null
+  loadImportPreview()
 }
 
 function deleteSnapshot(record) {
@@ -2311,7 +2494,7 @@ function normalizeLoaded(s) {
   if (!form.ops.param_presets) form.ops.param_presets = {}
   // 空 = 跟随全局（后端语义）；界面上物化为全选
   if (!Array.isArray(form.ops.notify_channels) || !form.ops.notify_channels.length) {
-    form.ops.notify_channels = ['app_popup', 'wxpusher']
+    form.ops.notify_channels = ['app_popup', 'wxpusher', 'feishu_bot']
   }
   opsUserDir.value = form.ops.user_plugins_dir || ''
   if (!form.polling) form.polling = emptyForm().polling

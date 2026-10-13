@@ -207,6 +207,28 @@
                   <a-button size="small" type="outline" @click="addSub">➕ 添加子任务</a-button>
                 </div>
               </a-form-item>
+              <!-- 附件/链接：仅一次性任务（模板无此字段）；详情页缩略/跳转打开 -->
+              <a-form-item v-if="!isTemplate && form.mode !== 'periodic'" label="附件 / 链接">
+                <div class="slots-box">
+                  <div v-for="(a, idx) in form.attachments" :key="idx" class="slot-row">
+                    <span class="att-chip" :title="a">{{ attIcon(a) }} {{ attLabel(a) }}</span>
+                    <a-button size="mini" status="danger" @click="form.attachments.splice(idx, 1)">删</a-button>
+                  </div>
+                  <div class="slot-row">
+                    <a-button size="small" type="outline" :loading="picking" @click="addAttachmentFile">
+                      📎 添加文件
+                    </a-button>
+                    <a-input-search
+                      v-model="newLink"
+                      size="small"
+                      placeholder="粘贴 https:// 链接，回车添加"
+                      style="flex: 1"
+                      search-button
+                      @search="addAttachmentLink"
+                    />
+                  </div>
+                </div>
+              </a-form-item>
               <a-form-item>
                 <a-checkbox v-model="form.reminder_enabled">弹窗提醒</a-checkbox>
               </a-form-item>
@@ -263,6 +285,20 @@
                   </div>
                 </a-form-item>
               </template>
+
+              <!-- 同时刻已有弹窗提醒：自动列出仅作参考，不阻断保存 -->
+              <a-form-item v-if="form.reminder_enabled && reminderConflicts.length">
+                <div class="conflict-hint">
+                  <div class="conflict-hint-title">该时间已有弹窗提醒（仅参考）：</div>
+                  <div
+                    v-for="(c, i) in reminderConflicts"
+                    :key="`${c.kind}-${c.id}-${i}`"
+                    class="conflict-hint-row"
+                  >
+                    [{{ CONFLICT_KIND_LABELS[c.kind] || c.kind }}] {{ c.title }} — {{ c.detail || c.time }}
+                  </div>
+                </div>
+              </a-form-item>
             </a-form>
           </a-card>
         </div>
@@ -336,7 +372,7 @@
 </template>
 
 <script setup>
-import { computed, h, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Message, Modal } from '@arco-design/web-vue'
 import { PhCamera, PhSparkle } from '@phosphor-icons/vue'
@@ -353,10 +389,12 @@ import {
   getTask,
   getTemplate,
   listPlugins,
+  pickPath,
   runPlugin,
   updateTask,
   updateTemplate,
 } from '@/api/client'
+import { attIcon, attLabel } from '@/utils/attachments'
 import NumberSpinner from '@/components/NumberSpinner.vue'
 import TimeSpinner from '@/components/TimeSpinner.vue'
 
@@ -728,6 +766,31 @@ function removeSub(idx) {
   form.subtasks.splice(idx, 1)
 }
 
+// ---- 附件/链接（存字符串：http(s)=链接，其余=本地路径） ----
+const picking = ref(false)
+const newLink = ref('')
+
+async function addAttachmentFile() {
+  picking.value = true
+  try {
+    const r = await pickPath('file', { title: '选择附件', filter: '所有文件 (*)' })
+    if (r?.path && !form.attachments.includes(r.path)) form.attachments.push(r.path)
+  } finally {
+    picking.value = false
+  }
+}
+
+function addAttachmentLink() {
+  const v = newLink.value.trim()
+  if (!v) return
+  if (!/^https?:\/\//i.test(v)) {
+    Message.warning('链接需以 http:// 或 https:// 开头')
+    return
+  }
+  if (!form.attachments.includes(v)) form.attachments.push(v)
+  newLink.value = ''
+}
+
 function loadReminder(rem) {
   if (!rem?.enabled) {
     form.reminder_enabled = false
@@ -789,7 +852,7 @@ function buildPayload() {
     details: form.details || '',
     reminder,
     auto_abandon_on_overdue: form.auto_abandon_on_overdue,
-    attachments: [],
+    attachments: (form.attachments || []).slice(),
     subtasks: (form.subtasks || [])
       .filter((s) => (s.title || '').trim())
       .map((s) => ({ id: s.id, title: s.title.trim(), status: s.status || 'active' })),
@@ -840,71 +903,50 @@ async function onAddSecondary() {
   }
 }
 
-function formatConflictList(conflicts) {
-  if (!conflicts?.length) return ''
-  return conflicts
-    .map((c, i) => {
-      const kindLabel =
-        {
-          task: '任务',
-          template: '周期模板',
-          ai_plan: 'AI 计划',
-          ai_review: 'AI 复盘',
-        }[c.kind] || c.kind
-      return `${i + 1}. [${kindLabel}] ${c.title} — ${c.detail || c.time}`
-    })
-    .join('\n')
+// ---- 弹窗提醒同时刻参考：调到已设时间即自动列出（仅参考，不阻断保存）----
+
+const CONFLICT_KIND_LABELS = {
+  task: '任务',
+  template: '周期模板',
+  ai_plan: 'AI 计划',
+  ai_review: 'AI 复盘',
 }
 
-/**
- * 弹窗提醒开启时检查与其它任务/模板/计划复盘调度是否同钟点冲突。
- * 有冲突则弹确认；用户确认后继续保存。
- */
-async function confirmReminderConflictsIfNeeded(payload) {
-  const rem = payload?.reminder
-  if (!rem?.enabled) return true
-  try {
-    const body = {
-      reminder: rem,
-      exclude_task_id:
-        isEdit.value && !isTemplate.value ? taskId.value : undefined,
-      exclude_template_id:
-        isEdit.value && isTemplate.value ? taskId.value : undefined,
+const reminderConflicts = ref([])
+let conflictTimer = null
+let conflictSeq = 0
+
+// shortcut: 400ms 防抖合并 TimeSpinner 连续拨动；检查失败静默清空（参考信息非关键路径）
+watch(
+  () =>
+    [form.reminder_enabled, form.reminder_time, JSON.stringify(form.reminder_slots || [])].join('|'),
+  () => {
+    clearTimeout(conflictTimer)
+    const rem = buildReminder()
+    if (!rem.enabled) {
+      reminderConflicts.value = []
+      return
     }
-    const data = await checkReminderConflicts(body)
-    if (!data?.has_conflict || !data.conflicts?.length) return true
-    const list = formatConflictList(data.conflicts)
-    return await new Promise((resolve) => {
-      Modal.confirm({
-        draggable: true,
-        title: '提醒时间冲突',
-        content: () =>
-          h(
-            'div',
-            {
-              style: {
-                whiteSpace: 'pre-line',
-                maxHeight: '260px',
-                overflow: 'auto',
-                fontSize: '13px',
-                lineHeight: '1.5',
-              },
-            },
-            `以下已有弹窗/调度与当前提醒时间冲突：\n\n${list}\n\n仍要保存吗？`,
-          ),
-        okText: '仍要保存',
-        cancelText: '返回修改',
-        simple: false,
-        width: 480,
-        onOk: () => resolve(true),
-        onCancel: () => resolve(false),
-      })
-    })
-  } catch (e) {
-    Message.warning(e?.message || '冲突检查失败，将直接保存')
-    return true
-  }
-}
+    conflictTimer = setTimeout(async () => {
+      const seq = ++conflictSeq
+      try {
+        const data = await checkReminderConflicts({
+          reminder: rem,
+          exclude_task_id:
+            isEdit.value && !isTemplate.value ? taskId.value : undefined,
+          exclude_template_id:
+            isEdit.value && isTemplate.value ? taskId.value : undefined,
+        })
+        if (seq === conflictSeq) reminderConflicts.value = data?.conflicts || []
+      } catch (_) {
+        if (seq === conflictSeq) reminderConflicts.value = []
+      }
+    }, 400)
+  },
+  { immediate: true },
+)
+
+onUnmounted(() => clearTimeout(conflictTimer))
 
 async function onSave() {
   if (!form.title.trim()) {
@@ -924,8 +966,6 @@ async function onSave() {
     return
   }
   const payload = buildPayload()
-  const ok = await confirmReminderConflictsIfNeeded(payload)
-  if (!ok) return
 
   saving.value = true
   try {
@@ -995,6 +1035,7 @@ onMounted(async () => {
         form.task_type = t.task_type || 'one-time'
         form.template_id = t.template_id
         form.mode = 'one-time'
+        form.attachments = Array.isArray(t.attachments) ? t.attachments.slice() : []
         form.subtasks = (t.subtasks || []).map((s) => ({ ...s }))
         form.plugin_id = t.plugin_id || null
         loadReminder(t.reminder)
@@ -1033,6 +1074,15 @@ onMounted(async () => {
   align-items: center;
   gap: 8px;
 }
+.att-chip {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--color-text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .slot-label {
   font-size: 13px;
   color: var(--color-text-2);
@@ -1047,6 +1097,18 @@ onMounted(async () => {
 .muted {
   color: var(--color-text-3);
   font-size: 12px;
+}
+.conflict-hint {
+  width: 100%;
+  font-size: 12.5px;
+  color: var(--color-text-3);
+  line-height: 1.6;
+}
+.conflict-hint-title {
+  color: var(--color-text-2);
+}
+.conflict-hint-row {
+  word-break: break-word;
 }
 /* AI 解析预览 */
 .ai-preview {

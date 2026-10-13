@@ -499,12 +499,33 @@ function _autoSync() {
   _lastAutoSync = now
   refresh()
 }
+// 脚本运行中轮询：focus 同步会被展开的卡片跳过，不轮询的话
+// 「脚本运行中」橙标要等手动刷新才消失，长任务看着像面板卡死
+let _busyTimer = null
+function _pollBusy() {
+  if (_busyTimer) return
+  _busyTimer = setInterval(async () => {
+    if (!busy.value) return
+    try {
+      const d = await listPlugins()
+      busy.value = !!d.busy
+      if (!busy.value) {
+        runsLoaded.value = false
+        if (tab.value === 'runs') loadRuns()
+      }
+    } catch {
+      /* 瞬断下轮再试 */
+    }
+  }, 5000)
+}
 onMounted(() => {
   loadPlugins()
+  _pollBusy()
   window.addEventListener('focus', _autoSync)
   document.addEventListener('visibilitychange', _autoSync)
 })
 onBeforeUnmount(() => {
+  if (_busyTimer) clearInterval(_busyTimer)
   window.removeEventListener('focus', _autoSync)
   document.removeEventListener('visibilitychange', _autoSync)
 })
