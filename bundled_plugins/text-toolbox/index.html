@@ -1,0 +1,2389 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>文本工具箱</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://unpkg.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<!-- CDN 组件（可选增强；加载失败自动降级并提示） -->
+<script src="https://cdn.jsdelivr.net/npm/jsonrepair@3.13.1/lib/umd/jsonrepair.min.js" onerror="window.__cdnJsonrepairFail=true" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sql-formatter/15.9.0/sql-formatter.min.js" onerror="window.__cdnSqlFormatterFail=true" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<style>
+:root{
+  --bg:#f2f3f5; --card:#ffffff; --card2:#f7f8fa;
+  --text:#1d2129; --muted:#86909c; --border:#e5e6eb;
+  --primary:#165dff; --primary-weak:rgba(22,93,255,.10); --on-primary:#fff;
+  --ok:#00b42a; --err:#f53f3f; --warn:#ff7d00;
+  --ins-bg:rgba(0,180,42,.14); --del-bg:rgba(245,63,63,.14);
+  --shadow:0 1px 4px rgba(29,33,41,.06);
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#17171a; --card:#232324; --card2:#2a2a2b;
+    --text:#f7f8fa; --muted:#a9aeb8; --border:#3d3d40;
+    --primary:#3c7eff; --primary-weak:rgba(60,126,255,.16); --on-primary:#fff;
+    --ok:#27c346; --err:#f76560; --warn:#ff9a2e;
+    --ins-bg:rgba(39,195,70,.18); --del-bg:rgba(247,101,96,.18);
+    --shadow:none;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);
+  font:14px/1.6 system-ui,-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;}
+header{display:flex;align-items:center;gap:10px;padding:14px 20px 6px}
+header h1{font-size:17px;margin:0}
+header .sub{color:var(--muted);font-size:12px}
+main{max-width:1100px;margin:0 auto;padding:8px 20px 40px}
+nav.tabs{display:flex;gap:6px;flex-wrap:wrap;padding:10px 20px 0;max-width:1100px;margin:0 auto}
+nav.tabs button{border:1px solid transparent;background:transparent;color:var(--text);
+  padding:6px 14px;border-radius:16px;cursor:pointer;font-size:14px}
+nav.tabs button:hover{background:var(--primary-weak)}
+nav.tabs button.active{background:var(--primary);color:var(--on-primary)}
+section.tool{display:none;background:var(--card);border:1px solid var(--border);
+  border-radius:8px;padding:16px;margin-top:12px;box-shadow:var(--shadow)}
+section.tool.active{display:block}
+section.tool h2{font-size:15px;margin:0 0 12px}
+section.tool h2 small{color:var(--muted);font-weight:normal;margin-left:8px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:760px){.row2{grid-template-columns:1fr}}
+textarea{width:100%;min-height:190px;background:var(--card2);color:var(--text);
+  border:1px solid var(--border);border-radius:6px;padding:10px;resize:vertical;
+  font:13px/1.5 ui-monospace,SFMono-Regular,Consolas,"Courier New",monospace}
+textarea:focus{outline:none;border-color:var(--primary)}
+textarea[readonly]{opacity:.92}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0}
+button.act{background:var(--card);border:1px solid var(--border);color:var(--text);
+  border-radius:6px;padding:5px 12px;cursor:pointer;font-size:13px}
+button.act:hover{border-color:var(--primary);color:var(--primary)}
+button.act.primary{background:var(--primary);border-color:var(--primary);color:var(--on-primary)}
+button.act.primary:hover{opacity:.88}
+button.act.ghost{border-color:transparent;color:var(--muted)}
+select,input[type=number],input[type=text],input[type=password],input[type=datetime-local]{
+  background:var(--card2);color:var(--text);border:1px solid var(--border);
+  border-radius:6px;padding:5px 8px;font-size:13px}
+label.ck{display:inline-flex;align-items:center;gap:4px;color:var(--text);font-size:13px;cursor:pointer}
+.msg{font-size:13px;margin-top:8px;white-space:pre-wrap;word-break:break-all}
+.msg.ok{color:var(--ok)} .msg.err{color:var(--err)} .msg.warn{color:var(--warn)}
+.cdn-warn{display:none;background:var(--del-bg);color:var(--warn);border-radius:6px;
+  padding:6px 10px;font-size:12px;margin-bottom:10px}
+.cdn-warn.show{display:block}
+.card{border:1px solid var(--border);border-radius:8px;padding:14px;margin-top:12px;background:var(--card2)}
+.card h3{margin:0 0 10px;font-size:14px}
+.card h3 small{color:var(--muted);font-weight:normal;margin-left:6px}
+.kv{display:grid;grid-template-columns:110px 1fr;gap:6px 10px;font-size:13px;align-items:baseline}
+.kv b{color:var(--muted);font-weight:normal}
+.kv span{word-break:break-all}
+/* diff —— 照搬 jq22/textDifference（Mergely 深色双栏，取色自站点实测） */
+.mg{margin:-16px;background:#1A1A1A;color:#fff;border-radius:8px;overflow:hidden}
+.mg-title{text-align:center;border-bottom:1px solid #333;line-height:40px;font-size:16px}
+.mg-link{padding:0 10px;text-decoration:underline;color:#f6ff7f;font-weight:bold;
+  cursor:pointer;font-size:13px}
+.mg-link:hover{color:#FF7111}
+.mg-link.on{color:#7dff7d}
+.mg-head{display:grid;grid-template-columns:1fr 1fr}
+.mg-hcell{background:#1a1a1a;padding:6px 10px;font-size:12px;
+  display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.mg-hcell.lhs{color:#bd6969}
+.mg-hcell.rhs{color:#8bcaf3;border-left:1px solid #1D1D1D}
+.mg-path{font-family:ui-monospace,Consolas,monospace;color:#C9C9C9;font-size:13px;
+  max-width:14em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.save-link{color:#F8F8F8;cursor:pointer;font-size:12px;white-space:nowrap}
+.save-link:hover{text-decoration:underline}
+.dmsm{font-size:12px;color:#8a8a8a;padding-left:20px}
+.mg-work{display:flex;overflow:auto;max-height:78vh;min-height:320px;background:#1A1A1A}
+.mg-inner{display:flex;flex-direction:column;min-width:max(100%,1080px);position:relative;align-items:stretch}
+.mg-col{flex:1;min-width:220px;position:relative;border:1px solid #4A4A4A;
+  display:flex;flex-direction:column}
+.mg-col.lhs{background:#212121}
+.mg-col.rhs{background:#002035}
+.mg-col.drag{border-color:#a3d1ff}
+.mg-viewport{font:13px/19.5px ui-monospace,SFMono-Regular,Consolas,"Courier New",monospace;
+  color:#d5d5d5;padding:4px 0 40vh;min-width:100%;width:max-content}
+.mg-row{display:flex;min-height:19.5px}
+.mg-row .ln{flex:none;width:3.2em;text-align:right;padding:0 6px 0 2px;color:#7c7c7c;
+  user-select:none;border-right:1px solid #3a3a3a;background:rgba(0,0,0,.18);
+  font-size:12px;line-height:19.5px}
+.mg-row pre{margin:0;padding:0 8px;white-space:pre;flex:1;min-height:19.5px}
+.mg-row.pad .ln{background:transparent;border-right-color:transparent}
+.mg-row.a pre{background:#ddeeff;color:#000}
+.mg-row.d pre{background:#FFFCE9;color:#000}
+.mg-row.c pre{background:rgba(255,70,70,.41);color:#000}
+.mg-row.a.hs{border-top:1px solid #a3d1ff}
+.mg-row.a.he{border-bottom:1px solid #a3d1ff}
+.mg-row.d.hs{border-top:1px solid #f8e8e8}
+.mg-row.d.he{border-bottom:1px solid #f8e8e8}
+.mg-row:not(.pad):hover pre{background:#FDFFC6;color:#000}
+.mg-mark{background:#fdffdd;border-radius:5px;padding:0 5px;color:inherit}
+.mg-mark-del{color:red;font-weight:400}
+.mg-divider{flex:none;width:28px;position:relative;background:#1A1A1A}
+#mg-canvas{position:absolute;inset:0;display:block}
+/* 输入区常驻双栏（与下方比对视图同栅格对齐），实时比对；resize:both 可手动拉宽拉高 */
+.mg-inputs,.mg-diffrow{display:grid;grid-template-columns:1fr 28px 1fr}
+.mg-tawrap{position:relative;display:flex;min-width:0}
+.mg-ta{display:block;width:100%;min-height:170px;max-height:65vh;background:#161616;color:#d5d5d5;
+  border:1px solid #4A4A4A;outline:none;resize:both;padding:4px 8px;
+  font:13px/19.5px ui-monospace,SFMono-Regular,Consolas,"Courier New",monospace}
+.mg-ta:focus{border-color:#a3d1ff}
+.mg-col.lhs .mg-ta,.mg-tawrap.lhs .mg-ta{background:#212121}
+.mg-col.rhs .mg-ta,.mg-tawrap.rhs .mg-ta{background:#002035}
+.mg-empty{position:absolute;inset:0;display:flex;align-items:flex-start;
+  padding:10px 14px;color:#7c7c7c;font-size:12px;pointer-events:none}
+.mg-foot{display:flex;gap:14px;align-items:center;padding:8px 12px;
+  border-top:1px solid #333;color:#9a9a9a;font-size:12px;flex-wrap:wrap}
+.mg-foot .ck{color:#9a9a9a}
+.mg-stat{color:#8a8a8a}
+.mg-plain{color:#f6ff7f;cursor:pointer;text-decoration:underline}
+.mg-plain:hover{color:#FF7111}
+/* JSON —— 照搬 jsonlint.com（Validate 深色主题，取色自站点实测：
+   bg #0D0D0D/#1A1A1A/#2D2D2D，border #3a3f4b/#4A4A4A，accent #0A84FF，
+   绿横幅 rgb(16,185,129)/rgba(16,185,129,.1)，红横幅 rgb(239,68,68)/rgba(239,68,68,.1)，
+   编辑器描边环用 --accent-green #32D74B / --accent-red #FF453A） */
+.jl{margin:-16px;background:#0D0D0D;color:#FAFAFA;border-radius:8px;padding:16px 20px}
+.jl-h1{font-size:24px;font-weight:700;margin:0 0 4px;color:#FAFAFA}
+.jl-sub{font-size:14px;color:#8A8A8A;margin:0 0 12px}
+.jl .cdn-warn{background:rgba(245,158,11,.1);color:#FF9F0A}
+.jl-editor{display:flex;border-radius:8px;overflow:hidden;background:#1A1A1A;
+  border:1px solid #3a3f4b;transition:border-color .15s,box-shadow .15s}
+.jl-editor.valid{border-color:#32D74B;box-shadow:0 0 0 1px #32D74B}
+.jl-editor.invalid{border-color:#FF453A;box-shadow:0 0 0 1px #FF453A}
+.jl-gutter{flex:none;width:48px;overflow:hidden;background:#2D2D2D;  /* monaco margin 覆盖为 bg-tertiary */
+  border-right:1px solid #2d3139;user-select:none}
+.jl-gutter-in{padding:12px 10px 12px 0;white-space:pre;text-align:right;
+  font:12px/21px ui-monospace,SFMono-Regular,Consolas,monospace;color:#8A8A8A}
+.jl-gutter-in .err{color:#FF453A;font-weight:700}
+#json-in{flex:1;min-width:0;height:380px;background:transparent;color:#FAFAFA;
+  border:none;outline:none;resize:none;white-space:pre;overflow:auto;
+  padding:12px 16px;font:14px/21px ui-monospace,SFMono-Regular,Consolas,"Courier New",monospace}
+#json-in::placeholder{color:#6e6e6e}
+.jl-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:12px}
+.jl-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  border-radius:8px;padding:8px 16px;font-size:14px;line-height:20px;font-weight:600;
+  cursor:pointer;transition:all .15s cubic-bezier(.4,0,.2,1)}
+.jl-btn:active{transform:scale(.98)}
+.jl-btn:disabled{opacity:.5;cursor:not-allowed}
+.jl-btn-primary{background:#0A84FF;color:#fff;border:1px solid #0A84FF}
+.jl-btn-primary:hover:enabled{opacity:.9}
+.jl-btn-secondary{background:transparent;border:1px solid #4A4A4A;color:#FAFAFA}
+.jl-btn-secondary:hover:enabled{background:#2D2D2D}
+.jl-btn-ghost{background:#2D2D2D;color:#0A84FF;border:1px solid transparent}
+.jl-btn-ghost:hover{opacity:.8}
+.jl-sel{border-radius:8px;padding:6px 8px;font-size:14px;background:#2D2D2D;
+  border:1px solid #3a3f4b;color:#FAFAFA;cursor:pointer}
+.jl-tip{font-size:12px;color:#8A8A8A;margin:8px 0 0}
+.jl-tip kbd{padding:2px 6px;border-radius:4px;font-size:12px;background:#2D2D2D;font-family:inherit}
+.jl-status{margin-top:12px;display:flex;flex-direction:column;gap:12px}
+.jl-banner{padding:8px 12px;border-radius:6px;font-size:14px;animation:jlfade .2s ease-out}
+@keyframes jlfade{from{opacity:0}to{opacity:1}}
+.jl-banner.ok{display:flex;align-items:center;flex-wrap:wrap;background:rgba(16,185,129,.1)}
+.jl-banner .ic{width:16px;height:16px;flex:none}
+.jl-banner.ok .ic,.jl-banner.ok b{color:#10b981}
+.jl-banner b{font-weight:500}
+.jl-stats{margin-left:8px;color:#8A8A8A}
+.jl-banner.bad{background:rgba(239,68,68,.1);display:flex;flex-direction:column;gap:12px}
+.jl-bad-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.jl-bad-head .ic,.jl-bad-head b{color:#ef4444}
+.jl-bad-head b{font-size:14px;font-weight:500}
+.jl-bad-count{font-size:12px;color:#8A8A8A}
+.jl-err{display:flex;align-items:flex-start;gap:8px}
+.jl-err>.ic{margin-top:2px;color:#ef4444}
+.jl-err-body{min-width:0;flex:1}
+.jl-err-line1{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px;font-size:14px}
+.jl-err-code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px;
+  padding:2px 6px;border-radius:4px;background:#2D2D2D;color:#ef4444}
+.jl-err-msg{color:#B8B8B8;word-break:break-word}
+.jl-err-pos{font-size:12px;color:#8A8A8A}
+.jl-err pre{margin:4px 0 0;font:12px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;
+  color:#8A8A8A;overflow-x:auto}
+.jl-err .hint{margin:4px 0 0;font-size:12px;color:#B8B8B8}
+.jl-err .hint .ic{width:14px;height:14px;color:#FF9F0A;vertical-align:-2px;margin-right:4px}
+.jl-note{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:12px;
+  color:#8A8A8A;margin-top:8px}
+.jl-note code{padding:2px 6px;border-radius:4px;background:#2D2D2D;
+  font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+/* timestamp */
+#ts-outputs .rel{color:var(--primary)}
+footer{max-width:1100px;margin:0 auto;padding:0 20px 24px;color:var(--muted);font-size:12px}
+/* ---- 时间工具（万年历/日期计算/格式化，自 time-toolbox 并入） ---- */
+:root{
+  --red-w:rgba(245,63,63,.10); --orange-w:rgba(255,125,0,.14); --primary-w:var(--primary-weak);
+}
+@media (prefers-color-scheme: dark){
+  :root{ --red-w:rgba(247,101,96,.14); --orange-w:rgba(255,154,46,.16); }
+}
+.cal-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.cal-head .ym{font-size:16px;font-weight:600;min-width:130px;text-align:center}
+.cal-wrap{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
+.cal-grid-wrap{flex:1 1 560px}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.cal-week{text-align:center;color:var(--muted);font-size:12.5px;padding:4px 0}
+.cal-cell{position:relative;min-height:64px;border:1px solid var(--border);border-radius:8px;
+  padding:6px 8px;cursor:pointer;background:var(--card);
+  display:flex;flex-direction:column;justify-content:space-between}
+.cal-cell:hover{border-color:var(--primary)}
+.cal-cell.out{opacity:.38}
+.cal-cell.today{border-color:var(--primary);box-shadow:0 0 0 2px var(--primary-weak)}
+.cal-cell.sel{background:var(--primary-weak)}
+.cal-cell .d{font-size:17px;font-weight:600;line-height:1.2}
+.cal-cell.rest .d{color:var(--err)}
+.cal-cell .l{font-size:11.5px;color:var(--muted);text-align:right}
+.cal-cell .l.fest{color:var(--primary)}
+.cal-cell .l.term{color:var(--warn)}
+.cal-badge{position:absolute;top:4px;right:4px;font-size:10px;line-height:1;
+  padding:2px 3px;border-radius:4px}
+.cal-badge.rest{background:var(--red-w);color:var(--err)}
+.cal-badge.work{background:var(--orange-w);color:var(--warn)}
+.cal-side{flex:0 0 240px}
+.cal-detail .big{font-size:22px;font-weight:700}
+.cal-detail dl{margin:10px 0 0;display:grid;grid-template-columns:auto 1fr;gap:4px 12px}
+.cal-detail dt{color:var(--muted)}
+.cal-detail dd{margin:0}
+.legend{display:flex;gap:14px;color:var(--muted);font-size:12px;margin-top:10px;flex-wrap:wrap}
+.legend i{font-style:normal}
+.tag{display:inline-block;font-size:11px;padding:1px 8px;border-radius:999px}
+.tag.rest{background:var(--red-w);color:var(--err)}
+.tag.work{background:var(--orange-w);color:var(--warn)}
+.tag.fest{background:var(--primary-w);color:var(--primary)}
+.seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.seg button{border:none;background:transparent;padding:6px 16px;cursor:pointer;color:var(--muted);font-size:13.5px}
+.seg button.on{background:var(--primary);color:var(--on-primary)}
+.fld{display:flex;align-items:center;gap:8px;margin:8px 0;flex-wrap:wrap}
+.fld label{min-width:76px;color:var(--muted);font-size:13px}
+.res-box{margin-top:12px;background:var(--card2);border-radius:8px;padding:12px 14px}
+.res-box .main{font-size:18px;font-weight:700}
+.res-box .lines{margin-top:8px;display:grid;gap:4px}
+.err{color:var(--err);font-size:12.5px;margin-top:6px}
+.fmt-table{width:100%;border-collapse:collapse;margin-top:12px}
+.fmt-table th,.fmt-table td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--border);vertical-align:top}
+.fmt-table th{color:var(--muted);font-weight:500;font-size:12.5px}
+.fmt-table td.k{color:var(--muted);font-size:12.5px;white-space:nowrap;width:220px}
+.fmt-table td.v{word-break:break-all}
+.mono2{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}
+.out-inline{background:var(--card2);border:1px solid var(--border);border-radius:6px;
+  padding:8px 10px;font-family:ui-monospace,Consolas,monospace;font-size:13px;
+  word-break:break-all;min-height:2.2em;white-space:pre-wrap}
+/* 分段式日期时间输入：每单位一格、输满自动右移（单位间以分隔符占位） */
+.dtseg{display:inline-flex;align-items:center;gap:3px;flex-wrap:wrap}
+.dtseg input{width:3.1em;text-align:center;padding:6px 2px;font-size:13.5px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  background:var(--card2);color:inherit;border:1px solid var(--border);border-radius:6px}
+.dtseg input.y{width:4.1em}
+.dtseg input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 2px var(--primary-weak)}
+.dtseg .sep{color:var(--muted);font-size:13px;user-select:none}
+/* 万年历当日任务 */
+#cal-tasks h4{margin:0 0 6px;font-size:13px;color:var(--muted);font-weight:600}
+#cal-tasks .tk{display:flex;align-items:baseline;gap:6px;padding:4px 0;
+  border-top:1px dashed var(--border);font-size:13px}
+#cal-tasks .tk:first-of-type{border-top:none}
+#cal-tasks .tk .t{flex:1;word-break:break-word}
+#cal-tasks .tk .tag{flex:none}
+#cal-tasks .empty{color:var(--muted);font-size:12.5px}
+hr.sep{border:none;border-top:1px solid var(--border);margin:14px 0}
+</style>
+</head>
+<body>
+<header>
+  <h1>🧰 文本工具箱</h1>
+  <span class="sub">本地运行 · 仅监听 127.0.0.1 · 无任何上传</span>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button data-tool="json" class="active">JSON</button>
+  <button data-tool="sql">SQL</button>
+  <button data-tool="diff">文本比对</button>
+  <button data-tool="time">时间工具</button>
+  <button data-tool="random">随机字符串</button>
+  <button data-tool="crypto">哈希/编码/加密</button>
+</nav>
+
+<main>
+
+<!-- ============================== JSON（照搬 jsonlint.com · Validate 深色主题） ============================== -->
+<section class="tool active" id="tool-json" data-tool="json">
+ <div class="jl">
+  <h2 class="jl-h1">JSON Validator and Formatter</h2>
+  <p class="jl-sub">To format and validate your JSON, just copy + paste it below:</p>
+  <div class="cdn-warn" id="json-cdn-warn">⚠ jsonrepair CDN 未加载，Try Fix 已降级为内置简易启发式（仅支持尾逗号、单引号、裸键名、注释等常见问题）。</div>
+  <div class="jl-editor" id="jl-editor">
+    <div class="jl-gutter"><div class="jl-gutter-in" id="jl-gutter-in">1</div></div>
+    <textarea id="json-in" spellcheck="false" wrap="off" placeholder="Click here to start editing JSON..."></textarea>
+  </div>
+  <div class="jl-bar">
+    <button class="jl-btn jl-btn-primary" id="json-validate" title="Ctrl/Cmd + Enter">
+      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Validate
+    </button>
+    <button class="jl-btn jl-btn-secondary" id="json-clear">Clear</button>
+    <button class="jl-btn jl-btn-secondary" id="json-prettify" title="Ctrl/Cmd + Shift + F">Prettify</button>
+    <select class="jl-sel" id="json-indent" title="Indentation style for Prettify">
+      <option value="2">2 spaces</option><option value="4">4 spaces</option><option value="tab">Tab</option>
+    </select>
+    <button class="jl-btn jl-btn-secondary" id="json-copy">Copy</button>
+    <button class="jl-btn jl-btn-secondary" id="json-tryfix">Try Fix</button>
+    <button class="jl-btn jl-btn-ghost" id="json-sample">Load Sample</button>
+  </div>
+  <p class="jl-tip" id="json-tip">Tip: Press <kbd>Ctrl</kbd>+<kbd>Enter</kbd> to validate</p>
+  <div class="jl-status" id="json-status"></div>
+  <div class="jl-note">
+    <span>Validated by <b style="color:#B8B8B8;font-weight:500">JSON.parse</b>（浏览器本地）</span><span aria-hidden="true">·</span>
+    <code>Try Fix: jsonrepair@3</code><span aria-hidden="true">·</span>
+    <span>Ctrl/Cmd + Enter 校验 · Ctrl/Cmd + Shift + F 格式化</span>
+  </div>
+ </div>
+</section>
+
+<!-- ============================== SQL ============================== -->
+<section class="tool" id="tool-sql" data-tool="sql">
+  <h2>SQL 工具<small>格式化 / 压缩 / 简单语法检查</small></h2>
+  <div class="cdn-warn" id="sql-cdn-warn">⚠ sql-formatter CDN 未加载，格式化已降级为内置简易实现（仅换行与空白规整）。</div>
+  <div class="row2">
+    <textarea id="sql-in" spellcheck="false" placeholder="-- 粘贴 SQL&#10;SELEC a, b FROM t WHERE x = 1"></textarea>
+    <textarea id="sql-out" spellcheck="false" readonly placeholder="结果输出"></textarea>
+  </div>
+  <div class="bar">
+    <button class="act primary" id="sql-format">格式化</button>
+    <button class="act" id="sql-minify">压缩（去注释·单行）</button>
+    <button class="act" id="sql-check">语法检查</button>
+    <select id="sql-dialect" title="SQL 方言">
+      <option value="mysql">MySQL</option>
+      <option value="hive">Hive</option>
+      <option value="spark">Spark SQL</option>
+    </select>
+    <span style="flex:1"></span>
+    <button class="act ghost" data-io="copy">复制结果</button>
+    <button class="act ghost" data-io="clear">清空</button>
+    <button class="act ghost" data-io="sample">示例</button>
+  </div>
+  <div class="msg" id="sql-msg"></div>
+</section>
+
+<!-- ============================== 文本比对（照搬 jq22/textDifference · Mergely 深色双栏） ============================== -->
+<section class="tool" id="tool-diff" data-tool="diff">
+ <div class="mg">
+  <div class="mg-title">⚖ 在线文本比较工具<span class="mg-link" id="diff-cjk" title="西文也切换为逐字符比对">→中文文本对比模式</span></div>
+  <div class="mg-head">
+    <div class="mg-hcell lhs">
+      <tt class="mg-path" id="diff-path-l">lhs</tt>
+      <a class="save-link" id="diff-save-l">💾 保存save</a>
+      <span class="dmsm">(在下面输入您的代码或文本，或直接把文件拖入到框中，内容会自动载入到文本域)</span>
+    </div>
+    <div class="mg-hcell rhs">
+      <tt class="mg-path" id="diff-path-r">rhs</tt>
+      <a class="save-link" id="diff-save-r">💾 保存save</a>
+      <span class="dmsm">(在下面输入您的代码或文本，或直接把文件拖入到框中)</span>
+    </div>
+  </div>
+  <div class="mg-work"><div class="mg-inner">
+    <div class="mg-inputs">
+      <div class="mg-tawrap lhs" id="mg-taw-l">
+        <div class="mg-empty" id="mg-empty-l">在此输入您的代码或文本，或直接把文件拖入到框中</div>
+        <textarea class="mg-ta" id="diff-l" spellcheck="false" wrap="off"></textarea>
+      </div>
+      <div class="mg-gap"></div>
+      <div class="mg-tawrap rhs" id="mg-taw-r">
+        <div class="mg-empty" id="mg-empty-r">在此输入您的代码或文本，或直接把文件拖入到框中</div>
+        <textarea class="mg-ta" id="diff-r" spellcheck="false" wrap="off"></textarea>
+      </div>
+    </div>
+    <div class="mg-diffrow">
+      <div class="mg-col lhs" id="mg-col-l">
+        <div class="mg-viewport" id="mg-view-l"></div>
+      </div>
+      <div class="mg-divider"><canvas id="mg-canvas"></canvas></div>
+      <div class="mg-col rhs" id="mg-col-r">
+        <div class="mg-viewport" id="mg-view-r"></div>
+      </div>
+    </div>
+  </div></div>
+  <div class="mg-foot">
+    <label class="ck"><input type="checkbox" id="diff-ignorews">ignore witespaces</label>
+    <label class="ck"><input type="checkbox" id="diff-ignorecase">忽略大小写</label>
+    <span class="mg-stat" id="diff-stats"></span>
+    <span style="flex:1"></span>
+    <span class="mg-plain" id="diff-sample">示例</span>
+    <span class="mg-plain" id="diff-clear">清空</span>
+  </div>
+ </div>
+</section>
+
+<!-- ============================== 时间工具（单 tab：万年历 + 时间戳/计算/格式化三合一） ============================== -->
+<section class="tool" id="tool-time" data-tool="time">
+  <div class="bar" style="margin-bottom:12px">
+    <div class="seg" id="time-seg">
+      <button data-pane="cal" class="on">万年历</button>
+      <button data-pane="ts">时间戳 · 计算 · 格式化</button>
+    </div>
+  </div>
+
+  <!-- 页1 万年历（右侧详情下方列当日任务） -->
+  <div id="time-cal">
+  <h2 style="margin-top:0">万年历<small>公历+农历 · 节气/节日 · 休/班角标（国务院数据 2020–2026）</small></h2>
+  <div class="cal-head">
+    <button class="act ghost" id="cal-prev" aria-label="上个月">◀</button>
+    <span class="ym" id="cal-ym"></span>
+    <button class="act ghost" id="cal-next" aria-label="下个月">▶</button>
+    <input type="number" id="cal-year" min="1901" max="2100" style="width:86px">
+    <select id="cal-month"></select>
+    <button class="act" id="cal-today">今天</button>
+    <span class="sub">农历 1900–2100 · 节气天文近似（±1 分钟内）</span>
+  </div>
+  <div class="cal-wrap">
+    <div class="cal-grid-wrap">
+      <div class="cal-grid" id="cal-grid"></div>
+      <div class="legend">
+        <i><span class="tag rest">休</span> 法定假日/周末</i>
+        <i><span class="tag work">班</span> 调休上班</i>
+        <i style="color:var(--warn)">节气</i>
+        <i style="color:var(--primary)">节日</i>
+      </div>
+    </div>
+    <div class="cal-side">
+      <div class="card cal-detail" id="cal-detail" style="margin:0"></div>
+      <div class="card" id="cal-tasks" style="margin:10px 0 0"></div>
+    </div>
+  </div>
+  </div>
+
+  <!-- 页2 三合一：时间戳互转 / 日期计算 / 时间格式化 -->
+  <div id="time-ts" style="display:none">
+  <div class="card">
+    <h3>时间戳 ⇄ 时间<small>方向按钮切换 · 秒/毫秒可选或自动识别 · 本地时区</small></h3>
+    <div class="bar">
+      <div class="seg" id="ts-dir">
+        <button data-dir="ts2dt" class="on">时间戳 → 时间</button>
+        <button data-dir="dt2ts">时间 → 时间戳</button>
+      </div>
+      <select id="ts-unit-sel" title="时间戳单位（仅时间戳→时间方向生效）">
+        <option value="auto">自动识别单位</option>
+        <option value="s">按秒</option>
+        <option value="ms">按毫秒</option>
+      </select>
+    </div>
+    <div id="ts2dt-pane">
+      <div class="bar">
+        <input type="text" id="ts-in" placeholder="如 1700000000 或 1700000000000" style="width:260px">
+        <button class="act primary" id="ts-now">现在</button>
+      </div>
+      <div class="kv" id="ts-outputs"></div>
+    </div>
+    <div id="dt2ts-pane" style="display:none">
+      <div class="fld"><label>时间</label><span id="dt-in-slot" style="flex:1"></span>
+        <button class="act primary" id="dt-now">现在</button>
+      </div>
+      <div class="kv" id="dt-outputs"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>日期/时间计算器<small>加减（月末 clamp） · 自然差 Y年M月D日 · 工作日</small></h3>
+    <div class="bar">
+      <div class="seg" id="calc-seg">
+        <button data-mode="add" class="on">日期加减</button>
+        <button data-mode="diff">时间差</button>
+      </div>
+    </div>
+    <div id="calc-add">
+      <div class="fld"><label>基准时间</label>
+        <span id="add-base-slot" style="flex:1"></span>
+        <button class="act" id="add-now">取当前</button>
+      </div>
+      <div class="fld"><label>加减量</label>
+        <span class="sub">年</span><input type="number" id="add-y" placeholder="0">
+        <span class="sub">月</span><input type="number" id="add-mo" placeholder="0">
+        <span class="sub">周</span><input type="number" id="add-w" placeholder="0">
+        <span class="sub">天</span><input type="number" id="add-d" placeholder="0">
+        <span class="sub">时</span><input type="number" id="add-h" placeholder="0">
+        <span class="sub">分</span><input type="number" id="add-mi" placeholder="0">
+        <span class="sub">秒</span><input type="number" id="add-s" placeholder="0">
+        <span class="sub">（负数为减）</span>
+      </div>
+      <div class="bar"><button class="act primary" id="add-go">计算</button></div>
+      <div class="res-box" id="add-res" style="display:none"></div>
+    </div>
+    <div id="calc-diff" style="display:none">
+      <div class="fld"><label>开始时间</label>
+        <span id="diff-a-slot" style="flex:1"></span>
+        <button class="act" id="diff-a-now">取当前</button>
+      </div>
+      <div class="fld"><label>结束时间</label>
+        <span id="diff-b-slot" style="flex:1"></span>
+        <button class="act" id="diff-b-now">取当前</button>
+      </div>
+      <div class="bar"><button class="act primary" id="diff-go">计算</button></div>
+      <div class="res-box" id="diff-res" style="display:none"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>日期时间格式化<small>内置 25 种格式逐行复制 · 本地/UTC 切换</small></h3>
+    <div class="bar">
+      <span id="fmt-in-slot" style="flex:1"></span>
+      <button class="act primary" id="fmt-go">格式化</button>
+      <button class="act" id="fmt-now">取当前</button>
+      <div class="seg" id="fmt-tz">
+        <button data-tz="local" class="on">输入按本地时区</button>
+        <button data-tz="utc">输入按 UTC</button>
+      </div>
+    </div>
+    <div class="err" id="fmt-err"></div>
+    <table class="fmt-table" id="fmt-table" style="display:none">
+      <thead><tr><th>格式</th><th>输出</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  </div>
+</section>
+
+<!-- ============================== 随机字符串 ============================== -->
+<section class="tool" id="tool-random" data-tool="random">
+  <h2>随机字符串<small>crypto.getRandomValues · 拒绝采样无取模偏差</small></h2>
+  <div class="bar">
+    <label class="ck">长度 <input type="number" id="rnd-len" min="1" max="4096" value="16" style="width:76px"></label>
+    <label class="ck"><input type="checkbox" id="rnd-upper" checked>大写 A-Z</label>
+    <label class="ck"><input type="checkbox" id="rnd-lower" checked>小写 a-z</label>
+    <label class="ck"><input type="checkbox" id="rnd-digit" checked>数字 0-9</label>
+    <label class="ck"><input type="checkbox" id="rnd-symbol">符号 !@#$%^&*-_=+?</label>
+    <label class="ck"><input type="checkbox" id="rnd-noconfus" checked>排除易混字符 (0 O 1 l I |)</label>
+    <label class="ck">前缀 <input type="text" id="rnd-prefix" placeholder="可空" style="width:110px"></label>
+    <button class="act primary" id="rnd-gen">生成</button>
+  </div>
+  <div class="out-inline" id="rnd-out"></div>
+  <div class="msg" id="rnd-msg" style="color:var(--muted)"></div>
+  <div class="bar">
+    <button class="act" id="rnd-copy">复制结果</button>
+  </div>
+</section>
+
+<!-- ============================== 哈希/编码/加密 ============================== -->
+<section class="tool" id="tool-crypto" data-tool="crypto">
+  <h2>哈希 / 编码 / 加密<small>MD5 · Unicode \uXXXX · URL 百分号 · AES-256-GCM (WebCrypto + PBKDF2)</small></h2>
+
+  <div class="card">
+    <h3>MD5 摘要<small>内置实现（WebCrypto 不提供 MD5）；仅校验用途，不适用于密码存储</small></h3>
+    <div class="bar">
+      <input type="text" id="md5-in" placeholder="输入任意文本" style="flex:1">
+      <button class="act primary" id="md5-run">计算</button>
+      <button class="act ghost" data-io2="clear">清空</button>
+    </div>
+    <div class="out-inline" id="md5-out"></div>
+  </div>
+
+  <div class="card">
+    <h3>Unicode / URL 编解码</h3>
+    <div class="bar">
+      <input type="text" id="enc-in" placeholder="输入文本或 \\uXXXX / %XX 序列" style="flex:1">
+      <button class="act" id="enc-u">编码 \uXXXX</button>
+      <button class="act" id="dec-u">解码 \uXXXX</button>
+      <button class="act" id="enc-url">URL 编码</button>
+      <button class="act" id="dec-url">URL 解码</button>
+      <button class="act ghost" data-io2="clear">清空</button>
+    </div>
+    <div class="out-inline" id="enc-out"></div>
+  </div>
+
+  <div class="card">
+    <h3>AES-256-GCM 对称加解密<small>PBKDF2-SHA256(100000) 派生 · 输出 base64 = salt(16B) + IV(12B) + 密文+tag · 同页配套解密</small></h3>
+    <div class="bar">
+      <input type="text" id="aes-plain" placeholder="明文" style="flex:1">
+      <input type="password" id="aes-pass" placeholder="口令" style="width:180px">
+      <button class="act primary" id="aes-enc">加密</button>
+    </div>
+    <div class="out-inline" id="aes-blob" style="margin-top:8px"></div>
+    <hr class="sep">
+    <div class="bar">
+      <textarea id="aes-in" spellcheck="false" style="min-height:80px;flex:1" placeholder="粘贴 base64 密文（本页格式）"></textarea>
+      <input type="password" id="aes-pass2" placeholder="口令" style="width:180px">
+      <button class="act primary" id="aes-dec">解密</button>
+    </div>
+    <div class="out-inline" id="aes-out" style="margin-top:8px"></div>
+    <div class="msg" id="aes-msg"></div>
+  </div>
+</section>
+
+</main>
+<footer>ZenTray 插件 · text-toolbox · 本地 Web 服务，页面数据不出本机</footer>
+
+<script>
+//<<<CORE 纯函数核心（node 自测与浏览器共用，勿引用 DOM）=====================
+const TT = (() => {
+  'use strict';
+
+  /* ---------- MD5（RFC 1321，UTF-8 输入） ---------- */
+  function md5Bytes(bytes) {
+    const S = [7,12,17,22,7,12,17,22,7,12,17,22,7,12,17,22,
+               5,9,14,20,5,9,14,20,5,9,14,20,5,9,14,20,
+               4,11,16,23,4,11,16,23,4,11,16,23,4,11,16,23,
+               6,10,15,21,6,10,15,21,6,10,15,21,6,10,15,21];
+    const K = new Uint32Array(64);
+    for (let i = 0; i < 64; i++) K[i] = Math.floor(Math.abs(Math.sin(i + 1)) * 4294967296);
+    const n = bytes.length;
+    const blocks = (((n + 8) >> 6) + 1) >>> 0;
+    const buf = new Uint8Array(blocks * 64);
+    buf.set(bytes); buf[n] = 0x80;
+    const dv = new DataView(buf.buffer);
+    dv.setUint32(blocks * 64 - 8, (n << 3) >>> 0, true);
+    dv.setUint32(blocks * 64 - 4, Math.floor(n / 536870912), true);
+    let a0 = 0x67452301, b0 = 0xefcdab89, c0 = 0x98badcfe, d0 = 0x10325476;
+    const M = new Uint32Array(16);
+    for (let b = 0; b < blocks; b++) {
+      for (let j = 0; j < 16; j++) M[j] = dv.getUint32(b * 64 + j * 4, true);
+      let A = a0, B = b0, C = c0, D = d0;
+      for (let i = 0; i < 64; i++) {
+        let F, g;
+        if (i < 16)      { F = (B & C) | (~B & D); g = i; }
+        else if (i < 32) { F = (D & B) | (~D & C); g = (5 * i + 1) & 15; }
+        else if (i < 48) { F = B ^ C ^ D;          g = (3 * i + 5) & 15; }
+        else             { F = C ^ (B | ~D);       g = (7 * i) & 15; }
+        F = (F + A + K[i] + M[g]) >>> 0;
+        A = D; D = C; C = B;
+        B = (B + (((F << S[i]) | (F >>> (32 - S[i]))) >>> 0)) >>> 0;
+      }
+      a0 = (a0 + A) >>> 0; b0 = (b0 + B) >>> 0; c0 = (c0 + C) >>> 0; d0 = (d0 + D) >>> 0;
+    }
+    const out = new Uint8Array(16), odv = new DataView(out.buffer);
+    odv.setUint32(0, a0, true); odv.setUint32(4, b0, true);
+    odv.setUint32(8, c0, true); odv.setUint32(12, d0, true);
+    return out;
+  }
+  function md5hex(str) {
+    const h = [...md5Bytes(new TextEncoder().encode(str))]
+      .map(b => b.toString(16).padStart(2, '0')).join('');
+    return h;
+  }
+
+  /* ---------- JSON 修复（降级启发式；首选 jsonrepair CDN） ---------- */
+  // 容忍：// 与 /* */ 注释、尾逗号、单引号字符串、裸键名、True/False/None/NaN
+  function jsonHeuristicRepair(src) {
+    const VALID_ESC = new Set(['"', '\\', '/', 'b', 'f', 'n', 'r', 't', 'u']);
+    let out = '', i = 0;
+    let inStr = false, strCh = '';
+    const n = src.length;
+    while (i < n) {
+      const c = src[i];
+      if (!inStr) {
+        if (c === '/' && src[i + 1] === '/') { while (i < n && src[i] !== '\n') i++; continue; }
+        if (c === '/' && src[i + 1] === '*') {
+          i += 2; while (i < n && !(src[i] === '*' && src[i + 1] === '/')) i++; i += 2; continue;
+        }
+        if (c === "'" || c === '"') { inStr = true; strCh = c; out += '"'; i++; continue; }
+        if (c === ',') {           // 尾逗号：后面（跳过空白）是 } ] 或结尾 → 丢弃
+          let j = i + 1; while (j < n && /\s/.test(src[j])) j++;
+          if (j >= n || src[j] === '}' || src[j] === ']') { i++; continue; }
+          out += c; i++; continue;
+        }
+        if (/[A-Za-z_$]/.test(c)) { // 裸标识符：后随 ':' 视为键名加引号；字面量映射
+          let j = i; while (j < n && /[\w$]/.test(src[j])) j++;
+          const w = src.slice(i, j);
+          let k = j; while (k < n && /\s/.test(src[k])) k++;
+          if (src[k] === ':') { out += '"' + w + '"'; i = j; continue; }
+          if (w === 'True') { out += 'true'; i = j; continue; }
+          if (w === 'False') { out += 'false'; i = j; continue; }
+          if (w === 'None' || w === 'undefined') { out += 'null'; i = j; continue; }
+          if (w === 'NaN' || w === 'Infinity' || w === '-Infinity') { out += 'null'; i = j; continue; }
+          out += w; i = j; continue;
+        }
+        out += c; i++; continue;
+      }
+      /* --- 字符串内 --- */
+      if (c === '\\') {             // 前瞻单点处理转义，避免 \ 先行输出
+        const d = src[i + 1];
+        if (d === undefined) { out += '\\'; i++; continue; }
+        if (d === 'u') { out += '\\u'; i += 2; continue; }  // \uXXXX 原样保留
+        if (d === "'") { out += "'"; i += 2; continue; }
+        if (d === '"') { out += '\\"'; i += 2; continue; }
+        if (VALID_ESC.has(d)) { out += '\\' + d; i += 2; continue; }
+        out += d; i += 2; continue; // 非法转义（\x 等）→ 落成裸字符
+      }
+      if (c === strCh) { inStr = false; out += '"'; i++; continue; }
+      if (c === '"' && strCh === "'") { out += '\\"'; i++; continue; }
+      out += c; i++; continue;
+    }
+    return out;
+  }
+  function jsonRepairBest(src) {    // jsonrepair 可用时优先，失败/缺失退启发式
+    if (typeof JSONRepair !== 'undefined' && typeof JSONRepair.jsonrepair === 'function') {
+      try { return { text: JSONRepair.jsonrepair(src), engine: 'jsonrepair' }; }
+      catch (e) { /* 落到启发式 */ }
+    }
+    return { text: jsonHeuristicRepair(src), engine: 'heuristic' };
+  }
+  function jsonErrInfo(err, src) {   // V8 JSON.parse 错误 → {name, message, line, col}（jsonlint 风格定位）
+    const name = (err && err.name) || 'Error';
+    let message = String((err && err.message) || err);
+    const m = /position (\d+)/.exec(message);
+    if (!m) return { name, message, line: null, col: null };
+    const pos = Math.min(+m[1], src.length);
+    const line = src.slice(0, pos).split('\n').length;
+    const before = src.lastIndexOf('\n', pos - 1);
+    const col = before < 0 ? pos + 1 : pos - before;
+    return { name, message, line, col: Math.max(col, 1) };
+  }
+  function jsonStats(value, text) {  // jsonlint 风格统计：大小/键数/深度/对象数/数组数
+    let keys = 0, objects = 0, arrays = 0, depth = 0;
+    (function walk(v, d) {
+      if (d > depth) depth = d;
+      if (Array.isArray(v)) { arrays++; v.forEach(x => walk(x, d + 1)); }
+      else if (v && typeof v === 'object') {
+        objects++;
+        for (const k in v) { keys++; walk(v[k], d + 1); }
+      }
+    })(value, 0);
+    const bytes = new TextEncoder().encode(text).length;
+    const sizeFormatted = bytes < 1024 ? bytes + ' bytes'
+      : bytes < 1048576 ? (bytes / 1024).toFixed(1) + ' KB'
+      : (bytes / 1048576).toFixed(1) + ' MB';
+    return { sizeFormatted, keys, depth, objects, arrays };
+  }
+
+  /* ---------- diff：自研 LCS（O(n·m) DP；ponytail: 超大文本会慢，>2 万行建议分块） ---------- */
+  function lcsOps(a, b) {
+    const n = a.length, m = b.length, w = m + 1;
+    const dp = new Uint32Array((n + 1) * w);
+    for (let i = n - 1; i >= 0; i--)
+      for (let j = m - 1; j >= 0; j--)
+        dp[i * w + j] = a[i] === b[j]
+          ? dp[(i + 1) * w + j + 1] + 1
+          : Math.max(dp[(i + 1) * w + j], dp[i * w + j + 1]);
+    const ops = []; let i = 0, j = 0;
+    while (i < n && j < m) {
+      if (a[i] === b[j]) { ops.push(['=', a[i]]); i++; j++; }
+      else if (dp[(i + 1) * w + j] >= dp[i * w + j + 1]) { ops.push(['-', a[i]]); i++; }
+      else { ops.push(['+', b[j]]); j++; }
+    }
+    while (i < n) ops.push(['-', a[i++]]);
+    while (j < m) ops.push(['+', b[j++]]);
+    return ops;
+  }
+  // 比较（可带 norm：忽略大小写/空白）用 norm 后的 token，输出保留原文：
+  function diffLines(aText, bText, norm) {
+    const nf = norm || (s => s);
+    const a = aText.split('\n'), b = bText.split('\n');
+    const ops = lcsOps(a.map(nf), b.map(nf));
+    // lcsOps 返回的是 norm 后的值；用双指针重放原文
+    const out = []; let ai = 0, bi = 0;
+    for (const [t] of ops) {
+      if (t === '=') { out.push(['=', a[ai]]); ai++; bi++; }
+      else if (t === '-') { out.push(['-', a[ai]]); ai++; }
+      else { out.push(['+', b[bi]]); bi++; }
+    }
+    return out;
+  }
+  function diffWords(aText, bText, norm) {
+    const nf = norm || (s => s);
+    const a = (aText.match(/\s+|\S+/g) || []);
+    const b = (bText.match(/\s+|\S+/g) || []);
+    const ops = lcsOps(a.map(nf), b.map(nf));
+    const out = []; let ai = 0, bi = 0;
+    for (const [t] of ops) {
+      if (t === '=') { out.push(['=', a[ai]]); ai++; bi++; }
+      else if (t === '-') { out.push(['-', a[ai]]); ai++; }
+      else { out.push(['+', b[bi]]); bi++; }
+    }
+    return out;
+  }
+
+  /* ---------- 对齐对照：行 rows + 差异块 hunks + 逐块接受替换 ---------- */
+  // rows: [{l: 原文行|null, r: 原文行|null, h: 块id|null}]；hunks: [{id, dels, adds}]
+  function diffRows(aText, bText, norm) {
+    const ops = diffLines(aText, bText, norm);
+    const rows = [], hunks = [];
+    let i = 0;
+    while (i < ops.length) {
+      if (ops[i][0] === '=') { rows.push({ l: ops[i][1], r: ops[i][1], h: null }); i++; continue; }
+      const id = hunks.length, dels = [], adds = [];
+      while (i < ops.length && ops[i][0] !== '=') {
+        (ops[i][0] === '-' ? dels : adds).push(ops[i][1]); i++;
+      }
+      hunks.push({ id, dels, adds });
+      for (let k = 0; k < Math.max(dels.length, adds.length); k++)
+        rows.push({ l: k < dels.length ? dels[k] : null, r: k < adds.length ? adds[k] : null, h: id });
+    }
+    return { rows, hunks };
+  }
+  // accepts: {块id: 'toA'|'toB'}；'toA' = 用 B 块替换 A 块（A 吸收），'toB' 反向。
+  // 逐块独立应用（对 ops 一次性重放），天然与接受顺序无关。
+  function applyAccepts(aText, bText, norm, accepts) {
+    const ops = diffLines(aText, bText, norm);
+    const aOut = [], bOut = [];
+    let i = 0, hunkId = -1;
+    const ac = accepts || {};
+    while (i < ops.length) {
+      if (ops[i][0] === '=') { aOut.push(ops[i][1]); bOut.push(ops[i][1]); i++; continue; }
+      hunkId++;
+      while (i < ops.length && ops[i][0] !== '=') {
+        const [t, v] = ops[i];
+        const dir = ac[hunkId];
+        if (t === '-') { if (dir !== 'toA') aOut.push(v); if (dir === 'toB') bOut.push(v); }
+        else           { if (dir === 'toA') aOut.push(v); if (dir !== 'toB') bOut.push(v); }
+        i++;
+      }
+    }
+    return { a: aOut.join('\n'), b: bOut.join('\n') };
+  }
+
+  /* ---------- 词内高亮 tokenizer：CJK 逐字、西文按词 ---------- */
+  function tokenizeIntra(text) {
+    return text.match(
+      /[㐀-䶿一-鿿豈-﫿぀-ヿ＀-￯]|[^\s㐀-䶿一-鿿豈-﫿぀-ヿ＀-￯]+|\s+/g
+    ) || [];
+  }
+  // 行内差异（token 粒度），供左右行内 <mark> 渲染
+  function inlineDiff(aLine, bLine) {
+    return lcsOps(tokenizeIntra(aLine), tokenizeIntra(bLine));
+  }
+
+  /* ---------- 相似度 ----------
+   * 口径：字符级 LCS 长度 / max(两文本字符数)（码点计，含空白）。
+   * 小文本（两侧各 ≤2500 字符）精确 DP；更大降级为行级相同字符比率（含换行），
+   * 结果偏保守但可解释、避免 O(n·m) 爆内存。 */
+  function similarity(aText, bText) {
+    if (aText === bText) return 1;
+    const la = [...aText].length, lb = [...bText].length;
+    if (!la && !lb) return 1;
+    if (!la || !lb) return 0;
+    if (la <= 2500 && lb <= 2500) {
+      const ops = lcsOps([...aText], [...bText]);
+      let eq = 0;
+      for (const [t, v] of ops) if (t === '=') eq += [...v].length;
+      return eq / Math.max(la, lb);
+    }
+    const ops = diffLines(aText, bText);
+    let eq = 0;
+    for (const [t, v] of ops) if (t === '=') eq += v.length + 1;
+    return Math.min(1, (eq - 1) / Math.max(aText.length, bText.length));
+  }
+  /* ---------- 时间戳 ---------- */
+  function tsUnit(ts) {
+    const s = String(ts).trim();
+    if (!/^\d+$/.test(s)) return 'unknown';
+    return s.length >= 12 ? 'ms' : 's';
+  }
+  function tsToDate(ts) {
+    const n = Number(ts);
+    return new Date(tsUnit(ts) === 'ms' ? n : n * 1000);
+  }
+  function relTime(ms, now) {
+    const nowMs = now == null ? Date.now() : now;
+    const diff = Math.floor((nowMs - ms) / 1000);
+    const a = Math.abs(diff), suf = diff < 0 ? '后' : '前';
+    if (a < 5) return '刚刚';
+    if (a < 60) return `${a} 秒${suf}`;
+    if (a < 3600) return `${Math.floor(a / 60)} 分钟${suf}`;
+    if (a < 86400) return `${Math.floor(a / 3600)} 小时${suf}`;
+    if (a < 2592000) return `${Math.floor(a / 86400)} 天${suf}`;
+    if (a < 31536000) return `${Math.floor(a / 2592000)} 个月${suf}`;
+    return `${Math.floor(a / 31536000)} 年${suf}`;
+  }
+  function fmtLocal(d) {
+    const p = x => String(x).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ` +
+           `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}` +
+           ` GMT${d.getTimezoneOffset() <= 0 ? '+' : '-'}${p(Math.floor(Math.abs(d.getTimezoneOffset()) / 60))}:${p(Math.abs(d.getTimezoneOffset()) % 60)}`;
+  }
+
+  /* ---------- 随机字符串（拒绝采样，无取模偏差） ---------- */
+  const CONFUSABLE = new Set('0O1lI|'.split(''));
+  function buildCharset(o) {
+    let s = '';
+    if (o.upper)  s += 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    if (o.lower)  s += 'abcdefghijklmnopqrstuvwxyz';
+    if (o.digit)  s += '0123456789';
+    if (o.symbol) s += '!@#$%^&*-_=+?';
+    if (o.noConfusable) s = [...s].filter(c => !CONFUSABLE.has(c)).join('');
+    return s;
+  }
+  function randomString(o, rng) {
+    const cs = buildCharset(o);
+    if (!cs) return '';
+    const rngFn = rng || (k => {
+      const b = new Uint8Array(k); crypto.getRandomValues(b); return b;
+    });
+    const n = cs.length, max = Math.floor(256 / n) * n;
+    const prefix = o.prefix || '';
+    let out = prefix;
+    const need = Math.max(0, o.length | 0);
+    let pool = rngFn(Math.max(need * 2, 64));
+    let pi = 0;
+    while (out.length - prefix.length < need) {
+      if (pi >= pool.length) { pool = rngFn(Math.max(need * 2, 64)); pi = 0; }
+      const b = pool[pi++];
+      if (b >= max) continue;          // 拒绝采样
+      out += cs[b % n];
+    }
+    return out;
+  }
+
+  /* ---------- Unicode / URL 编解码 ---------- */
+  function unicodeEscape(s) {
+    let out = '';
+    for (const ch of s) {              // 迭代码点，星面字符拆代理对
+      const cp = ch.codePointAt(0);
+      if (cp < 0x80) { out += ch; continue; }
+      if (cp <= 0xffff) out += '\\u' + cp.toString(16).padStart(4, '0');
+      else {
+        const c2 = cp - 0x10000;
+        const hi = 0xd800 + (c2 >> 10), lo = 0xdc00 + (c2 & 0x3ff);
+        out += '\\u' + hi.toString(16).padStart(4, '0') +
+               '\\u' + lo.toString(16).padStart(4, '0');
+      }
+    }
+    return out;
+  }
+  function unicodeUnescape(s) {
+    return s.replace(/\\u([0-9a-fA-F]{4})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
+  }
+  function urlEncode(s) { return encodeURIComponent(s); }
+  function urlDecode(s) {
+    try { return decodeURIComponent(s); }
+    catch (e) { return null; }
+  }
+
+  /* ---------- base64 ---------- */
+  function b64encode(bytes) {
+    let s = '';
+    for (let i = 0; i < bytes.length; i += 0x8000)
+      s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(s);
+  }
+  function b64decode(str) {
+    const bin = atob(str.replace(/\s+/g, ''));
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+
+  /* ---------- AES-256-GCM（WebCrypto + PBKDF2） ---------- */
+  const AES_ITER = 100000;
+  async function deriveKey(password, salt, usage) {
+    const base = await crypto.subtle.importKey(
+      'raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']);
+    return crypto.subtle.deriveKey(
+      { name: 'PBKDF2', salt, iterations: AES_ITER, hash: 'SHA-256' }, base,
+      { name: 'AES-GCM', length: 256 }, false, usage);
+  }
+  // 输出 base64(salt[16] + iv[12] + 密文+tag[16])；opts 供测试注入固定 salt/iv
+  async function aesEncrypt(password, plaintext, opts) {
+    const o = opts || {};
+    const salt = o.salt || crypto.getRandomValues(new Uint8Array(16));
+    const iv = o.iv || crypto.getRandomValues(new Uint8Array(12));
+    const key = await deriveKey(password, salt, ['encrypt']);
+    const ct = new Uint8Array(await crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv }, key, new TextEncoder().encode(plaintext)));
+    const blob = new Uint8Array(16 + 12 + ct.length);
+    blob.set(salt, 0); blob.set(iv, 16); blob.set(ct, 28);
+    return { b64: b64encode(blob), salt, iv };
+  }
+  async function aesDecrypt(password, b64) {
+    const blob = b64decode(b64);
+    if (blob.length < 28 + 16) throw new Error('密文太短，不是本页格式');
+    const salt = blob.slice(0, 16), iv = blob.slice(16, 28), ct = blob.slice(28);
+    const key = await deriveKey(password, salt, ['decrypt']);
+    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct);
+    return new TextDecoder().decode(pt);
+  }
+
+  /* ---------- SQL：字符串感知扫描 / 简易格式化 / 粗检 ---------- */
+  const SQL_KEYWORDS = new Set(('SELECT FROM WHERE GROUP BY ORDER HAVING LIMIT OFFSET UNION ALL DISTINCT AS ' +
+    'INSERT INTO VALUES UPDATE SET DELETE CREATE TABLE DROP ALTER INDEX VIEW DATABASE SCHEMA IF NOT EXISTS ' +
+    'JOIN INNER LEFT RIGHT FULL OUTER CROSS ON USING NATURAL CASE WHEN THEN ELSE END AND OR NOT XOR IN IS NULL ' +
+    'LIKE ILIKE RLIKE REGEXP BETWEEN EXISTS ESCAPE ASC DESC PARTITION OVER ROWS RANGE UNBOUNDED PRECEDING ' +
+    'FOLLOWING CURRENT ROW WITH RECURSIVE CAST CONVERT COALESCE IFNULL NULLIF EXTRACT INTERVAL DATE_ADD ' +
+    'DATE_SUB DATEDIFF TO_DATE TO_TIMESTAMP FROM_UNIXTIME UNIX_TIMESTAMP CONCAT SUBSTRING TRIM UPPER LOWER ' +
+    'REPLACE LENGTH CHAR_LENGTH ROUND FLOOR CEIL ABS MOD GREATEST LEAST NOW CURRENT_DATE CURRENT_TIMESTAMP ' +
+    'CURDATE CURTIME SYSDATE ADDDATE FORMAT STR_TO_DATE DATE_FORMAT LATERAL DISTRIBUTE CLUSTER SORT BUCKET ' +
+    'PARTITIONED STORED LOCATION ROW FORMAT DELIMITED FIELDS TERMINATED LINES SERDE TBLPROPERTIES EXTENDED ' +
+    'LATERAL VIEW EXPLODE POSEXPLODE TRANSFORM REDUCE MAP ARRAY STRUCT BOOLEAN TINYINT SMALLINT INT INTEGER ' +
+    'BIGINT FLOAT DOUBLE REAL DECIMAL NUMERIC CHAR VARCHAR STRING BINARY DATE TIMESTAMP TIMESTAMPTZ JSON UUID ' +
+    'GRANT REVOKE TRUNCATE ANALYZE EXPLAIN DESCRIBE DESC SHOW USE EXCHANGE PURGE MSCK REPAIR OPTIMIZE VACUUM ' +
+    'COMMENT PRIMARY FOREIGN KEY REFERENCES UNIQUE DEFAULT CHECK CONSTRAINT AUTO_INCREMENT ENGINE CHARSET ' +
+    'COLLATE AUTOEXTEND MAX_ROWS MIN_ROWS UNSIGNED ZEROFILL GENERATED ALWAYS VIRTUAL STORED WINDOW FILTER ' +
+    'RENAME ADD COLUMN MODIFY CHANGE AFTER FIRST CASCADE RESTRICT PURGE FLASHBACK CACHE UNCACHED LAZY').split(/\s+/));
+
+  function sqlScan(sql) {             // 产出 {clean, segments}：非字符串非注释段标记
+    const segs = [];                  // {start,end,type:'code'|'str'|'comment'}
+    let i = 0, n = sql.length, segStart = 0, kind = 'code';
+    const push = end => { if (end > segStart) segs.push({ start: segStart, end, type: kind }); };
+    while (i < n) {
+      const c = sql[i];
+      if (kind === 'code') {
+        if (c === "'" || c === '"' || c === '`') { push(i); segStart = i; kind = 'str'; i++; continue; }
+        if (c === '-' && sql[i + 1] === '-') {
+          push(i); segStart = i; kind = 'line';
+          while (i < n && sql[i] !== '\n') i++;
+          push(i); segStart = i; kind = 'code'; continue;
+        }
+        if (c === '/' && sql[i + 1] === '*') {
+          push(i); segStart = i; kind = 'block';
+          i += 2; while (i < n && !(sql[i] === '*' && sql[i + 1] === '/')) i++;
+          i = Math.min(i + 2, n); push(i); segStart = i; kind = 'code'; continue;
+        }
+        i++; continue;
+      }
+      if (kind === 'str') {
+        const q = sql[segStart];
+        if (c === '\\') { i += 2; continue; }
+        if (c === q) {
+          if (sql[i + 1] === q) { i += 2; continue; }  // SQL 转义 '' "" ``
+          push(i + 1); segStart = i + 1; kind = 'code';
+        }
+        i++; continue;
+      }
+      i++;
+    }
+    if (segStart < n) push(n);
+    return segs;
+  }
+  function sqlStrip(sql) {            // 去注释 + 空白折叠（保字符串字面量）
+    const segs = sqlScan(sql);
+    let out = '';
+    for (const s of segs) {
+      const t = sql.slice(s.start, s.end);
+      if (s.type === 'str') out += t;
+      else if (s.type === 'code') {
+        let c = t.replace(/\s+/g, ' ');
+        if (out === '' || /\s$/.test(out)) c = c.replace(/^ /, '');  // 注释接缝去重空格
+        out += c;
+      }
+    }
+    return out.trim();
+  }
+  function sqlNaiveFormat(sql) {      // CDN 失效时的降级格式化
+    const s = sqlStrip(sql);
+    const kw = /^(SELECT|FROM|WHERE|GROUP BY|ORDER BY|HAVING|LIMIT|OFFSET|UNION ALL|UNION|VALUES|SET|ON|AND|OR|NOT EXISTS|EXISTS|JOIN|LEFT JOIN|RIGHT JOIN|INNER JOIN|FULL JOIN|CROSS JOIN|WITH|INSERT INTO|DELETE FROM|UPDATE|CREATE TABLE|DROP TABLE|ALTER TABLE|CASE|WHEN|THEN|ELSE|END|OR REPLACE|PARTITION BY|DISTRIBUTE BY|CLUSTER BY|SORT BY|LATERAL VIEW|WINDOW)\b/i;
+    // 在顶层关键字前换行（简单启发式，不区分括号层级）
+    let depth = 0, out = '', buf = '';
+    const toks = s.match(/\s+|\S+/g) || [];
+    let inStr = false, strCh = '';
+    for (const tk of toks) {
+      if (inStr) { buf += tk; if (tk.endsWith(strCh) && !tk.endsWith('\\' + strCh)) inStr = false; continue; }
+      if (/^['"`]/.test(tk)) { inStr = true; strCh = tk[0]; buf += tk; continue; }
+      if (tk === '(') depth++;
+      if (tk === ')') depth--;
+      if (depth === 0 && kw.test(tk) && buf.trim() !== '') {
+        out += buf.replace(/\s+/g, ' ').trim() + '\n';
+        buf = '';
+      }
+      buf += tk;
+    }
+    out += buf.replace(/\s+/g, ' ').trim();
+    return out;
+  }
+  function levenshtein1(a, b) {       // 仅判距离 ≤1
+    if (Math.abs(a.length - b.length) > 1) return false;
+    let i = 0, j = 0, diff = false;
+    while (i < a.length && j < b.length) {
+      if (a[i] === b[j]) { i++; j++; continue; }
+      if (diff) return false;
+      diff = true;
+      if (a.length === b.length) { i++; j++; }
+      else if (a.length > b.length) i++;
+      else j++;
+    }
+    return true;
+  }
+  function sqlCheck(sql) {            // 非全量校验：配平 + 关键字粗检
+    const issues = [];
+    const lineOf = pos => sql.slice(0, pos).split('\n').length;
+    for (const seg of sqlScan(sql)) {
+      if (seg.type !== 'code') continue;
+      const text = sql.slice(seg.start, seg.end);
+      let depth = 0;
+      for (let k = 0; k < text.length; k++) {
+        const c = text[k];
+        if (c === '(') depth++;
+        else if (c === ')') { depth--; if (depth < 0) { issues.push(`第 ${lineOf(seg.start + k)} 行：多余的 ')'`); depth = 0; } }
+      }
+      if (depth > 0) issues.push(`第 ${lineOf(seg.start)} 行起：'(' 未闭合（缺 ${depth} 个 ')'）`);
+      // 未闭合字符串
+      if (seg.type === 'str') { /* unreachable */ }
+    }
+    // 字符串未闭合检测：扫描中 kind==='str' 到结尾
+    let i = 0, n = sql.length;
+    while (i < n) {
+      const c = sql[i];
+      if (c === '-' && sql[i + 1] === '-') break;
+      if (c === '/' && sql[i + 1] === '*') { i += 2; while (i < n && !(sql[i] === '*' && sql[i + 1] === '/')) i++; i += 2; continue; }
+      if (c === "'" || c === '"' || c === '`') {
+        const q = c; const startLine = lineOf(i); let j = i + 1, closed = false;
+        while (j < n) {
+          if (sql[j] === '\\') { j += 2; continue; }
+          if (sql[j] === q) { if (sql[j + 1] === q) { j += 2; continue; } closed = true; break; }
+          j++;
+        }
+        if (!closed) { issues.push(`第 ${startLine} 行：${q} 字符串未闭合`); break; }
+        i = j + 1; continue;
+      }
+      i++;
+    }
+    // 关键字拼写粗检（Levenshtein ≤1）
+    const seen = new Set();
+    for (const seg of sqlScan(sql)) {
+      if (seg.type !== 'code') continue;
+      const re = /[A-Za-z_][A-Za-z_0-9]*/g;
+      const text = sql.slice(seg.start, seg.end);
+      let m;
+      while ((m = re.exec(text))) {
+        const w = m[0], W = w.toUpperCase();
+        if (SQL_KEYWORDS.has(W) || w.length < 3 || /_/.test(w)) continue;
+        if (seen.has(W)) continue;
+        const hit = [...SQL_KEYWORDS].find(k => levenshtein1(W, k));
+        if (hit) { issues.push(`第 ${lineOf(seg.start + m.index)} 行：'${w}' 疑似关键字拼写（→ ${hit}？）`); seen.add(W); }
+      }
+    }
+    return issues;
+  }
+
+  /* ---------- 时间工具（自 time-toolbox 并入：农历/节气/节假日/计算/格式化） ---------- */
+  const LUNAR_INFO = [
+    0x04bd8,0x04ae0,0x0a570,0x054d5,0x0d260,0x0d950,0x16554,0x056a0,0x09ad0,0x055d2,
+    0x04ae0,0x0a5b6,0x0a4d0,0x0d250,0x1d255,0x0b540,0x0d6a0,0x0ada2,0x095b0,0x14977,
+    0x04970,0x0a4b0,0x0b4b5,0x06a50,0x06d40,0x1ab54,0x02b60,0x09570,0x052f2,0x04970,
+    0x06566,0x0d4a0,0x0ea50,0x06e95,0x05ad0,0x02b60,0x186e3,0x092e0,0x1c8d7,0x0c950,
+    0x0d4a0,0x1d8a6,0x0b550,0x056a0,0x1a5b4,0x025d0,0x092d0,0x0d2b2,0x0a950,0x0b557,
+    0x06ca0,0x0b550,0x15355,0x04da0,0x0a5b0,0x14573,0x052b0,0x0a9a8,0x0e950,0x06aa0,
+    0x0aea6,0x0ab50,0x04b60,0x0aae4,0x0a570,0x05260,0x0f263,0x0d950,0x05b57,0x056a0,
+    0x096d0,0x04dd5,0x04ad0,0x0a4d0,0x0d4d4,0x0d250,0x0d558,0x0b540,0x0b6a0,0x195a6,
+    0x095b0,0x049b0,0x0a974,0x0a4b0,0x0b27a,0x06a50,0x06d40,0x0af46,0x0ab60,0x09570,
+    0x04af5,0x04970,0x064b0,0x074a3,0x0ea50,0x06b58,0x055c0,0x0ab60,0x096d5,0x092e0,
+    0x0c960,0x0d954,0x0d4a0,0x0da50,0x07552,0x056a0,0x0abb7,0x025d0,0x092d0,0x0cab5,
+    0x0a950,0x0b4a0,0x0baa4,0x0ad50,0x055d9,0x04ba0,0x0a5b0,0x15176,0x052b0,0x0a930,
+    0x07954,0x06aa0,0x0ad50,0x05b52,0x04b60,0x0a6e6,0x0a4e0,0x0d260,0x0ea65,0x0d530,
+    0x05aa0,0x076a3,0x096d0,0x04afb,0x04ad0,0x0a4d0,0x1d0b6,0x0d250,0x0d520,0x0dd45,
+    0x0b5a0,0x056d0,0x055b2,0x049b0,0x0a577,0x0a4b0,0x0aa50,0x1b255,0x06d20,0x0ada0,
+    0x14b63,0x09370,0x049f8,0x04970,0x064b0,0x168a6,0x0ea50,0x06b20,0x1a6c4,0x0aae0,
+    0x0a2e0,0x0d2e3,0x0c960,0x0d557,0x0d4a0,0x0da50,0x05d55,0x056a0,0x0a6d0,0x055d4,
+    0x052d0,0x0a9b8,0x0a950,0x0b4a0,0x0b6a6,0x0ad50,0x055a0,0x0aba4,0x0a5b0,0x052b0,
+    0x0b273,0x06930,0x07337,0x06aa0,0x0ad50,0x14b55,0x04b60,0x0a570,0x054e4,0x0d160,
+    0x0e968,0x0d520,0x0daa0,0x16aa6,0x056d0,0x04ae0,0x0a9d4,0x0a2d0,0x0d150,0x0f252,
+    0x0d520,
+  ];
+  function lYearDays(y){ let s=348; for(let i=0x8000;i>0x8;i>>=1) s+=(LUNAR_INFO[y-1900]&i)?1:0; return s+lLeapDays(y); }
+  function lLeapDays(y){ return lLeapMonth(y)?((LUNAR_INFO[y-1900]&0x10000)?30:29):0; }
+  function lLeapMonth(y){ return LUNAR_INFO[y-1900]&0xf; }
+  function lMonthDays(y,m){ return (LUNAR_INFO[y-1900]&(0x10000>>m))?30:29; }
+
+  /** 公历 → 农历。基准 1900-01-31 = 农历 1900 年正月初一。范围 1900-01-31 ~ 2100-12-31。 */
+  function solar2lunar(y,m,d){
+    let offset = Math.round((Date.UTC(y,m-1,d) - Date.UTC(1900,0,31)) / 86400000);
+    if (offset < 0) return null;
+    let ly = 0;
+    for (let i = 1900; i <= 2100; i++) {
+      const days = lYearDays(i);
+      if (offset < days) { ly = i; break; }
+      offset -= days;
+    }
+    if (!ly) return null; // 超出 2100
+    const leap = lLeapMonth(ly);
+    let lm = 12, isLeap = false, days = 0;
+    for (let i = 1; i <= 12; i++) {
+      if (leap > 0 && i === leap + 1 && !isLeap) { i--; isLeap = true; days = lLeapDays(ly); }
+      else { isLeap = false; days = lMonthDays(ly, i); }
+      lm = i;
+      if (offset < days) break;
+      offset -= days;
+    }
+    if (offset >= days) return null; // 防御：不应发生
+    return { year: ly, month: lm, day: offset + 1, isLeap, monthDays: days };
+  }
+
+  const CN_DAY = ['初一','初二','初三','初四','初五','初六','初七','初八','初九','初十',
+    '十一','十二','十三','十四','十五','十六','十七','十八','十九','二十',
+    '廿一','廿二','廿三','廿四','廿五','廿六','廿七','廿八','廿九','三十'];
+  const CN_MON = ['','正','二','三','四','五','六','七','八','九','十','冬','腊'];
+  const GAN = '甲乙丙丁戊己庚辛壬癸', ZHI = '子丑寅卯辰巳午未申酉戌亥', SHENGXIAO = '鼠牛虎兔龙蛇马羊猴鸡狗猪';
+  const lunarDayName = d => CN_DAY[d-1] || '';
+  const lunarMonthName = (m, isLeap) => (isLeap?'闰':'') + CN_MON[m] + '月';
+  const yearGZ = ly => GAN[(ly-4)%10] + ZHI[(ly-4)%12];
+  const yearSX = ly => SHENGXIAO[(ly-4)%12];
+  /** 农历全称，如「乙巳年闰六月廿三」 */
+  function lunarFull(l){
+    if (!l) return '';
+    return yearGZ(l.year) + '年' + lunarMonthName(l.month, l.isLeap) + lunarDayName(l.day);
+  }
+
+  /* 节气（1900 起通用天文近似，经典分钟偏移表） */
+  const TERM_INFO = [0,21208,42467,63836,85337,107014,128867,150921,173149,195551,
+    218072,240693,263343,285989,308563,331033,353350,375494,397447,419188,
+    440795,462224,483532,504758];
+  const TERM_NAMES = ['小寒','大寒','立春','雨水','惊蛰','春分','清明','谷雨','立夏','小满',
+    '芒种','夏至','小暑','大暑','立秋','处暑','白露','秋分','寒露','霜降',
+    '立冬','小雪','大雪','冬至'];
+  /** y 年第 n 个节气（0=小寒）落在当月几号 */
+  function sTermDay(y, n){
+    const ms = 31556925974.7 * (y - 1900) + TERM_INFO[n] * 60000 + Date.UTC(1900, 0, 6, 2, 5);
+    return new Date(ms).getUTCDate();
+  }
+  /** y 年 m 月 d 日的节气名（无则 null） */
+  function termOfDate(y, m, d){
+    for (const n of [(m-1)*2, (m-1)*2+1]) {
+      if (sTermDay(y, n) === d) return TERM_NAMES[n];
+    }
+    return null;
+  }
+
+  /* 法定节假日（国务院办公厅通知，人工录入 2020–2026） */
+  /** {年: {节假日名: ['MMDD' 或 'MMDD-MMDD' 区间]}} → {'YYYY-MM-DD': 名称} */
+  function _expandHolidays(spec){
+    const out = {};
+    for (const [ys, groups] of Object.entries(spec)) {
+      const y = Number(ys);
+      for (const [name, ranges] of Object.entries(groups)) {
+        for (const r of ranges) {
+          const [a, b = a] = r.split('-');
+          const am = Number(r.slice(0,2)), ad = Number(r.slice(2,4));
+          const bm = Number(b.slice(0,2)), bd = Number(b.slice(4,6) || b.slice(2,4));
+          const cur = new Date(y, am - 1, ad);
+          const end = new Date(y, bm - 1, bd);
+          while (cur <= end) {
+            out[`${y}-${String(cur.getMonth()+1).padStart(2,'0')}-${String(cur.getDate()).padStart(2,'0')}`] = name;
+            cur.setDate(cur.getDate() + 1);
+          }
+        }
+      }
+    }
+    return out;
+  }
+  const HOL_REST = _expandHolidays({
+    2020: { 元旦: ['0101'], 春节: ['0124-0202'], 清明节: ['0404-0406'], 劳动节: ['0501-0505'], 端午节: ['0625-0627'], 国庆中秋: ['1001-1008'] },
+    2021: { 元旦: ['0101-0103'], 春节: ['0211-0217'], 清明节: ['0403-0405'], 劳动节: ['0501-0505'], 端午节: ['0612-0614'], 中秋节: ['0919-0921'], 国庆节: ['1001-1007'] },
+    2022: { 元旦: ['0101-0103'], 春节: ['0131-0206'], 清明节: ['0403-0405'], 劳动节: ['0430-0504'], 端午节: ['0603-0605'], 中秋节: ['0910-0912'], 国庆节: ['1001-1007'], 元旦跨年: ['1231'] },
+    2023: { 元旦: ['0101-0102'], 春节: ['0121-0127'], 清明节: ['0405'], 劳动节: ['0429-0503'], 端午节: ['0622-0624'], 中秋国庆: ['0929-1006'] },
+    2024: { 元旦: ['0101'], 春节: ['0210-0217'], 清明节: ['0404-0406'], 劳动节: ['0501-0505'], 端午节: ['0610'], 中秋节: ['0915-0917'], 国庆节: ['1001-1007'] },
+    2025: { 元旦: ['0101'], 春节: ['0128-0204'], 清明节: ['0404-0406'], 劳动节: ['0501-0505'], 端午节: ['0531-0602'], 国庆中秋: ['1001-1008'] },
+    2026: { 元旦: ['0101-0103'], 春节: ['0215-0222'], 清明节: ['0404-0406'], 劳动节: ['0501-0505'], 端午节: ['0619-0621'], 中秋节: ['0925-0927'], 国庆节: ['1001-1008'] },
+  });
+  const HOL_WORK = _expandHolidays({
+    2020: { 春节调休: ['0119','0201'], 劳动节调休: ['0426'], 国庆调休: ['0927','1010'] },
+    2021: { 春节调休: ['0207','0220'], 劳动节调休: ['0425'], 中秋调休: ['0918'], 国庆调休: ['0926','1009'] },
+    2022: { 春节调休: ['0129','0130'], 清明调休: ['0402'], 劳动节调休: ['0424','0507'], 国庆调休: ['1008','1009'] },
+    2023: { 春节调休: ['0128','0129'], 劳动节调休: ['0423','0506'], 端午调休: ['0625'], 中秋国庆调休: ['1007','1008'] },
+    2024: { 春节调休: ['0204','0218'], 清明调休: ['0407'], 劳动节调休: ['0428'], 中秋调休: ['0914'], 国庆调休: ['0929','1010'] },
+    2025: { 春节调休: ['0126','0208'], 劳动节调休: ['0427'], 国庆调休: ['0928','1011'] },
+    2026: { 春节调休: ['0214','0228'], 劳动节调休: ['0509'], 国庆调休: ['1010','1011'] },
+  });
+  /** 返回 {tag:'rest'|'work', name}；周末（未覆盖处）按 rest，普通工作日 null */
+  function holidayOf(y, m, d){
+    const k = `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    if (HOL_REST[k]) return { tag: 'rest', name: HOL_REST[k] };
+    if (HOL_WORK[k]) return { tag: 'work', name: HOL_WORK[k] };
+    const wd = new Date(y, m - 1, d).getDay();
+    if (wd === 0 || wd === 6) return { tag: 'rest', name: '周末' };
+    return null;
+  }
+
+  /* 节日 */
+  const FEST_SOLAR = { '01-01':'元旦','03-08':'妇女节','03-12':'植树节','05-01':'劳动节',
+    '05-04':'青年节','06-01':'儿童节','07-01':'建党节','08-01':'建军节','09-10':'教师节','10-01':'国庆节' };
+  const FEST_LUNAR = { '1-1':'春节','1-15':'元宵节','2-2':'龙抬头','5-5':'端午节',
+    '7-7':'七夕','7-15':'中元节','8-15':'中秋节','9-9':'重阳节','12-8':'腊八节','12-23':'小年' };
+  /** 当日节日名（公历固定 + 农历 + 除夕 + 周制母亲/父亲节），无则 null */
+  function festFull(y, m, d){
+    const lunar = solar2lunar(y, m, d);
+    const base = (() => {
+      const s = FEST_SOLAR[`${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`];
+      if (s) return s;
+      if (lunar && !lunar.isLeap) {
+        const l = FEST_LUNAR[`${lunar.month}-${lunar.day}`];
+        if (l) return l;
+      }
+      return null;
+    })();
+    if (base) return base;
+    const tm = new Date(y, m - 1, d + 1); // JS 自动进位到下月
+    const nl = solar2lunar(tm.getFullYear(), tm.getMonth() + 1, tm.getDate());
+    if (nl && nl.month === 1 && nl.day === 1 && !nl.isLeap) return '除夕';
+    const wd = new Date(y, m - 1, d).getDay();
+    const nth = Math.ceil(d / 7);
+    if (m === 5 && wd === 0 && nth === 2) return '母亲节';
+    if (m === 6 && wd === 0 && nth === 3) return '父亲节';
+    return null;
+  }
+
+  /** 单元格/详情聚合：{lunar, term, fest, hol, label} label 优先级 节日>节气>农历（初一显示月名） */
+  function dayInfo(y, m, d){
+    const lunar = solar2lunar(y, m, d);
+    const term = termOfDate(y, m, d);
+    const fest = festFull(y, m, d);
+    const hol = holidayOf(y, m, d);
+    let label = '';
+    if (lunar) {
+      label = fest || term || (lunar.day === 1 ? lunarMonthName(lunar.month, lunar.isLeap) : lunarDayName(lunar.day));
+    }
+    return { lunar, term, fest, hol, label };
+  }
+
+  /* 基础格式化 */
+  const pad2 = n => String(n).padStart(2, '0');
+  const WEEK_CN = ['日','一','二','三','四','五','六'];
+  const WEEK_EN = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const MON_EN = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const ymd = d => `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+  const hms = d => `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+  const ymdhms = d => `${ymd(d)} ${hms(d)}`;
+  function tzOffsetStr(d){
+    const o = -d.getTimezoneOffset(), s = o >= 0 ? '+' : '-', a = Math.abs(o);
+    return `${s}${pad2(Math.floor(a/60))}:${pad2(a%60)}`;
+  }
+  function tzOffsetShort(d){
+    const o = -d.getTimezoneOffset(), s = o >= 0 ? '+' : '-', a = Math.abs(o);
+    return `${s}${pad2(Math.floor(a/60))}${pad2(a%60)}`;
+  }
+  const fmtLocalIso = d => `${ymdhms(d).replace(' ','T')}${tzOffsetStr(d)}`;
+  const fmtRfc2822 = d => `${WEEK_EN[d.getDay()]}, ${pad2(d.getDate())} ${MON_EN[d.getMonth()]} ${d.getFullYear()} ${hms(d)} ${tzOffsetShort(d)}`;
+  /** 相对现在（可注入 now 供测试） */
+  function relativeNow(d, now = new Date()){
+    const s = Math.round((d - now) / 1000);
+    const a = Math.abs(s);
+    const t = a < 60 ? `${a} 秒` : a < 3600 ? `${Math.round(a/60)} 分钟` : a < 86400 ? `${Math.round(a/3600)} 小时` : a < 86400*30 ? `${Math.round(a/86400)} 天` : null;
+    if (t === null) return ymdhms(d);
+    return s >= 0 ? `${t}后` : `${t}前`;
+  }
+  /** ISO 周：{y, w}（周一为一周之始，第 1 周含首个周四） */
+  function isoWeek(d){
+    const t = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    t.setDate(t.getDate() - (t.getDay() + 6) % 7 + 3); // 本周四
+    const f = new Date(t.getFullYear(), 0, 4);
+    f.setDate(f.getDate() - (f.getDay() + 6) % 7 + 3); // 当年首个周四
+    return { y: t.getFullYear(), w: 1 + Math.round((t - f) / (7*86400000)) };
+  }
+  const dayOfYear = d => Math.round((Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) - Date.UTC(d.getFullYear(), 0, 1)) / 86400000) + 1;
+
+  /** 全量格式清单：[名称, fn(Date)->string]（now 可注入，用于相对时间） */
+  const FORMATS = [
+    ['ISO 8601（本地，含时区）', d => fmtLocalIso(d)],
+    ['ISO 8601（UTC）', d => d.toISOString()],
+    ['ISO 8601 基本格式（UTC，无分隔）', d => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')],
+    ['RFC 2822', fmtRfc2822],
+    ['Unix 时间戳（秒）', d => String(Math.floor(d.getTime() / 1000))],
+    ['Unix 时间戳（毫秒）', d => String(d.getTime())],
+    ['儒略日 JD（UT）', d => String(d.getTime() / 86400000 + 2440587.5)],
+    ['yyyy-MM-dd HH:mm:ss', ymdhms],
+    ['yyyy-MM-dd HH:mm', d => `${ymd(d)} ${hms(d).slice(0,5)}`],
+    ['yyyy-MM-dd', ymd],
+    ['yyyy/MM/dd HH:mm:ss', d => ymdhms(d).replace(/-/g, '/')],
+    ['yyyy.MM.dd', d => ymd(d).replace(/-/g, '.')],
+    ['yyyyMMdd', d => ymd(d).replace(/-/g, '')],
+    ['yyyyMMddHHmmss', d => ymdhms(d).replace(/[-: ]/g, '')],
+    ['yy-MM-dd', d => ymd(d).slice(2)],
+    ['MM-dd HH:mm', d => `${ymd(d).slice(5)} ${hms(d).slice(0,5)}`],
+    ['HH:mm:ss', hms],
+    ['yyyy年M月d日', d => `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日`],
+    ['yyyy年M月d日 星期X H:mm:ss', d => `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日 星期${WEEK_CN[d.getDay()]} ${hms(d)}`],
+    ['yyyy年M月d日 星期X 上/下午h:mm', d => {
+      const h = d.getHours();
+      const ap = h < 6 ? '凌晨' : h < 12 ? '上午' : h < 13 ? '中午' : h < 18 ? '下午' : '晚上';
+      const h12 = h < 6 ? h : (h % 12 === 0 ? 12 : h % 12);
+      return `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日 星期${WEEK_CN[d.getDay()]} ${ap}${h12}:${pad2(d.getMinutes())}`;
+    }],
+    ['星期X（中文全称）', d => `星期${WEEK_CN[d.getDay()]}`],
+    ['一年中第几天（DDD）', d => String(dayOfYear(d)).padStart(3, '0')],
+    ['ISO 周年份-周数（YYYY-Www）', d => { const w = isoWeek(d); return `${w.y}-W${String(w.w).padStart(2,'0')}`; }],
+    ['当月第几个星期X', d => `第${Math.ceil(d.getDate()/7)}个星期${WEEK_CN[d.getDay()]}`],
+    ['相对现在', d => relativeNow(d)],
+  ];
+
+  /** 'yyyy-MM-dd[ T]HH:mm[:ss]' → 本地 Date；非法（越界数字等）null */
+  function parseDateTimeInput(s){
+    const m = String(s).trim().match(/^(\d{4})-(\d{1,2})-(\d{1,2})[ T](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?$/);
+    if (!m) return null;
+    const [Y, Mo, Dd, H, Mi] = m.slice(1, 6).map(Number);
+    const S = m[6] === undefined ? 0 : Number(m[6]);
+    if (Mo < 1 || Mo > 12 || Dd < 1 || Dd > 31 || H > 23 || Mi > 59 || S > 59) return null;
+    const d = new Date(Y, Mo - 1, Dd, H, Mi, S);
+    if (d.getFullYear() !== Y || d.getMonth() !== Mo - 1 || d.getDate() !== Dd) return null;
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  /** parts: {y, mo, w, d, h, mi, s}（可负）。年月先加并按月末 clamp（1/31+1月→2/28），其余按毫秒 */
+  function dateAdd(base, parts){
+    const r = new Date(base.getTime());
+    const y = parts.y || 0, mo = parts.mo || 0;
+    if (y || mo) {
+      const day0 = r.getDate();
+      r.setDate(1);
+      r.setFullYear(r.getFullYear() + y, r.getMonth() + mo, 1);
+      const last = new Date(r.getFullYear(), r.getMonth() + 1, 0).getDate();
+      r.setDate(Math.min(day0, last));
+    }
+    const ms = (((parts.w||0)*7*24*3600) + ((parts.d||0)*24*3600) + ((parts.h||0)*3600) + ((parts.mi||0)*60) + ((parts.s||0))) * 1000;
+    r.setTime(r.getTime() + ms);
+    return r;
+  }
+  /** 自然日历差（Y年M月D日 H时M分S秒）+ 绝对总量，参数顺序无关 */
+  function dateDiff(a, b){
+    const [lo, hi] = a <= b ? [a, b] : [b, a];
+    let Y = hi.getFullYear() - lo.getFullYear();
+    let Mo = hi.getMonth() - lo.getMonth();
+    let D = hi.getDate() - lo.getDate();
+    let H = hi.getHours() - lo.getHours();
+    let Mi = hi.getMinutes() - lo.getMinutes();
+    let S = hi.getSeconds() - lo.getSeconds();
+    if (S < 0) { S += 60; Mi--; }
+    if (Mi < 0) { Mi += 60; H--; }
+    if (H < 0) { H += 24; D--; }
+    if (D < 0) { D += new Date(hi.getFullYear(), hi.getMonth(), 0).getDate(); Mo--; }
+    if (Mo < 0) { Mo += 12; Y--; }
+    const ms = hi.getTime() - lo.getTime();
+    return { Y, Mo, D, H, Mi, S,
+      totalDays: Math.floor(ms / 86400000),
+      totalWeeks: Math.floor(ms / (7 * 86400000)),
+      totalHours: Math.floor(ms / 3600000),
+      totalMinutes: Math.floor(ms / 60000),
+      totalSeconds: Math.floor(ms / 1000) };
+  }
+  /** [a, b] 闭区间工作日数：调休上班日计入、法定假日与周末不计（覆盖 2020–2026，其余年份按周末） */
+  function workdaysBetween(a, b){
+    const [lo, hi] = a <= b ? [a, b] : [b, a];
+    const cur = new Date(lo.getFullYear(), lo.getMonth(), lo.getDate());
+    const end = new Date(hi.getFullYear(), hi.getMonth(), hi.getDate());
+    let n = 0;
+    while (cur <= end) {
+      const h = holidayOf(cur.getFullYear(), cur.getMonth() + 1, cur.getDate());
+      if (!h || h.tag === 'work') n++;
+      cur.setDate(cur.getDate() + 1);
+    }
+    return n;
+  }
+
+  return {
+    md5hex, md5Bytes,
+    jsonHeuristicRepair, jsonRepairBest, jsonErrInfo, jsonStats,
+    lcsOps, diffLines, diffWords, diffRows, applyAccepts,
+    tokenizeIntra, inlineDiff, similarity,
+    tsUnit, tsToDate, relTime, fmtLocal,
+    buildCharset, randomString, CONFUSABLE,
+    unicodeEscape, unicodeUnescape, urlEncode, urlDecode,
+    b64encode, b64decode, AES_ITER, aesEncrypt, aesDecrypt,
+    sqlStrip, sqlNaiveFormat, sqlCheck, SQL_KEYWORDS,
+    solar2lunar, lunarFull, yearGZ, yearSX, lLeapMonth, lYearDays,
+    sTermDay, termOfDate, holidayOf, festFull, dayInfo,
+    parseDateTimeInput, dateAdd, dateDiff, workdaysBetween,
+    FORMATS, isoWeek, dayOfYear, relativeNow, fmtLocalIso, ymdhms, pad2, WEEK_CN,
+  };
+})();
+if (typeof globalThis !== 'undefined') globalThis.TT_CORE = TT;
+//CORE>>>
+</script>
+
+<script>
+/* ============================== UI 接线（浏览器 only） ============================== */
+(() => {
+  'use strict';
+  const $ = s => document.querySelector(s);
+  const T = TT;
+
+  /* 标签切换 */
+  const tabs = document.querySelectorAll('#tabs button');
+  tabs.forEach(btn => btn.addEventListener('click', () => {
+    tabs.forEach(b => b.classList.toggle('active', b === btn));
+    document.querySelectorAll('section.tool').forEach(sec =>
+      sec.classList.toggle('active', sec.dataset.tool === btn.dataset.tool));
+  }));
+
+  /* 通用：复制/清空/示例 */
+  function copyText(txt, btn) {
+    const done = ok => {
+      if (!btn) return;
+      const old = btn.textContent;
+      btn.textContent = ok ? '已复制' : '复制失败';
+      setTimeout(() => btn.textContent = old, 1200);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText)
+      navigator.clipboard.writeText(txt).then(() => done(true), () => done(false));
+    else {
+      const ta = document.createElement('textarea');
+      ta.value = txt; document.body.appendChild(ta); ta.select();
+      let ok = false; try { ok = document.execCommand('copy'); } catch (e) {}
+      ta.remove(); done(ok);
+    }
+  }
+  document.querySelectorAll('[data-io]').forEach(btn => {
+    const sec = btn.closest('section.tool');
+    if (sec.id === 'tool-diff' || sec.id === 'tool-json') return;  // 双输入/单编辑器，单独接线（见下）
+    const inEl = sec.querySelector('textarea'), outEl = sec.querySelectorAll('textarea')[1];
+    const act = btn.dataset.io;
+    if (act === 'copy') btn.addEventListener('click', () => copyText(outEl.value, btn));
+    if (act === 'clear') btn.addEventListener('click', () => { inEl.value = ''; outEl.value = ''; msg(sec, ''); });
+    if (act === 'sample') btn.addEventListener('click', () => { inEl.value = SEC_SAMPLE[sec.id] || ''; });
+  });
+  document.querySelectorAll('[data-io2]').forEach(btn => {  // crypto 卡内小清空
+    btn.addEventListener('click', () => {
+      const card = btn.closest('.card');
+      card.querySelectorAll('input,textarea,.out-inline').forEach(el => { if (el.tagName !== 'BUTTON') el.value = ''; });
+    });
+  });
+  function msg(secOrId, text, cls) {
+    const el = typeof secOrId === 'string' ? $(secOrId) : secOrId.querySelector('.msg');
+    if (!el) return;
+    el.textContent = text || '';
+    el.className = 'msg' + (cls ? ' ' + cls : '');
+  }
+
+  /* ---------------- JSON（照搬 jsonlint.com：单编辑器 + 实时校验 + Prettify/Compress ---------------- */
+  const SAMPLES = {
+    'tool-sql': "-- 有拼写错误与未闭合括号的示例\nSELEC user_id, sum(amount) AS total\nFROM orders o\nJOIN users u ON o.user_id = u.id\nWHERE created_at > '2026-01-01' AND status IN ('paid', 'done'\nGROUP BY user_id\nORDER BY total DESC LIMIT 10",
+    'tool-diff-l': "The quick brown fox\njumps over\nthe lazy dog\nline four\nline five",
+    'tool-diff-r': "The quick brown fox\nleaps over\nthe lazy dog\nline 4 changed\nline five\nline six added",
+  };
+  const SEC_SAMPLE = {
+    'tool-sql': SAMPLES['tool-sql'],
+  };
+  const JL = {
+    ta: $('#json-in'), editor: $('#jl-editor'), gutter: $('#jl-gutter-in'),
+    prettify: $('#json-prettify'), indent: $('#json-indent'), copy: $('#json-copy'),
+    fix: $('#json-tryfix'), sample: $('#json-sample'), tip: $('#json-tip'),
+    status: $('#json-status'),
+  };
+  // 示例与 jsonlint.com 首页 Load Sample 完全一致
+  const JL_SAMPLE = '{\n  "name": "John Doe",\n  "email": "john@example.com",\n  "age": 30,\n  "active": true,\n  "roles": ["admin", "user"],\n  "address": {\n    "street": "123 Main St",\n    "city": "New York",\n    "country": "USA"\n  },\n  "projects": [\n    {"id": 1, "name": "Website Redesign"},\n    {"id": 2, "name": "Mobile App"}\n  ]\n}';
+  const JL_SVG = {
+    okcircle: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
+    x: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+    bulb: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.96 1.41-2.91A7 7 0 0 0 4 9c0 1.03.23 2.01.66 2.89.75 1.84 1.61 3.32 1.61 5.11h7c0-1 .34-2.09 1.82-3Z"/></svg>',
+  };
+  let jlState = 'idle', jlErr = null, jlValue = null, jlSrc = '';
+  const jlEsc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const jlIsPretty = s => s.trim().includes('\n');
+
+  function jlRender() {
+    const src = JL.ta.value;
+    const empty = !src.trim(), pretty = jlIsPretty(src);
+    // 行号槽（错误行红标；2 万行以上放弃逐行 span 只出纯文本）
+    const lines = src.split('\n');
+    const errLine = jlState === 'invalid' && jlErr && jlErr.line;
+    if (lines.length <= 20000)
+      JL.gutter.innerHTML = lines.map((_, i) =>
+        errLine === i + 1 ? `<span class="err">${i + 1}</span>` : i + 1).join('\n');
+    else JL.gutter.textContent = lines.map((_, i) => i + 1).join('\n');
+    // 按钮态（与站点一致：Prettify/Compress 随当前文本翻转；缩进选择仅在 可美化 时出现）
+    JL.prettify.textContent = pretty ? 'Compress' : 'Prettify';
+    JL.prettify.disabled = jlState !== 'valid';
+    JL.indent.style.display = jlState === 'valid' && !pretty ? '' : 'none';
+    JL.copy.disabled = empty;
+    JL.fix.style.display = jlState === 'invalid' ? '' : 'none';
+    JL.sample.style.display = empty ? '' : 'none';
+    JL.tip.style.display = empty ? '' : 'none';
+    JL.editor.classList.toggle('valid', jlState === 'valid');
+    JL.editor.classList.toggle('invalid', jlState === 'invalid');
+    // 状态横幅
+    if (jlState === 'valid' && jlValue != null) {
+      const s = T.jsonStats(jlValue, src);
+      JL.status.innerHTML =
+        `<div class="jl-banner ok">${JL_SVG.okcircle}<b>Valid JSON</b>` +
+        `<span class="jl-stats">${s.sizeFormatted} • ${s.keys} keys • depth ${s.depth} • ${s.objects} objects • ${s.arrays} arrays</span></div>`;
+    } else if (jlState === 'invalid') {
+      const e = jlErr || { name: 'Error', message: 'Invalid JSON', line: null, col: null };
+      const msg = e.message.replace(/^SyntaxError:\s*/, '');
+      let body = '';
+      if (e.line) {
+        const line = (jlSrc.split('\n')[e.line - 1] || '').slice(0, 200);
+        const caret = ' '.repeat(Math.min(Math.max(e.col - 1, 0), 200)) + '^';
+        body = `<pre>${jlEsc(line)}\n${caret}</pre>`;
+      }
+      const hint = `${JL_SVG.bulb}可点 <b style="font-weight:600">Try Fix</b> 自动修复（注释 / 尾逗号 / 单引号 / 裸键名 / True·None 等）`;
+      JL.status.innerHTML =
+        `<div class="jl-banner bad"><div class="jl-bad-head">${JL_SVG.x}<b>Invalid JSON</b>` +
+        `<span class="jl-bad-count">1 error</span></div>` +
+        `<div class="jl-err">${JL_SVG.x}<div class="jl-err-body">` +
+        `<div class="jl-err-line1"><span class="jl-err-code">${jlEsc(e.name)}</span>` +
+        `<span class="jl-err-msg">${jlEsc(msg)}</span>` +
+        (e.line ? `<span class="jl-err-pos">line ${e.line}, col ${e.col}</span>` : '') +
+        `</div>${body}<p class="hint">${hint}</p></div></div></div>`;
+    } else JL.status.innerHTML = '';
+  }
+  function jlValidate() {
+    jlSrc = JL.ta.value;
+    if (!jlSrc.trim()) { jlState = 'idle'; jlErr = null; jlValue = null; }
+    else {
+      try { jlValue = JSON.parse(jlSrc); jlState = 'valid'; jlErr = null; }
+      catch (e) { jlState = 'invalid'; jlValue = null; jlErr = T.jsonErrInfo(e, jlSrc); }
+    }
+    jlRender();
+  }
+  function jlPrettify() {
+    if (jlState !== 'valid') return;
+    const v = JSON.parse(JL.ta.value);   // 刚校验过，必成功
+    const ind = JL.indent.value;
+    JL.ta.value = jlIsPretty(JL.ta.value)
+      ? JSON.stringify(v)                                                    // Compress
+      : JSON.stringify(v, null, ind === 'tab' ? '\t' : parseInt(ind, 10));   // Prettify
+    jlValidate();
+  }
+  JL.ta.addEventListener('input', jlValidate);
+  JL.ta.addEventListener('scroll', () => { JL.gutter.style.transform = `translateY(${-JL.ta.scrollTop}px)`; });
+  $('#json-validate').addEventListener('click', jlValidate);
+  $('#json-clear').addEventListener('click', () => { JL.ta.value = ''; jlValidate(); JL.ta.focus(); });
+  JL.prettify.addEventListener('click', jlPrettify);
+  JL.copy.addEventListener('click', async () => {
+    const txt = JL.ta.value;
+    if (!txt.trim()) return;
+    let okFlag = false;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      try { await navigator.clipboard.writeText(txt); okFlag = true; } catch (e) {}
+    }
+    if (!okFlag) {
+      const ta = document.createElement('textarea');
+      ta.value = txt; document.body.appendChild(ta); ta.select();
+      try { okFlag = document.execCommand('copy'); } catch (e) {}
+      ta.remove();
+    }
+    JL.copy.textContent = okFlag ? 'Copied ✓' : 'Copy failed';
+    setTimeout(() => { JL.copy.textContent = 'Copy'; }, 2000);
+  });
+  JL.fix.addEventListener('click', () => {
+    JL.ta.value = T.jsonRepairBest(JL.ta.value).text;
+    jlValidate();
+  });
+  JL.sample.addEventListener('click', () => { JL.ta.value = JL_SAMPLE; jlValidate(); });
+  // 拖拽文件载入（对齐站点 onDrop）
+  JL.editor.addEventListener('dragover', e => e.preventDefault());
+  JL.editor.addEventListener('drop', e => {
+    e.preventDefault();
+    const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) f.text().then(t => { JL.ta.value = t; jlValidate(); });
+  });
+  // 快捷键：Ctrl/Cmd+Enter 校验 · Ctrl/Cmd+Shift+F 格式化（仅 JSON 页签激活时）
+  document.addEventListener('keydown', e => {
+    if (!$('#tool-json').classList.contains('active')) return;
+    const mod = e.ctrlKey || e.metaKey;
+    if (mod && e.key === 'Enter') { e.preventDefault(); jlValidate(); }
+    else if (mod && e.shiftKey && (e.key === 'F' || e.key === 'f')) { e.preventDefault(); jlPrettify(); }
+  });
+  if (window.__cdnJsonrepairFail || typeof JSONRepair === 'undefined')
+    $('#json-cdn-warn').classList.add('show');
+  jlValidate();
+
+  /* ---------------- SQL ---------------- */
+  $('#sql-format').addEventListener('click', () => {
+    const src = $('#sql-in').value, sec = $('#tool-sql');
+    if (!src.trim()) return msg(sec, '请输入 SQL', 'warn');
+    const lang = $('#sql-dialect').value;
+    if (typeof sqlFormatter !== 'undefined') {
+      try {
+        $('#sql-out').value = sqlFormatter.format(src, { language: lang });
+        return msg(sec, `✓ 格式化完成（sql-formatter · ${lang}）`, 'ok');
+      } catch (e) { /* 落降级 */ }
+    }
+    $('#sql-out').value = T.sqlNaiveFormat(src);
+    msg(sec, '⚠ CDN 不可用，已用内置简易格式化', 'warn');
+  });
+  $('#sql-minify').addEventListener('click', () => {
+    const src = $('#sql-in').value, sec = $('#tool-sql');
+    if (!src.trim()) return msg(sec, '请输入 SQL', 'warn');
+    $('#sql-out').value = T.sqlStrip(src);
+    msg(sec, `✓ 压缩完成（去注释、单行，保留字符串字面量）`, 'ok');
+  });
+  $('#sql-check').addEventListener('click', () => {
+    const src = $('#sql-in').value, sec = $('#tool-sql');
+    if (!src.trim()) return msg(sec, '请输入 SQL', 'warn');
+    const issues = T.sqlCheck(src);
+    if (!issues.length) return msg(sec, '✓ 未发现明显问题（括号/引号配平、关键字拼写粗检；非全量语法校验）', 'ok');
+    msg(sec, '⚠ 发现 ' + issues.length + ' 处疑似问题（非全量校验）：\n' + issues.join('\n'), 'warn');
+  });
+  if (window.__cdnSqlFormatterFail || typeof sqlFormatter === 'undefined')
+    $('#sql-cdn-warn').classList.add('show');
+
+  /* ---------------- diff：照搬 jq22/textDifference（Mergely 深色双栏合并视图） ----------------
+   * 形态：上方常驻双输入框（输入即实时比对，防抖 150ms，无需失焦），下方差异渲染；
+   * 中缝画布连线 + 每差异块 ◀/▶ 合并箭头（◀ 用 B 块替换 A，▶ 用 A 块替换 B）；
+   * 接受即两侧一致、差异消散，输入框同步回显。 */
+  const diffState = { accepts: {}, spans: [], big: false, cjk: false, L: '', R: '' };
+  const MG = {
+    colL: $('#mg-col-l'), colR: $('#mg-col-r'),
+    tawL: $('#mg-taw-l'), tawR: $('#mg-taw-r'),
+    viewL: $('#mg-view-l'), viewR: $('#mg-view-r'),
+    emptyL: $('#mg-empty-l'), emptyR: $('#mg-empty-r'),
+    pathL: $('#diff-path-l'), pathR: $('#diff-path-r'),
+    cvs: $('#mg-canvas'),
+  };
+  const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  function diffNorm() {
+    let norm = null;
+    if ($('#diff-ignorecase').checked) { const b = norm || (s => s); norm = s => b(s).toLowerCase(); }
+    if ($('#diff-ignorews').checked) { const b = norm || (s => s); norm = s => b(s).replace(/[ \t]+/g, ' ').trim(); }
+    return norm;
+  }
+  // 行内差异 token 级 <mark>（默认 CJK 逐字/西文按词；中文模式全文本逐字符）
+  function inlineMarks(aLine, bLine) {
+    const ops = diffState.cjk ? T.lcsOps([...aLine], [...bLine]) : T.inlineDiff(aLine, bLine);
+    let lh = '', rh = '';
+    for (const [t, v] of ops) {
+      const e = esc(v);
+      if (t === '=') { lh += e; rh += e; }
+      else if (t === '-') lh += `<mark class="mg-mark mg-mark-del">${e}</mark>`;
+      else rh += `<mark class="mg-mark">${e}</mark>`;
+    }
+    return [lh, rh];
+  }
+
+  /* ----- 中缝画布：贝塞尔连线 + 合并箭头（悬停 #a3d1ff，同 mergely-active） ----- */
+  const mgArrows = [];
+  let mgHover = null;
+  function drawCanvas() {
+    const inner = document.querySelector('.mg-inner');
+    const cvs = MG.cvs, dpr = window.devicePixelRatio || 1;
+    const w = 28, h = Math.max(inner.offsetHeight, 1);
+    cvs.width = Math.round(w * dpr); cvs.height = Math.round(h * dpr);
+    cvs.style.width = w + 'px'; cvs.style.height = h + 'px';
+    const ctx = cvs.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    mgArrows.length = 0;
+    const base = inner.getBoundingClientRect();
+    const midY = (view, ri0, ri1) => {
+      const a = view.querySelector(`.mg-row[data-ri="${ri0}"]`);
+      const b = view.querySelector(`.mg-row[data-ri="${ri1}"]`);
+      if (!a || !b) return null;
+      return ((a.getBoundingClientRect().top + b.getBoundingClientRect().bottom) / 2) - base.top;
+    };
+    const tri = (x, y, dir) => {
+      ctx.beginPath();
+      if (dir < 0) { ctx.moveTo(x + 7, y); ctx.lineTo(x - 6, y - 6); ctx.lineTo(x - 6, y + 6); }
+      else         { ctx.moveTo(x - 7, y); ctx.lineTo(x + 6, y - 6); ctx.lineTo(x + 6, y + 6); }
+      ctx.closePath(); ctx.fill();
+    };
+    for (const sp of diffState.spans) {
+      const yl = midY(MG.viewL, sp.ri0, sp.ri1);
+      const yr = midY(MG.viewR, sp.ri0, sp.ri1);
+      if (yl == null || yr == null) continue;
+      ctx.strokeStyle = 'rgba(163,209,255,.5)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(0, yl);
+      ctx.bezierCurveTo(14, yl, 14, yr, 28, yr);
+      ctx.stroke();
+      ctx.fillStyle = mgHover === sp.h + 'toA' ? '#a3d1ff' : '#6e6e6e';
+      tri(w / 2, yl - 8, -1);                       // ◀ 用 B 块替换 A
+      mgArrows.push({ x: w / 2, y: yl - 8, h: sp.h, dir: 'toA' });
+      ctx.fillStyle = mgHover === sp.h + 'toB' ? '#a3d1ff' : '#6e6e6e';
+      tri(w / 2, yr + 8, 1);                        // ▶ 用 A 块替换 B
+      mgArrows.push({ x: w / 2, y: yr + 8, h: sp.h, dir: 'toB' });
+    }
+  }
+  MG.cvs.addEventListener('mousemove', e => {
+    const r = MG.cvs.getBoundingClientRect();
+    const x = e.clientX - r.left, y = e.clientY - r.top;
+    const hit = mgArrows.find(a => (x - a.x) ** 2 + (y - a.y) ** 2 <= 100);
+    const key = hit ? hit.h + hit.dir : null;
+    if (key !== mgHover) {
+      mgHover = key;
+      MG.cvs.style.cursor = hit ? 'pointer' : 'default';
+      drawCanvas();
+    }
+  });
+  MG.cvs.addEventListener('mouseleave', () => { mgHover = null; drawCanvas(); });
+  MG.cvs.addEventListener('click', () => {
+    const hit = mgArrows.find(a => a.h + a.dir === mgHover);
+    if (hit) acceptHunk(hit.h, hit.dir);
+  });
+
+  // 外部路径（拖拽/示例/清空/箭头接受）改 diffState 时回显输入框
+  function syncTextareas() {
+    $('#diff-l').value = diffState.L;
+    $('#diff-r').value = diffState.R;
+  }
+
+  function acceptHunk(id, dir) {
+    diffState.accepts[id] = dir;
+    const m = T.applyAccepts(diffState.L, diffState.R, diffNorm(), diffState.accepts);
+    diffState.L = m.a; diffState.R = m.b;   // 接受后该块两侧一致，重比对即消散
+    syncTextareas();
+    diffRun();
+  }
+
+  const rowDiv = (line, ln, cls, codeHtml, ri) =>
+    `<div class="mg-row${line == null ? ' pad' : ''}${cls && line != null ? ' ' + cls : ''}" data-ri="${ri}">` +
+    `<span class="ln">${ln}</span><pre>${codeHtml || ' '}</pre></div>`;
+
+  function refreshEmpty() {
+    MG.emptyL.style.display = diffState.L ? 'none' : '';
+    MG.emptyR.style.display = diffState.R ? 'none' : '';
+  }
+
+  function diffRun() {
+    const norm = diffNorm();
+    const L = diffState.L, R = diffState.R;
+    diffState.accepts = {};
+    // 超大文本保护：>2 万行或 >200 万字符 → 关词内高亮/精确相似度
+    diffState.big = L.split('\n').length > 20000 || R.split('\n').length > 20000 ||
+                    L.length + R.length > 2e6;
+    const { rows, hunks } = T.diffRows(L, R, norm);
+    // 块 → 行配色（mergely 语义：.a 纯增=蓝 / .d 纯删=黄 / .c 修改=红，两侧同现）
+    const hCls = h => h.dels.length && h.adds.length ? 'c' : (h.adds.length ? 'a' : 'd');
+    const spans = [];
+    let hl = '', hr = '', lnA = 0, lnB = 0, lastH = null;
+    rows.forEach((row, ri) => {
+      let cls = '';
+      if (row.h != null) {
+        if (row.h !== lastH) { spans.push({ h: row.h, ri0: ri, ri1: ri }); lastH = row.h; }
+        spans[spans.length - 1].ri1 = ri;
+        cls = hCls(hunks[row.h]);
+      } else lastH = null;
+      const la = row.l != null ? ++lnA : '';
+      const lb = row.r != null ? ++lnB : '';
+      let lcHtml = '', rcHtml = '';
+      if (row.l != null && row.r != null && row.l !== row.r && !diffState.big)
+        [lcHtml, rcHtml] = inlineMarks(row.l, row.r);
+      else { lcHtml = esc(row.l ?? ''); rcHtml = esc(row.r ?? ''); }
+      hl += rowDiv(row.l, la, cls, lcHtml, ri);
+      hr += rowDiv(row.r, lb, cls, rcHtml, ri);
+    });
+    MG.viewL.innerHTML = hl;
+    MG.viewR.innerHTML = hr;
+    // 块边界描线（.a #a3d1ff / .d #f8e8e8）
+    for (const sp of spans)
+      for (const view of [MG.viewL, MG.viewR]) {
+        const r0 = view.querySelector(`.mg-row[data-ri="${sp.ri0}"]`);
+        const r1 = view.querySelector(`.mg-row[data-ri="${sp.ri1}"]`);
+        if (r0 && !r0.classList.contains('pad')) r0.classList.add('hs');
+        if (r1 && !r1.classList.contains('pad')) r1.classList.add('he');
+      }
+    diffState.spans = spans;
+    let add = 0, delc = 0;
+    for (const h of hunks) { delc += h.dels.length; add += h.adds.length; }
+    const sim = diffState.big ? null : T.similarity(L, R);
+    $('#diff-stats').textContent = hunks.length
+      ? `差异块 ${hunks.length} · -${delc} +${add} 行` +
+        (sim == null ? ' · ⚠ 文本过大，已关闭词内高亮' : ` · 相似度 ${(sim * 100).toFixed(1)}%`)
+      : (L || R ? '两侧一致' : '');
+    refreshEmpty();
+    requestAnimationFrame(drawCanvas);
+  }
+
+  /* ----- 常驻输入框：input 即实时比对（防抖 150ms，光标在不在框里都保持最新） ----- */
+  let diffDeb = 0;
+  [['#diff-l', 'L'], ['#diff-r', 'R']].forEach(([sel, key]) => {
+    const ta = $(sel);
+    ta.addEventListener('input', () => {
+      diffState[key] = ta.value;
+      clearTimeout(diffDeb);
+      diffDeb = setTimeout(diffRun, 150);
+    });
+    ta.addEventListener('keydown', e => {      // Tab 缩进两格
+      if (e.key === 'Tab') { e.preventDefault(); ta.setRangeText('  ', ta.selectionStart, ta.selectionEnd, 'end'); }
+    });
+  });
+
+  // 拖拽读文件（FileReader 薄胶水）；路径标签显示文件名（同站点 path-lhs/rhs）
+  function setDiffSide(side, text, name) {
+    diffState[side === 'a' ? 'L' : 'R'] = text;
+    if (name != null) (side === 'a' ? MG.pathL : MG.pathR).textContent = name;
+    syncTextareas();
+    diffRun();
+  }
+  [MG.tawL, MG.tawR, MG.colL, MG.colR].forEach((col, i) => {
+    col.addEventListener('dragover', e => { e.preventDefault(); col.classList.add('drag'); });
+    col.addEventListener('dragleave', () => col.classList.remove('drag'));
+    col.addEventListener('drop', e => {
+      e.preventDefault(); col.classList.remove('drag');
+      const f = e.dataTransfer.files && e.dataTransfer.files[0];
+      if (!f) return;
+      const rd = new FileReader();
+      rd.onload = () => setDiffSide(i % 2 === 0 ? 'a' : 'b', String(rd.result), f.name);
+      rd.readAsText(f);
+    });
+  });
+
+  // 保存save：下载该侧当前内容（含已接受的合并）
+  function downloadText(text, name) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+  }
+  $('#diff-save-l').addEventListener('click', () => {
+    const m = T.applyAccepts(diffState.L, diffState.R, diffNorm(), diffState.accepts);
+    downloadText(m.a, (MG.pathL.textContent || 'lhs') + '.txt');
+  });
+  $('#diff-save-r').addEventListener('click', () => {
+    const m = T.applyAccepts(diffState.L, diffState.R, diffNorm(), diffState.accepts);
+    downloadText(m.b, (MG.pathR.textContent || 'rhs') + '.txt');
+  });
+
+  $('#diff-cjk').addEventListener('click', () => {
+    diffState.cjk = !diffState.cjk;
+    $('#diff-cjk').classList.toggle('on', diffState.cjk);
+    diffRun();
+  });
+  ['diff-ignorecase', 'diff-ignorews'].forEach(id =>
+    $('#' + id).addEventListener('change', diffRun));
+  // 示例 / 清空
+  $('#diff-sample').addEventListener('click', () => {
+    diffState.L = SAMPLES['tool-diff-l']; diffState.R = SAMPLES['tool-diff-r'];
+    MG.pathL.textContent = 'lhs'; MG.pathR.textContent = 'rhs';
+    syncTextareas();
+    diffRun();
+  });
+  $('#diff-clear').addEventListener('click', () => {
+    diffState.L = ''; diffState.R = '';
+    MG.pathL.textContent = 'lhs'; MG.pathR.textContent = 'rhs';
+    syncTextareas();
+    diffRun();
+  });
+  diffRun();   // 初始渲染空态
+
+  /* ---------------- 分段式日期时间输入（每单位一格，输满自动右移） ---------------- */
+  const TT_SEG = {};           // slotId -> 组件（calc/format 等脚本共用）
+  globalThis.TT_SEG_REF = TT_SEG;
+  globalThis.TT_makeDtSeg = makeDtSeg;
+  function makeDtSeg(mount) {
+    const phs = ['YYYY', 'MM', 'DD', 'HH', 'mm', 'ss'];
+    const wrap = document.createElement('span');
+    wrap.className = 'dtseg';
+    const ins = phs.map((ph, i) => {
+      if (i) {
+        const s = document.createElement('span');
+        s.className = 'sep';
+        s.textContent = i < 3 ? '-' : (i === 3 ? ' ' : ':');
+        wrap.append(s);
+      }
+      const inp = document.createElement('input');
+      inp.type = 'text';
+      inp.inputMode = 'numeric';
+      inp.maxLength = ph.length;
+      inp.placeholder = ph;
+      if (ph.length === 4) inp.classList.add('y');
+      wrap.append(inp);
+      return inp;
+    });
+    mount.append(wrap);
+    let cb = null;
+    ins.forEach((inp, i) => {
+      inp.addEventListener('input', () => {
+        const v = inp.value.replace(/\D/g, '').slice(0, inp.maxLength);
+        if (v !== inp.value) inp.value = v;
+        if (v.length === inp.maxLength && i < ins.length - 1) {
+          ins[i + 1].focus();
+          ins[i + 1].select();
+        }
+        if (cb) cb(api.value);
+      });
+      inp.addEventListener('keydown', e => {   // 退格回退到上一单位
+        if (e.key === 'Backspace' && !inp.value && i > 0) {
+          e.preventDefault();
+          ins[i - 1].focus();
+          ins[i - 1].select();
+        }
+      });
+      inp.addEventListener('paste', e => {     // 粘贴完整时间串自动分布
+        const txt = (e.clipboardData || window.clipboardData).getData('text') || '';
+        if (/\d{4}\D+\d{1,2}\D+\d{1,2}/.test(txt)) {
+          e.preventDefault();
+          api.value = txt;
+          if (cb) cb(api.value);
+        }
+      });
+    });
+    const api = {
+      get value() {   // 年月日必填，时分秒缺省补 0；不完整返回 ''
+        const v = ins.map(x => x.value.replace(/\D/g, ''));
+        if (v[0].length !== 4 || !v[1] || !v[2]) return '';
+        const p = (s, n) => s.padStart(n, '0');
+        return `${v[0]}-${p(v[1], 2)}-${p(v[2], 2)} ${p(v[3] || '0', 2)}:${p(v[4] || '0', 2)}:${p(v[5] || '0', 2)}`;
+      },
+      set value(v) {
+        const g = (String(v).match(/\d+/g) || []).slice(0, 6);
+        ins.forEach((inp, i) => { inp.value = (g[i] || '').slice(0, inp.maxLength); });
+      },
+      onChange(f) { cb = f; },
+    };
+    return api;
+  }
+
+  /* ---------------- timestamp ---------------- */
+  document.querySelectorAll('#ts-dir button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#ts-dir button').forEach(b => b.classList.toggle('on', b === btn));
+      $('#ts2dt-pane').style.display = btn.dataset.dir === 'ts2dt' ? '' : 'none';
+      $('#dt2ts-pane').style.display = btn.dataset.dir === 'dt2ts' ? '' : 'none';
+    });
+  });
+  function tsUnitOf(raw) {   // 单位：下拉选择优先，auto=位数自适应识别
+    const sel = $('#ts-unit-sel').value;
+    return sel === 'auto' ? T.tsUnit(raw) : sel;
+  }
+  function tsRender() {
+    const raw = $('#ts-in').value.trim();
+    const box = $('#ts-outputs');
+    if (!raw || !/^-?\d+$/.test(raw)) {
+      box.innerHTML = '<span style="color:var(--muted)">输入纯数字时间戳（自动识别 10 位秒 / 13 位毫秒，也可在右上角指定单位）</span>';
+      return;
+    }
+    const sel = $('#ts-unit-sel').value;
+    const unit = tsUnitOf(raw);
+    if (unit === 'unknown') { box.innerHTML = ''; return; }
+    const n = Number(raw);
+    const d = unit === 'ms' ? new Date(n) : new Date(n * 1000);
+    const ms = d.getTime();
+    const unitNote = sel === 'auto'
+      ? (unit === 'ms' ? '毫秒（自动识别：13 位）' : '秒（自动识别：10 位）')
+      : (unit === 'ms' ? '毫秒（手动指定）' : '秒（手动指定）');
+    box.innerHTML =
+      `<b>识别单位</b><span>${unitNote}</span>` +
+      `<b>本地时间</b><span>${T.fmtLocal(d)}</span>` +
+      `<b>ISO 8601</b><span>${d.toISOString()}</span>` +
+      `<b>UTC</b><span>${d.toUTCString()}</span>` +
+      `<b>相对时间</b><span class="rel" id="ts-rel">${T.relTime(ms)}</span>` +
+      `<b>秒/毫秒</b><span>${Math.floor(ms / 1000)} / ${ms}</span>` +
+      `<b>星期 / ISO 周</b><span>星期${T.WEEK_CN[d.getDay()]} · ${(() => { const w = T.isoWeek(d); return `${w.y}-W${String(w.w).padStart(2, '0')}`; })()}</span>` +
+      `<b>年积日</b><span>${T.dayOfYear(d)} / ${((y => y % 4 === 0 && y % 100 !== 0 || y % 400 === 0)(d.getFullYear())) ? 366 : 365}</span>`;
+  }
+  $('#ts-in').addEventListener('input', tsRender);
+  $('#ts-unit-sel').addEventListener('change', tsRender);
+  $('#ts-now').addEventListener('click', () => {
+    $('#ts-in').value = String(Math.floor(Date.now() / 1000));
+    tsRender();
+  });
+  setInterval(() => {                // 相对时间每秒刷新
+    const rel = $('#ts-rel');
+    const raw = $('#ts-in').value.trim();
+    if (rel && /^-?\d+$/.test(raw)) {
+      const unit = tsUnitOf(raw);
+      if (unit !== 'unknown') {
+        const n = Number(raw);
+        rel.textContent = T.relTime(unit === 'ms' ? n : n * 1000);
+      }
+    }
+  }, 1000);
+  const dtSeg = makeDtSeg($('#dt-in-slot'));
+  function dtRender() {
+    const v = dtSeg.value;
+    const box = $('#dt-outputs');
+    if (!v) { box.innerHTML = '<span style="color:var(--muted)">按格输入本地时间（年月日必填，时分秒可空按 0 计）</span>'; return; }
+    const d = T.parseDateTimeInput(v);
+    if (!d) { box.innerHTML = '<span style="color:var(--err)">时间无效</span>'; return; }
+    const ms = d.getTime();
+    box.innerHTML =
+      `<b>秒时间戳</b><span>${Math.floor(ms / 1000)}</span>` +
+      `<b>毫秒时间戳</b><span>${ms}</span>` +
+      `<b>UTC</b><span>${d.toUTCString()}</span>` +
+      `<b>相对</b><span>${T.relTime(ms)}</span>`;
+  }
+  dtSeg.onChange(dtRender);
+  $('#dt-now').addEventListener('click', () => {
+    const d = new Date();
+    dtSeg.value = `${d.getFullYear()} ${d.getMonth() + 1} ${d.getDate()} ${d.getHours()} ${d.getMinutes()} ${d.getSeconds()}`;
+    dtRender();
+  });
+
+  /* ---------------- random ---------------- */
+  function rndRun() {
+    const o = {
+      length: Math.max(1, Math.min(4096, +$('#rnd-len').value || 16)),
+      upper: $('#rnd-upper').checked, lower: $('#rnd-lower').checked,
+      digit: $('#rnd-digit').checked, symbol: $('#rnd-symbol').checked,
+      noConfusable: $('#rnd-noconfus').checked, prefix: $('#rnd-prefix').value,
+    };
+    const cs = T.buildCharset(o);
+    const out = $('#rnd-out');
+    if (!cs) { out.textContent = ''; return msg('#rnd-msg', '请至少勾选一个字符集', 'warn'); }
+    const s = T.randomString(o);
+    out.textContent = s;
+    const bits = (s.length - o.prefix.length) * Math.log2(cs.length);
+    msg('#rnd-msg', `字符集 ${cs.length} 种 · 随机部分 ${s.length - o.prefix.length} 字符 · 熵约 ${bits.toFixed(0)} bit${bits < 64 ? '（偏弱，建议加长）' : ''}`, '');
+  }
+  $('#rnd-gen').addEventListener('click', rndRun);
+  $('#rnd-copy').addEventListener('click', e => copyText($('#rnd-out').textContent, e.target));
+  rndRun();
+
+  /* ---------------- crypto ---------------- */
+  $('#md5-run').addEventListener('click', () => {
+    $('#md5-out').textContent = T.md5hex($('#md5-in').value) || '';
+  });
+  const encOut = $('#enc-out');
+  $('#enc-u').addEventListener('click', () => encOut.textContent = T.unicodeEscape($('#enc-in').value));
+  $('#dec-u').addEventListener('click', () => encOut.textContent = T.unicodeUnescape($('#enc-in').value));
+  $('#enc-url').addEventListener('click', () => encOut.textContent = T.urlEncode($('#enc-in').value));
+  $('#dec-url').addEventListener('click', () => {
+    const v = T.urlDecode($('#enc-in').value);
+    encOut.textContent = v == null ? '✗ 百分号序列不合法' : v;
+  });
+  $('#aes-enc').addEventListener('click', async () => {
+    const pass = $('#aes-pass').value, pt = $('#aes-plain').value;
+    if (!pass) return msg('#aes-msg', '请输入口令', 'warn');
+    try {
+      const r = await T.aesEncrypt(pass, pt);
+      $('#aes-blob').textContent = r.b64;
+      msg('#aes-msg', `✓ 已加密（AES-256-GCM · PBKDF2 ${T.AES_ITER} 轮 · base64 含 salt+IV）`, 'ok');
+    } catch (e) { msg('#aes-msg', '✗ 加密失败：' + e.message, 'err'); }
+  });
+  $('#aes-dec').addEventListener('click', async () => {
+    const pass = $('#aes-pass2').value, blob = $('#aes-in').value.trim();
+    if (!pass || !blob) return msg('#aes-msg', '请输入口令与密文', 'warn');
+    try {
+      $('#aes-out').textContent = await T.aesDecrypt(pass, blob);
+      msg('#aes-msg', '✓ 解密成功', 'ok');
+    } catch (e) {
+      $('#aes-out').textContent = '';
+      msg('#aes-msg', '✗ 解密失败：口令错误或密文不是本页格式（' + e.message + '）', 'err');
+    }
+  });
+})();
+</script>
+
+<script>
+/* ============================== 时间工具 UI（万年历/日期计算/格式化，自 time-toolbox 并入） ============================== */
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const T = globalThis.TT_CORE;
+
+  function copyText(text, btn) {
+    const done = () => { const t = btn.textContent; btn.textContent = '已复制'; setTimeout(() => btn.textContent = t, 1200); };
+    if (navigator.clipboard && navigator.clipboard.writeText)
+      navigator.clipboard.writeText(text).then(done).catch(() => {});
+    else {
+      const ta = document.createElement('textarea');
+      ta.value = text; document.body.append(ta); ta.select();
+      try { document.execCommand('copy'); done(); } catch (e) {}
+      ta.remove();
+    }
+  }
+  function fillNow(id) {
+    const d = new Date();
+    SEG[id].value = `${d.getFullYear()} ${d.getMonth() + 1} ${d.getDate()} ${d.getHours()} ${d.getMinutes()} ${d.getSeconds()}`;
+  }
+  /* 分段式输入挂载（组件定义在脚本 2） */
+  const SEG = globalThis.TT_SEG_REF;
+  const mkSeg = globalThis.TT_makeDtSeg;
+  for (const id of ['add-base', 'diff-a', 'diff-b', 'fmt-in'])
+    SEG[id] = mkSeg($(`${id}-slot`));
+
+  /* ---- 页内二级导航：万年历 / 时间戳·计算·格式化 ---- */
+  document.querySelectorAll('#time-seg button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#time-seg button').forEach(b => b.classList.toggle('on', b === btn));
+      $('time-cal').style.display = btn.dataset.pane === 'cal' ? '' : 'none';
+      $('time-ts').style.display = btn.dataset.pane === 'ts' ? '' : 'none';
+    });
+  });
+
+  /* ---- 万年历 ---- */
+  const today = new Date();
+  const cal = { y: today.getFullYear(), m: today.getMonth() + 1, sel: null };
+  (function initCal() {
+    const sel = $('cal-month');
+    for (let i = 1; i <= 12; i++) {
+      const o = document.createElement('option'); o.value = i; o.textContent = `${i} 月`;
+      sel.append(o);
+    }
+    $('cal-year').value = cal.y; sel.value = cal.m;
+    $('cal-year').addEventListener('change', e => {
+      const v = Number(e.target.value);
+      if (v >= 1901 && v <= 2100) { cal.y = v; renderCal(); }
+    });
+    sel.addEventListener('change', e => { cal.m = Number(e.target.value); renderCal(); });
+    $('cal-prev').addEventListener('click', () => shiftCal(-1));
+    $('cal-next').addEventListener('click', () => shiftCal(1));
+    $('cal-today').addEventListener('click', () => {
+      cal.y = today.getFullYear(); cal.m = today.getMonth() + 1;
+      $('cal-year').value = cal.y; $('cal-month').value = cal.m;
+      renderCal(); selectDay(cal.y, cal.m, today.getDate());
+    });
+  })();
+  function shiftCal(n) {
+    cal.m += n;
+    if (cal.m < 1) { cal.m = 12; cal.y--; }
+    if (cal.m > 12) { cal.m = 1; cal.y++; }
+    $('cal-year').value = cal.y; $('cal-month').value = cal.m;
+    renderCal();
+  }
+  function renderCal() {
+    $('cal-ym').textContent = `${cal.y}年${cal.m}月`;
+    const grid = $('cal-grid');
+    grid.innerHTML = '';
+    for (const w of ['日','一','二','三','四','五','六']) {
+      const c = document.createElement('div'); c.className = 'cal-week'; c.textContent = w;
+      grid.append(c);
+    }
+    const first = new Date(cal.y, cal.m - 1, 1);
+    const start = new Date(first);
+    start.setDate(1 - first.getDay()); // 周日起，含补位
+    for (let i = 0; i < 42; i++) {
+      const cur = new Date(start);
+      cur.setDate(start.getDate() + i);
+      const y = cur.getFullYear(), m = cur.getMonth() + 1, d = cur.getDate();
+      const info = (() => {
+        try { return T.dayInfo(y, m, d); } catch (e) { return { label: '' }; }
+      })();
+      const cell = document.createElement('div');
+      cell.className = 'cal-cell';
+      if (m !== cal.m) cell.classList.add('out');
+      const isToday = y === today.getFullYear() && m === today.getMonth() + 1 && d === today.getDate();
+      if (isToday) cell.classList.add('today');
+      if (cal.sel && cal.sel.y === y && cal.sel.m === m && cal.sel.d === d) cell.classList.add('sel');
+      const wd = cur.getDay();
+      if (info.hol && info.hol.tag === 'rest') cell.classList.add('rest');
+      else if (wd === 0 || wd === 6) cell.classList.add('rest');
+      const num = document.createElement('span'); num.className = 'd'; num.textContent = d;
+      const lab = document.createElement('span');
+      lab.className = 'l' + (info.fest ? ' fest' : info.term ? ' term' : '');
+      lab.textContent = info.label || '';
+      cell.append(num, lab);
+      if (info.hol && info.hol.name !== '周末') {
+        const b = document.createElement('span');
+        b.className = `cal-badge ${info.hol.tag}`;
+        b.textContent = info.hol.tag === 'work' ? '班' : '休';
+        cell.append(b);
+      }
+      cell.addEventListener('click', () => selectDay(y, m, d));
+      grid.append(cell);
+    }
+  }
+  function selectDay(y, m, d) {
+    cal.sel = { y, m, d };
+    renderCal();
+    const info = T.dayInfo(y, m, d);
+    const wdN = new Date(y, m - 1, d).getDay();
+    const rows = [
+      ['公历', `${y}年${m}月${d}日`],
+      ['星期', `星期${T.WEEK_CN[wdN]}`],
+      ['农历', info.lunar ? `${T.lunarFull(info.lunar)}（${T.yearSX(info.lunar.year)}）` : '超出范围'],
+      ['节气', info.term || '—'],
+      ['节日', info.fest || '—'],
+      ['假日', info.hol ? (info.hol.tag === 'work' ? `班 · ${info.hol.name}` : `休 · ${info.hol.name}`) : (wdN === 0 || wdN === 6 ? '休 · 周末' : '—')],
+    ];
+    $('cal-detail').innerHTML = `<h3>日期详情</h3>
+      <div class="big">${y}-${T.pad2(m)}-${T.pad2(d)}</div>
+      <dl>${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>
+      <div class="sub mono2" style="margin-top:10px">当日零点 Unix：${Math.floor(new Date(y, m - 1, d).getTime() / 1000)}</div>`;
+    renderDayTasks(y, m, d);
+  }
+
+  /* ---- 当日任务（GET /api/tasks 只读投影；截止日命中或当日提醒命中） ---- */
+  const escHtml = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  function renderDayTasks(y, m, d) {
+    const box = $('cal-tasks');
+    box.innerHTML = '<h4>当日任务</h4><div class="empty">读取中…</div>';
+    fetch('/api/tasks').then(r => r.json()).then(list => {
+      const ymd = `${y}-${T.pad2(m)}-${T.pad2(d)}`;
+      const wd = new Date(y, m - 1, d).getDay();
+      const hits = [];
+      for (const t of list) {
+        if (t.deadline === ymd) { hits.push({ t, tag: '截止', sort: '0' }); continue; }
+        const r = t.reminder || {};
+        if (r.enabled) {
+          const slots = r.slots || [];
+          const fire = slots.length
+            ? slots.some(s => s.weekday === wd || s.day_of_month === d)
+            : !!r.time_of_day;   // 无槽位但有每日时刻 = 每日提醒
+          if (fire) hits.push({ t, tag: `提醒 ${r.time_of_day || ''}`.trim(), sort: `1${r.time_of_day || '99'}` });
+        }
+      }
+      hits.sort((a, b) => a.sort.localeCompare(b.sort));
+      box.innerHTML = `<h4>当日任务（${hits.length}）</h4>` + (hits.length
+        ? hits.map(({ t, tag }) =>
+            `<div class="tk"><span class="t">${escHtml(t.title)}</span>` +
+            (t.category ? `<span class="tag fest">${escHtml(t.category)}</span>` : '') +
+            `<span class="tag ${tag === '截止' ? 'rest' : 'work'}">${escHtml(tag)}</span></div>`).join('')
+        : '<div class="empty">当日暂无截止或提醒任务</div>');
+    }).catch(() => {
+      box.innerHTML = '<h4>当日任务</h4><div class="empty">读取失败（ZenTray 未运行或无数据）</div>';
+    });
+  }
+  renderCal();
+  selectDay(today.getFullYear(), today.getMonth() + 1, today.getDate());
+
+  /* ---- 日期计算 ---- */
+  document.querySelectorAll('#calc-seg button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#calc-seg button').forEach(b => b.classList.toggle('on', b === btn));
+      $('calc-add').style.display = btn.dataset.mode === 'add' ? '' : 'none';
+      $('calc-diff').style.display = btn.dataset.mode === 'diff' ? '' : 'none';
+    });
+  });
+  $('add-now').addEventListener('click', () => fillNow('add-base'));
+  $('diff-a-now').addEventListener('click', () => fillNow('diff-a'));
+  $('diff-b-now').addEventListener('click', () => fillNow('diff-b'));
+  $('add-go').addEventListener('click', () => {
+    const base = T.parseDateTimeInput(SEG['add-base'].value);
+    if (!base) { $('add-res').style.display = ''; $('add-res').innerHTML = '<span class="err">请先填写基准时间</span>'; return; }
+    const p = { y: +$('add-y').value || 0, mo: +$('add-mo').value || 0, w: +$('add-w').value || 0,
+      d: +$('add-d').value || 0, h: +$('add-h').value || 0, mi: +$('add-mi').value || 0, s: +$('add-s').value || 0 };
+    const r = T.dateAdd(base, p);
+    const lu = T.solar2lunar(r.getFullYear(), r.getMonth() + 1, r.getDate());
+    const sign = v => (v > 0 ? `+${v}` : String(v));
+    const expr = [p.y && sign(p.y)+'年', p.mo && sign(p.mo)+'月', p.w && sign(p.w)+'周', p.d && sign(p.d)+'天',
+      p.h && sign(p.h)+'时', p.mi && sign(p.mi)+'分', p.s && sign(p.s)+'秒'].filter(Boolean).join(' ') || '±0';
+    const w = T.isoWeek(r);
+    $('add-res').style.display = '';
+    $('add-res').innerHTML = `
+      <div class="sub">${T.ymdhms(base)}（${expr}）</div>
+      <div class="main">${T.ymdhms(r)}</div>
+      <div class="lines">
+        <span>星期${T.WEEK_CN[r.getDay()]} · ISO 周 ${w.y}-W${String(w.w).padStart(2, '0')}</span>
+        <span>农历 ${lu ? T.lunarFull(lu) + '（' + T.yearSX(lu.year) + '）' : '超出范围'}</span>
+        <span class="mono2">Unix 秒 ${Math.floor(r.getTime()/1000)} · ${T.fmtLocalIso(r)}</span>
+      </div>`;
+  });
+  $('diff-go').addEventListener('click', () => {
+    const a = T.parseDateTimeInput(SEG['diff-a'].value);
+    const b = T.parseDateTimeInput(SEG['diff-b'].value);
+    if (!a || !b) { $('diff-res').style.display = ''; $('diff-res').innerHTML = '<span class="err">请填写起止时间</span>'; return; }
+    const r = T.dateDiff(a, b);
+    const seg = (v, u) => v ? `${v}${u}` : '';
+    const nat = [seg(r.Y,'年'), seg(r.Mo,'月'), seg(r.D,'天'), seg(r.H,'时'), seg(r.Mi,'分'), seg(r.S,'秒')].filter(Boolean).join('') || '0 秒';
+    $('diff-res').style.display = '';
+    $('diff-res').innerHTML = `
+      <div class="sub">${T.ymdhms(a)} → ${T.ymdhms(b)}（${a <= b ? '顺推' : '已自动对调'}）</div>
+      <div class="main">${nat}</div>
+      <div class="lines">
+        <span>合计 ${r.totalDays} 天 = ${r.totalWeeks} 周余 ${r.totalDays - r.totalWeeks*7} 天 = ${r.totalHours} 小时 = ${r.totalMinutes} 分钟 = ${r.totalSeconds} 秒</span>
+        <span>工作日 ${T.workdaysBetween(a, b)} 天（调休上班计入，法定假日与周末不计；区间含首尾）</span>
+      </div>`;
+  });
+
+  /* ---- 时间格式化 ---- */
+  let fmtTz = 'local';
+  document.querySelectorAll('#fmt-tz button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#fmt-tz button').forEach(b => b.classList.toggle('on', b === btn));
+      fmtTz = btn.dataset.tz;
+      $('fmt-go').click();
+    });
+  });
+  $('fmt-now').addEventListener('click', () => fillNow('fmt-in'));
+  $('fmt-go').addEventListener('click', () => {
+    const v = SEG['fmt-in'].value;
+    $('fmt-err').textContent = '';
+    if (!v) { $('fmt-err').textContent = '请先选择或输入时间'; return; }
+    const m = v.trim().match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/);
+    if (!m) { $('fmt-err').textContent = '时间格式无效'; return; }
+    const [, Y, M, D, H, Mi, S] = m;
+    const d = fmtTz === 'local'
+      ? new Date(+Y, +M-1, +D, +H, +Mi, +(S||0))
+      : new Date(Date.UTC(+Y, +M-1, +D, +H, +Mi, +(S||0)));
+    const tb = $('fmt-table');
+    tb.style.display = '';
+    const body = tb.querySelector('tbody');
+    body.innerHTML = '';
+    for (const [name, fn] of T.FORMATS) {
+      const tr = document.createElement('tr');
+      const td1 = document.createElement('td'); td1.className = 'k'; td1.textContent = name;
+      const td2 = document.createElement('td'); td2.className = 'v mono2';
+      let val;
+      try { val = fn(d); } catch (e) { val = '（不支持）'; }
+      td2.textContent = val;
+      const td3 = document.createElement('td');
+      const cb = document.createElement('button'); cb.className = 'act ghost'; cb.textContent = '复制';
+      cb.addEventListener('click', () => copyText(String(val), cb));
+      td3.append(cb);
+      tr.append(td1, td2, td3);
+      body.append(tr);
+    }
+  });
+})();
+</script>
+<script>
+/* 标签页心跳：每 5s 告知服务端本页仍在开着的标签页里，
+   供 start 命令判断「已开则不重复新开标签」。 */
+(function () {
+  var ping = function () {
+    fetch('/tab-heartbeat', { cache: 'no-store' }).catch(function () {});
+  };
+  ping();
+  setInterval(ping, 5000);
+})();
+</script>
+</body>
+</html>

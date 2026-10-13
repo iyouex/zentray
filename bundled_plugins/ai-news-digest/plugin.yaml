@@ -1,0 +1,16 @@
+id: ai-news-digest
+name: AI 资讯日报
+version: 0.4.0
+type: script
+api_version: 2
+entry: ai_news_digest.py
+timeout_sec: 360
+category: 资讯
+description: 聚合 HN 与主流媒体 RSS 生成带图 HTML 日报：数码/AI/时政分组、卡片可点进详情页（含出处与相关链接），标题中英对照，可选 AI 摘要。
+params:
+  - name: top_n
+    default: "12"
+    description: 日报条数
+triggers:
+  - type: daily
+    time: "08:00"

@@ -1,0 +1,9 @@
+{
+  "window_hours": 48,
+  "top_n": 12,
+  "min_hn_points": 30,
+  "max_images": 8,
+  "ai_summary": false,
+  "bilingual": true,
+  "extra_rss": []
+}
