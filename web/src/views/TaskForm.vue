@@ -285,6 +285,20 @@
                   </div>
                 </a-form-item>
               </template>
+
+              <!-- 同时刻已有弹窗提醒：自动列出仅作参考，不阻断保存 -->
+              <a-form-item v-if="form.reminder_enabled && reminderConflicts.length">
+                <div class="conflict-hint">
+                  <div class="conflict-hint-title">该时间已有弹窗提醒（仅参考）：</div>
+                  <div
+                    v-for="(c, i) in reminderConflicts"
+                    :key="`${c.kind}-${c.id}-${i}`"
+                    class="conflict-hint-row"
+                  >
+                    [{{ CONFLICT_KIND_LABELS[c.kind] || c.kind }}] {{ c.title }} — {{ c.detail || c.time }}
+                  </div>
+                </div>
+              </a-form-item>
             </a-form>
           </a-card>
         </div>
@@ -358,7 +372,7 @@
 </template>
 
 <script setup>
-import { computed, h, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Message, Modal } from '@arco-design/web-vue'
 import { PhCamera, PhSparkle } from '@phosphor-icons/vue'
@@ -889,71 +903,50 @@ async function onAddSecondary() {
   }
 }
 
-function formatConflictList(conflicts) {
-  if (!conflicts?.length) return ''
-  return conflicts
-    .map((c, i) => {
-      const kindLabel =
-        {
-          task: '任务',
-          template: '周期模板',
-          ai_plan: 'AI 计划',
-          ai_review: 'AI 复盘',
-        }[c.kind] || c.kind
-      return `${i + 1}. [${kindLabel}] ${c.title} — ${c.detail || c.time}`
-    })
-    .join('\n')
+// ---- 弹窗提醒同时刻参考：调到已设时间即自动列出（仅参考，不阻断保存）----
+
+const CONFLICT_KIND_LABELS = {
+  task: '任务',
+  template: '周期模板',
+  ai_plan: 'AI 计划',
+  ai_review: 'AI 复盘',
 }
 
-/**
- * 弹窗提醒开启时检查与其它任务/模板/计划复盘调度是否同钟点冲突。
- * 有冲突则弹确认；用户确认后继续保存。
- */
-async function confirmReminderConflictsIfNeeded(payload) {
-  const rem = payload?.reminder
-  if (!rem?.enabled) return true
-  try {
-    const body = {
-      reminder: rem,
-      exclude_task_id:
-        isEdit.value && !isTemplate.value ? taskId.value : undefined,
-      exclude_template_id:
-        isEdit.value && isTemplate.value ? taskId.value : undefined,
+const reminderConflicts = ref([])
+let conflictTimer = null
+let conflictSeq = 0
+
+// shortcut: 400ms 防抖合并 TimeSpinner 连续拨动；检查失败静默清空（参考信息非关键路径）
+watch(
+  () =>
+    [form.reminder_enabled, form.reminder_time, JSON.stringify(form.reminder_slots || [])].join('|'),
+  () => {
+    clearTimeout(conflictTimer)
+    const rem = buildReminder()
+    if (!rem.enabled) {
+      reminderConflicts.value = []
+      return
     }
-    const data = await checkReminderConflicts(body)
-    if (!data?.has_conflict || !data.conflicts?.length) return true
-    const list = formatConflictList(data.conflicts)
-    return await new Promise((resolve) => {
-      Modal.confirm({
-        draggable: true,
-        title: '提醒时间冲突',
-        content: () =>
-          h(
-            'div',
-            {
-              style: {
-                whiteSpace: 'pre-line',
-                maxHeight: '260px',
-                overflow: 'auto',
-                fontSize: '13px',
-                lineHeight: '1.5',
-              },
-            },
-            `以下已有弹窗/调度与当前提醒时间冲突：\n\n${list}\n\n仍要保存吗？`,
-          ),
-        okText: '仍要保存',
-        cancelText: '返回修改',
-        simple: false,
-        width: 480,
-        onOk: () => resolve(true),
-        onCancel: () => resolve(false),
-      })
-    })
-  } catch (e) {
-    Message.warning(e?.message || '冲突检查失败，将直接保存')
-    return true
-  }
-}
+    conflictTimer = setTimeout(async () => {
+      const seq = ++conflictSeq
+      try {
+        const data = await checkReminderConflicts({
+          reminder: rem,
+          exclude_task_id:
+            isEdit.value && !isTemplate.value ? taskId.value : undefined,
+          exclude_template_id:
+            isEdit.value && isTemplate.value ? taskId.value : undefined,
+        })
+        if (seq === conflictSeq) reminderConflicts.value = data?.conflicts || []
+      } catch (_) {
+        if (seq === conflictSeq) reminderConflicts.value = []
+      }
+    }, 400)
+  },
+  { immediate: true },
+)
+
+onUnmounted(() => clearTimeout(conflictTimer))
 
 async function onSave() {
   if (!form.title.trim()) {
@@ -973,8 +966,6 @@ async function onSave() {
     return
   }
   const payload = buildPayload()
-  const ok = await confirmReminderConflictsIfNeeded(payload)
-  if (!ok) return
 
   saving.value = true
   try {
@@ -1106,6 +1097,18 @@ onMounted(async () => {
 .muted {
   color: var(--color-text-3);
   font-size: 12px;
+}
+.conflict-hint {
+  width: 100%;
+  font-size: 12.5px;
+  color: var(--color-text-3);
+  line-height: 1.6;
+}
+.conflict-hint-title {
+  color: var(--color-text-2);
+}
+.conflict-hint-row {
+  word-break: break-word;
 }
 /* AI 解析预览 */
 .ai-preview {
