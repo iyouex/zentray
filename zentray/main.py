@@ -287,6 +287,7 @@ def main():
         logger.warning("主题加载失败: %s", e)
 
     # 仅首次无配置时显示向导；之后一律静默托盘启动（优先 Vue）
+    _open_tasks_after_start = False
     try:
         from zentray.ui.setup_wizard import should_show_wizard, show_setup_wizard
         from zentray.ui.vue_commands import try_vue_setup_wizard
@@ -303,8 +304,13 @@ def main():
                     get_api_server().start()
             except Exception:
                 pass
-            if not try_vue_setup_wizard():
+            vue_wizard = try_vue_setup_wizard()
+            if not vue_wizard:
                 show_setup_wizard()
+            # 向导完成页「打开任务列表试试」：controller 就绪后由事件循环打开
+            _open_tasks_after_start = (
+                isinstance(vue_wizard, dict) and bool(vue_wizard.get("open_tasks"))
+            )
             from zentray.services.settings_manager import SettingsManager
 
             SettingsManager.reload()
@@ -474,6 +480,12 @@ def main():
     runtime.hotkey.triggered.connect(runtime.on_quick_add)
     if not runtime.hotkey.start():
         logger.warning("全局热键不可用（权限/Wayland？），仍可通过任务列表新建任务")
+
+    # 向导「打开任务列表试试」：全部就绪后首个事件循环周期执行（复用二次点击唤醒路径）
+    if _open_tasks_after_start:
+        from PySide6.QtCore import QTimer
+
+        QTimer.singleShot(0, _on_activate_existing)
 
     task_repo = injector.get(TaskRepository)
     template_repo = injector.get(PeriodicTemplateRepository)

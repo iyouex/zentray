@@ -229,6 +229,16 @@
           </template>
 
           <template v-else-if="mainKey === 'polling'">
+            <section class="compact-block">
+              <div class="compact-head">新建任务</div>
+              <div class="field-table">
+                <div class="field-line">
+                  <span class="field-k">打开新建任务表单</span>
+                  <a-button type="primary" size="small" @click="goNewTask">＋ 新建任务</a-button>
+                </div>
+              </div>
+            </section>
+
             <div class="compact-page">
               <section class="compact-block">
                 <div class="compact-head">轮播设置</div>
@@ -1242,7 +1252,9 @@ import JobEditor from '@/components/JobEditor.vue'
 import HistoryPanel from '@/components/HistoryPanel.vue'
 import NumberSpinner from '@/components/NumberSpinner.vue'
 import PluginDocDrawer from '@/components/PluginDocDrawer.vue'
+import { useRouter } from 'vue-router'
 
+const router = useRouter()
 const setThemeMode = inject('setThemeMode', null)
 const loading = ref(false)
 const saving = ref(false)
@@ -1250,6 +1262,10 @@ const mainKey = ref('ai')
 const aiTab = ref('plan')
 const apiExpandKeys = ref([])
 const notifyExpandKeys = ref([])
+
+function goNewTask() {
+  router.push('/tasks/new?from=list')
+}
 
 // —— 系统页 ——
 const autostartEnabled = ref(false)
