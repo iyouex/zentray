@@ -235,6 +235,16 @@ class SetupWizard(QDialog):
         self.finish_detail.setStyleSheet("color: #666; font-size: 13px;")
         layout.addWidget(self.finish_detail)
 
+        hint = QLabel(
+            "🧭 新建任务：托盘图标右键 → 📋 任务列表 → 「＋ 新建」\n"
+            "⌨️ 任意位置按 Ctrl+Alt+T 闪电添加\n"
+            "⚙️ 设置 → 📋 任务 → 「新建任务」按钮"
+        )
+        hint.setAlignment(Qt.AlignCenter)
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color: #888; font-size: 12px;")
+        layout.addWidget(hint)
+
         layout.addStretch()
         return page
 
