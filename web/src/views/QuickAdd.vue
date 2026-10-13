@@ -49,10 +49,17 @@
 </template>
 
 <script setup>
-import { nextTick, onMounted, ref } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { Message } from '@arco-design/web-vue'
 import { PhSparkle } from '@phosphor-icons/vue'
-import { aiParse, cancelHost, closeHost, createTask, getMeta } from '@/api/client'
+import {
+  aiParse,
+  cancelHost,
+  closeHost,
+  createTask,
+  getMeta,
+  reportHostHeight,
+} from '@/api/client'
 import { gsap, EASE, motionOff, isReduced } from '@/motion'
 
 const title = ref('')
@@ -157,6 +164,36 @@ onMounted(async () => {
   await nextTick()
   inputRef.value?.focus?.()
 })
+
+/** 窗口高度随内容自适应：AI 预览展开/收起时上报内容高度，宿主同步调窗。
+ * 不取 doc scrollHeight——它含视口高度，窗口调大后会自我放大到顶；
+ * 盒高（offsetHeight，不受 gsap 缩放影响）+页面内边距与视口无关，收展皆可回落 */
+let lastReportedH = 0
+const resizeObserver = new ResizeObserver(() => {
+  const box = boxRef.value
+  if (!box) return
+  const cs = getComputedStyle(box.parentElement)
+  const h = Math.ceil(box.offsetHeight + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom))
+  if (h > 0 && h !== lastReportedH) {
+    lastReportedH = h
+    reportHostHeight(h)
+  }
+})
+onMounted(() => {
+  if (boxRef.value) resizeObserver.observe(boxRef.value)
+})
+onBeforeUnmount(() => resizeObserver.disconnect())
+
+/** ESC 兜底：焦点不在输入框时（如刚点过 AI 按钮）@keydown.esc 收不到，
+ * 窗口级监听走同一阶梯；目标是自己输入框则让组件处理器独占，避免双触发破阶梯 */
+function onGlobalKeydown(e) {
+  if (e.key !== 'Escape') return
+  const inp = inputRef.value?.$el?.querySelector('input')
+  if (e.target === inp) return
+  onEsc()
+}
+onMounted(() => window.addEventListener('keydown', onGlobalKeydown))
+onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKeydown))
 
 /** 聚焦弹性绽放（spec §3.5）：聚焦时输入盒轻微放大，失焦回落；亮环仍由 CSS :focus-within 负责 */
 const boxRef = ref(null)

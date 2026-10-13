@@ -56,6 +56,56 @@ def test_console_close_channel_present():
     assert "if self.result_payload is not None:" in _SRC, "console+导航双通道须防重入"
 
 
+def test_size_channel_and_apply_host_height():
+    """浮层高度自适应（quick-add AI 预览）：前端 console 上报 zentray:size:，
+    宿主 apply_host_height 调窗并同步 _chrome_size（Resize 守卫按它判折半，
+    若沿用开窗时的旧高度，预览展开/收起会被守卫拽回 96px）。"""
+    assert '"zentray:size:"' in _SRC
+    assert "def apply_host_height" in _SRC
+    assert "apply_host_height(dlg, h)" in _SRC
+    # 顺序：_chrome_size 先于 resize 更新（Resize 事件在 resize() 内同步投递）
+    assert _SRC.index('setattr(dlg, "_chrome_size"') < _SRC.index("dlg.resize(dlg.width(), h)")
+    # 前端契约：client.js 上报函数 + QuickAdd 挂 ResizeObserver 与 ESC 兜底
+    root = Path(web_host.__file__).parents[2]
+    client = (root / "web" / "src" / "api" / "client.js").read_text(encoding="utf-8")
+    assert "zentray:size:" in client, "前端须以 console 上报内容高度"
+    qa = (root / "web" / "src" / "views" / "QuickAdd.vue").read_text(encoding="utf-8")
+    assert "reportHostHeight" in qa, "QuickAdd 须观察内容高度并上报"
+    assert "onGlobalKeydown" in qa, "ESC 兜底：焦点不在输入框时窗口级监听走同一阶梯"
+
+
+def test_apply_host_height_resizes_and_updates_chrome_size(qapp):
+    """调高生效、超屏夹紧、±2px 抖动不动；_chrome_size 必须在 resize 前更新——
+    Resize 事件在 resize() 内同步投递，守卫持旧目标会把收窗误判为合成器折半。"""
+    from PySide6.QtWidgets import QDialog
+
+    from zentray.ui.web_host import apply_host_height
+
+    dlg = QDialog()
+    dlg.resize(640, 96)
+    try:
+        apply_host_height(dlg, 300)
+        assert dlg.height() == 300
+        assert getattr(dlg, "_chrome_size", None) == (640, 300)
+
+        # 先更 _chrome_size 后 resize：目标必须与新高度一致（顺序回归断言）
+        apply_host_height(dlg, 120)
+        assert dlg.height() == 120
+        assert getattr(dlg, "_chrome_size", None) == (640, 120)
+
+        # 过大请求夹到 0.92 可用高度以内
+        apply_host_height(dlg, 1_000_000)
+        screen = qapp.primaryScreen()
+        assert dlg.height() <= int(screen.availableGeometry().height() * 0.92) + 1
+
+        # ±2px 内不动（防抖）
+        before = dlg.height()
+        apply_host_height(dlg, before + 1)
+        assert dlg.height() == before
+    finally:
+        dlg.deleteLater()
+
+
 def test_open_vue_route_single_active_policy():
     """开新 Vue 面板必须先 reject 旧的：被最小化遗忘的旧面板与新面板并存时，
     两者的混合 DPI 尺寸恢复会互相触发合成器 configure，形成无限减半拉锯。"""

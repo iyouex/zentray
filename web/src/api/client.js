@@ -342,6 +342,12 @@ export function cancelHost() {
   closeHost({ cancelled: true })
 }
 
+/** 浮层窗口高度随内容自适应（Qt WebEngine）：宿主拦截 console 消息调整窗口
+ * 高度（quick-add AI 预览展开/收起，免滚动条）；非浮层宿主忽略 */
+export function reportHostHeight(px) {
+  console.log(`zentray:size:${JSON.stringify({ h: Math.max(0, Math.round(px)) })}`)
+}
+
 // ---- 插件 ----
 
 /** 插件列表（含 failures；设置页可扫描） */
