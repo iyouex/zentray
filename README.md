@@ -3,9 +3,11 @@
 > 跨平台（Linux / Windows / macOS）系统托盘 GTD + 番茄钟 + AI 计划/复盘。  
 > 当前版本见 `zentray/config.py`（版本规则：[docs/VERSIONING.md](docs/VERSIONING.md)）。
 
-<p align="center">
-  <strong>📋 任务轮播 &nbsp;|&nbsp; 🍅 番茄专注 &nbsp;|&nbsp; 🤖 每日计划/复盘 &nbsp;|&nbsp; 📱 多渠道通知</strong>
-</p>
+![任务列表](docs/images/task-list.png)
+
+**无主窗口**：常驻顶栏/托盘，右键图标打开全部功能；Windows 左键托盘呼出速览面板。
+
+<p align="center"><strong>📋 任务轮播 &nbsp;|&nbsp; 🍅 番茄专注 &nbsp;|&nbsp; 🤖 每日计划/复盘 &nbsp;|&nbsp; 📱 多渠道通知</strong></p>
 
 > 📖 **用户手册**：[docs/USER_MANUAL.md](docs/USER_MANUAL.md)  
 > 🖥️ **Vue 前端**：[docs/FRONTEND_VUE.md](docs/FRONTEND_VUE.md)
@@ -22,13 +24,12 @@
 | Windows (x64) | `zentray_*_windows_x64.zip` | 免安装，解压后运行 `ZenTray/ZenTray.exe` |
 | macOS (arm64) | `zentray_*_macos_arm64.zip` | 解压 `ZenTray.app` 拖入「应用程序」 |
 
-首次启动可走配置向导（可全部跳过）。程序**无主窗口**，请看**顶栏/托盘**。
-安装包未签名/未公证：Windows SmartScreen 选「仍要运行」；macOS Gatekeeper 放行见[用户手册](docs/USER_MANUAL.md)。
+首次启动可走配置向导（可全部跳过）。安装包未签名/未公证：Windows SmartScreen 选「仍要运行」；macOS Gatekeeper 放行见[用户手册](docs/USER_MANUAL.md)。
 
 ### 开发运行
 
 ```bash
-git clone https://github.com/zen-geek/zentray.git
+git clone https://github.com/iyouex/zentray.git
 cd zentray
 python -m venv venv && source venv/bin/activate
 pip install -e ".[dev]"
@@ -53,22 +54,40 @@ AI_MODEL_NAME=gpt-4o
 
 ---
 
-## 功能一览
+## 界面速览
 
-| 功能 | 说明 |
+**速览面板**（Windows 左键托盘）——轮播槽任务卡（优先级/截止/子任务进度）+ 番茄钟状态，◀▶ 沿活跃序换位：
+
+![速览面板](docs/images/glance.png)
+
+**新建任务** —— 一次性/周期模式；分类、优先级、截止、提醒、子任务、附件/链接、关联插件：
+
+![新建任务](docs/images/task-form.png)
+
+**闪电添加** —— 全局热键 `Ctrl+Alt+T` 呼出，一句话记待办，回车入库：
+
+![闪电添加](docs/images/quick-add.png)
+
+**设置** —— 八页签导航：AI 能力 / 通知 / 任务 / 番茄钟 / 插件 / 系统（主题四皮肤、自启、系统日历）/ 备份 / 历史：
+
+![设置](docs/images/settings.png)
+
+**插件面板**（托盘「🧩 插件」）—— 分类筛选 + 逐插件卡片，脚本与服务一键运行/启停：
+
+![插件面板](docs/images/plugins-panel.png)
+
+### 核心能力
+
+| 能力 | 说明 |
 |------|------|
-| **托盘轮播** | 顶栏任务标题轮播；左侧**优先级饼图**（红/黄/绿，按进度填充） |
-| **番茄钟** | 专注-短休/长休循环（节奏预设、自动衔接、每日目标、今日统计）；可绑定任务；左：**番茄/休息饼图**（随倒计时填充）；右：倒计时或自定义文案 |
-| **任务** | 新建/编辑/进度(10%步进)/完成/废弃；二级分类、截止、提醒（编辑时自动列出同时刻其它提醒，仅参考）、附件/链接 |
-| **周期任务** | 日/周/月模板自动派发 |
-| **系统日历** | 设置 → 🖥️ 系统：活跃任务导出 .ics（截止日=全天事件、开启提醒=定时事件），经系统日历应用确认写入 |
-| **闪电添加** | `Ctrl+Alt+T` |
-| **AI** | **每日计划** + **每日复盘**；多 API 配置（同时启用一个）；毒舌/温柔/干练 + 自定义提示词 |
-| **AI 场景能力** | **智能解析**（快速添加/任务表单一句话补全）、**图片识别**（上传或 Ctrl+V 截图转任务草稿）、**任务建议**（优先级/截止/拆分一键应用）；默认关闭，设置 → AI 能力 中开启 |
-| **通知** | 固定渠道：应用弹窗、WxPusher（可同时开） |
-| **备份** | 设置 → 💾 备份：目录可配、手动备份（AES-256 加密/另存为）、自动周期备份+轮转、从文件恢复（预览计数 + 分类/分区勾选）、历史快照管理 |
-| **插件** | 设置 → 🧩 插件：脚本（进度占轮播）与服务（短通知）扩展，支持编辑/删除/使用说明，运行报告可用系统应用（浏览器/md 阅读器）直接打开；任务可关联插件一键运行；≥1 插件时托盘菜单出现「🧩 插件」子菜单，规范见 [docs/plugins/PLUGIN_SPEC.md](docs/plugins/PLUGIN_SPEC.md) |
-| **主题** | 浅色 / 深色 / 跟随系统；皮肤 Neo / Aurora / 霓虹 Synth / 黏土 Clay |
+| **托盘轮播** | 顶栏任务标题轮播；左侧优先级饼图（红/黄/绿，按子任务进度填充） |
+| **番茄钟** | 专注-短休/长休循环；节奏预设（经典/深度/超长）、每日目标、今日统计；可绑定任务 |
+| **AI** | **每日计划 + 每日复盘**（可分别调度）；多 API 配置同时启用一个 |
+| **AI 场景能力** | **智能解析**（一句话补全任务）、**图片识别**（截图转任务草稿）、**任务建议**（一键应用）；默认关闭，设置 → ✨ AI 能力 中开启 |
+| **通知** | 应用弹窗、WxPusher、飞书机器人（可同时开） |
+| **系统日历** | 活跃任务导出 .ics（截止日=全天事件、提醒=定时事件） |
+| **备份** | AES-256 加密、自动周期备份+轮转、从文件恢复（预览 + 分类勾选） |
+| **插件** | 脚本与服务扩展，调度规则/参数预设/授权；任务可关联插件；规范见 [docs/plugins/PLUGIN_SPEC.md](docs/plugins/PLUGIN_SPEC.md) |
 
 ---
 
