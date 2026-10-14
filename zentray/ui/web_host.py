@@ -40,9 +40,16 @@ def apply_host_height(dlg: "QDialog", height: int) -> None:
     app = QApplication.instance()
     screen = app.primaryScreen() if app else None
     max_h = int((screen.availableGeometry().height() if screen else 1040) * 0.92)
-    h = max(dlg.minimumHeight(), min(height, max_h))
+    h = min(height, max_h)
     if abs(h - dlg.height()) < 2:
         return
+    # 开窗 chrome 按预估高设了 minimum/maximum（apply_dialog_chrome，避开
+    # min==max 的 mutter 固定尺寸折半），实测内容高到达后必须放开边界：
+    # 收窗被 minimumHeight 钳住即提醒甲板空白下巴的根因，上限同理放行增高
+    if h < dlg.minimumHeight():
+        dlg.setMinimumHeight(h)
+    if h > dlg.maximumHeight():
+        dlg.setMaximumHeight(h)
     # 先更新 _chrome_size 再 resize：Resize 事件在 resize() 内同步投递，
     # 守卫若仍持旧目标会把收窗误判为合成器折半并强制重映射
     setattr(dlg, "_chrome_size", (dlg.width(), h))
