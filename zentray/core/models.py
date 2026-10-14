@@ -103,6 +103,10 @@ class PeriodicTemplate:
     subtasks: List[dict] = field(default_factory=list)
     # 关联插件 id（派发实例时继承）
     plugin_id: Optional[str] = None
+    # 系统日历未来日程投影：开关 + 范围（count=未来几次 1-60 / days=未来几天 7-365）
+    calendar_enabled: bool = False
+    calendar_horizon_mode: str = "count"
+    calendar_horizon_value: int = 4
 
     def __post_init__(self):
         if self.details is None:
@@ -123,6 +127,12 @@ class PeriodicTemplate:
             self.interval = max(1, int(self.interval or 1))
         except (TypeError, ValueError):
             self.interval = 1
+        if self.calendar_horizon_mode not in ("count", "days"):
+            self.calendar_horizon_mode = "count"
+        try:
+            self.calendar_horizon_value = max(1, int(self.calendar_horizon_value or 4))
+        except (TypeError, ValueError):
+            self.calendar_horizon_value = 4
 
     def to_dict(self) -> Dict[str, Any]:
         d = asdict(self)

@@ -11,6 +11,9 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Callable, Optional
 
+from zentray.services.calendar_feed import build_tasks_ics as _build_tasks_ics
+from zentray.services.calendar_feed import ics_escape as _ics_escape
+
 logger = logging.getLogger(__name__)
 
 
@@ -516,6 +519,7 @@ def _settings_dict() -> dict:
         "ops": asdict(s.ops),
         "update": asdict(s.update),
         "feishu_sync": asdict(s.feishu_sync),
+        "calendar": asdict(s.calendar),
     }
 
 
@@ -565,6 +569,7 @@ def _updates_check() -> tuple[int, dict]:
 
 
 def _updates_download(body: dict) -> tuple[int, dict]:
+    from zentray.services.settings_manager import SettingsManager
     from zentray.services.updater import UpdaterService
 
     url = str(body.get("url") or "")
@@ -572,7 +577,7 @@ def _updates_download(body: dict) -> tuple[int, dict]:
     if not url or not version:
         return 400, {"error": "url 与 version 必填"}
     try:
-        UpdaterService.instance().start_download(url, version)
+        UpdaterService.instance().start_download(url, version, SettingsManager().update.proxy)
         return 200, {"started": True}
     except Exception as e:
         return 400, {"error": str(e)}
@@ -1174,8 +1179,8 @@ def _attachment_open(body: dict) -> tuple[int, dict]:
             return 500, {"error": "打开链接失败"}
         return 200, {"ok": True}
     path = Path(value).expanduser()
-    if not path.is_file():
-        return 404, {"error": "文件不存在"}
+    if not path.exists():
+        return 404, {"error": "路径不存在"}
     _open_with_system(path)
     return 200, {"ok": True}
 
@@ -1438,6 +1443,16 @@ def _save_settings(data: dict) -> None:
         apply_app_theme()
     except Exception:
         pass
+    # 系统日历订阅源随开关即时重写
+    try:
+        from zentray.services.calendar_feed import CalendarFeedService
+
+        ts = _ctx.task_service
+        CalendarFeedService.instance().refresh(
+            ts.get_all_tasks(), ts.get_all_templates()
+        )
+    except Exception:
+        pass
 
 
 def _archived_list(query: dict) -> tuple[int, dict]:
@@ -1667,98 +1682,13 @@ def _system_backups() -> tuple[int, dict]:
     return 200, {"items": mig.list_backups(), "dir": str(mig.backup_dir_from_settings())}
 
 
-def _ics_escape(text: str) -> str:
-    """RFC 5545 TEXT 转义：反斜杠/分号/逗号，换行拼为 \\n。"""
-    return (
-        str(text or "")
-        .replace("\\", "\\\\")
-        .replace(";", "\\;")
-        .replace(",", "\\,")
-        .replace("\r\n", "\n")
-        .replace("\n", "\\n")
-    )
-
-
-def _build_tasks_ics(tasks) -> str:
-    """活跃任务 → VCALENDAR 文本（截止日=全天事件；提醒开启时以提醒时间起 30 分钟）。
-
-    纯函数便于单测；CRLF 为 ics 规范行尾。
-    """
-    import datetime as _dt
-
-    priority_tag = {"high": "🔴", "medium": "", "low": "⬇"}
-    lines = [
-        "BEGIN:VCALENDAR",
-        "VERSION:2.0",
-        "PRODID:-//ZenTray//Task Export//CN",
-        "CALSCALE:GREGORIAN",
-    ]
-    now = _dt.datetime.now().strftime("%Y%m%dT%H%M%S")
-    for t in tasks:
-        deadline = getattr(t, "deadline", None)
-        rem = getattr(t, "reminder", None)
-        rem_time = None
-        if rem is not None and getattr(rem, "enabled", False):
-            rem_time = getattr(rem, "time_of_day", None) or "17:00"
-        if not deadline and not rem_time:
-            continue
-        title = f"{priority_tag.get(getattr(t, 'priority', ''), '')}{t.title}".strip()
-        desc = _ics_escape(f"分类: {t.category or '未分类'}\n{getattr(t, 'details', '') or ''}")
-        if deadline:
-            try:
-                _dt.date.fromisoformat(str(deadline))
-            except ValueError:
-                deadline = None
-        if deadline and rem_time:
-            start = f"{str(deadline).replace('-', '')}T{rem_time.replace(':', '')}00"
-            end_t = (
-                _dt.datetime.combine(
-                    _dt.date.fromisoformat(str(deadline)),
-                    _dt.time.fromisoformat(rem_time),
-                )
-                + _dt.timedelta(minutes=30)
-            ).strftime("%Y%m%dT%H%M%S")
-        elif deadline:
-            start = str(deadline).replace("-", "")
-            end_t = None
-        elif rem_time:
-            # 无截止日但开了提醒：今天起 30 分钟事件
-            today = _dt.date.today()
-            start = (_dt.datetime.combine(today, _dt.time.fromisoformat(rem_time))).strftime(
-                "%Y%m%dT%H%M%S"
-            )
-            end_t = (
-                _dt.datetime.combine(today, _dt.time.fromisoformat(rem_time))
-                + _dt.timedelta(minutes=30)
-            ).strftime("%Y%m%dT%H%M%S")
-        else:
-            continue
-        lines += [
-            "BEGIN:VEVENT",
-            f"UID:zentray-{t.id}@zentray.local",
-            f"DTSTAMP:{now}",
-        ]
-        if deadline and end_t is None:
-            lines.append(f"DTSTART;VALUE=DATE:{start}")
-        else:
-            lines.append(f"DTSTART:{start}")
-            lines.append(f"DTEND:{end_t}")
-        lines += [
-            f"SUMMARY:{_ics_escape(title)}",
-            f"DESCRIPTION:{desc}",
-            "END:VEVENT",
-        ]
-    lines.append("END:VCALENDAR")
-    return "\r\n".join(lines) + "\r\n"
-
-
 def _system_calendar_export() -> tuple[int, dict]:
     """活跃任务导出 .ics 并用系统默认日历应用打开（导入后落系统日历）。"""
     import tempfile
     from pathlib import Path
 
     tasks = _ctx.task_service.get_all_tasks()
-    ics = _build_tasks_ics(tasks)
+    ics = _build_tasks_ics(tasks, _ctx.task_service.get_all_templates())
     count = ics.count("BEGIN:VEVENT")
     if count == 0:
         return 400, {"error": "没有带截止日期或提醒的任务可导出"}

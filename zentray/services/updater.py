@@ -107,6 +107,7 @@ class UpdaterService:
     def __init__(self):
         self._lock = threading.Lock()
         self._state = "idle"  # idle | downloading | ready | installing | error
+        self._helper_spawned = False
         self._progress = 0
         self._error = ""
         self._version = ""
@@ -155,6 +156,8 @@ class UpdaterService:
         if not url.startswith(DOWNLOAD_PREFIX):
             raise RuntimeError("非法下载地址（仅接受本仓库 Release 资产）")
         with self._lock:
+            self._helper_spawned = False  # 用户明确开始新一轮下载，解除重启武装
+        with self._lock:
             if self._state == "downloading":
                 raise RuntimeError("已有下载进行中")
             self._state, self._progress, self._error = "downloading", 0, ""
@@ -198,6 +201,8 @@ class UpdaterService:
     def install_and_restart(self) -> dict:
         """平台分派安装；成功后安排退出（helper 接管等待-替换/重启）。"""
         with self._lock:
+            if self._helper_spawned:
+                return {"restarting": True}  # 重启流程已武装（重复点击/重装同版本不叠加 helper）
             if self._state != "ready" or not self._path:
                 raise RuntimeError("安装包尚未就绪，请先下载")
             self._state = "installing"
@@ -215,6 +220,8 @@ class UpdaterService:
             with self._lock:
                 self._state = "error"
             raise
+        with self._lock:
+            self._helper_spawned = True  # 重启机制已武装（linux/mac helper、win bat）
         self._quit()
         return {"restarting": True}
 
@@ -293,10 +300,11 @@ class UpdaterService:
 
     @staticmethod
     def _quit() -> None:
-        # 推迟到事件循环退出，避免在 API 处理栈内同步重入（同 zentray://close 范式）
-        from PySide6.QtCore import QTimer
+        # 本方法在 HTTP 处理线程被调：QTimer.singleShot 跨线程启动定时器静默失效
+        # （应用永不退出、helper 永等），须用 queued invocation 投递到 GUI 线程
+        from PySide6.QtCore import QMetaObject, Qt
         from PySide6.QtWidgets import QApplication
 
         app = QApplication.instance()
         if app:
-            QTimer.singleShot(0, app.quit)
+            QMetaObject.invokeMethod(app, "quit", Qt.ConnectionType.QueuedConnection)

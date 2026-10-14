@@ -29,6 +29,7 @@ def _release(assets=("zentray_9.9.9_amd64.deb",)):
 def _resp(data, status=200):
     m = MagicMock()
     m.status_code = status
+    m.returncode = 0  # subprocess.run 结果复用同一 mock（安装成功路径）
     m.json.return_value = data
     m.raise_for_status.return_value = None
     return m
@@ -97,6 +98,23 @@ def test_download_rejects_foreign_url():
         UpdaterService.instance().start_download("https://evil.example/x.deb", "9.9.9")
 
 
+def test_download_proxy_passed_through(tmp_path):
+    svc = UpdaterService.instance()
+    with patch.object(updater, "UPDATES_DIR", tmp_path), \
+         patch.object(updater.requests, "get",
+                      return_value=_fake_stream_response([b"a" * 10], 10)) as g:
+        svc.start_download(
+            "https://github.com/iyouex/zentray/releases/download/v9.9.9/zentray_9.9.9_amd64.deb",
+            "9.9.9", "http://127.0.0.1:7897")
+        import time
+        for _ in range(100):
+            if svc.status()["state"] in ("ready", "error"):
+                break
+            time.sleep(0.02)
+    assert g.call_args.kwargs["proxies"] == {
+        "http": "http://127.0.0.1:7897", "https": "http://127.0.0.1:7897"}
+
+
 def test_download_state_machine(tmp_path):
     svc = UpdaterService.instance()
     with patch.object(updater, "UPDATES_DIR", tmp_path), \
@@ -157,3 +175,40 @@ def test_platform_suffix_unknown(monkeypatch):
     monkeypatch.setattr(updater.sys, "platform", "freebsd14")
     with pytest.raises(RuntimeError, match="不支持"):
         platform_suffix()
+
+
+def test_quit_scheduled_from_worker_thread():
+    """回归：_quit 在 HTTP 线程被调，跨线程 QTimer.singleShot 静默失效——
+    安装成功后应用永不退出、helper 永等（2026-10-14 实机复现）。
+    断言 exec() 在守护超时前被工作线程投递的 quit 打断（旧实现会挂到守护超时）。"""
+    import threading
+    import time
+
+    from PySide6.QtCore import QCoreApplication, QTimer
+
+    app = QCoreApplication.instance() or QCoreApplication([])
+
+    def invoke_from_worker():
+        threading.Thread(target=UpdaterService._quit).start()
+
+    QTimer.singleShot(0, invoke_from_worker)  # GUI 线程起事，工作线程投递 quit
+    QTimer.singleShot(2000, app.quit)  # 守护：断链时防测试挂死
+    t0 = time.monotonic()
+    app.exec()
+    assert time.monotonic() - t0 < 1.0, "quit 未从工作线程及时投递到 GUI 线程"
+
+
+def test_install_no_double_helper(tmp_path, monkeypatch):
+    """重启机制武装后重复点安装（含重装同版本）不再叠加 helper。"""
+    svc = UpdaterService()
+    svc._state = "ready"
+    svc._path = str(tmp_path / "x.deb")
+    spawned = []
+    monkeypatch.setattr(UpdaterService, "_spawn_helper",
+                        staticmethod(lambda argv: spawned.append(argv)))
+    monkeypatch.setattr(UpdaterService, "_quit", staticmethod(lambda: None))
+    monkeypatch.setattr(updater.subprocess, "run", lambda *a, **k: _resp(None))
+
+    assert svc.install_and_restart() == {"restarting": True}
+    assert svc.install_and_restart() == {"restarting": True}
+    assert len(spawned) == 1
