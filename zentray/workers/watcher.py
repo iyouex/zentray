@@ -132,6 +132,14 @@ class WatcherWorker(QThread):
             self.template_repo.save_all(templates)
 
         if task_changed or tmpl_changed:
+            try:
+                from zentray.services.calendar_feed import CalendarFeedService
+
+                CalendarFeedService.instance().refresh(
+                    self.task_repo.find_all(), templates
+                )
+            except Exception:
+                pass
             self.tasks_updated.emit()
 
     def stop(self):

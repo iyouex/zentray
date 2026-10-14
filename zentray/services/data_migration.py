@@ -69,6 +69,7 @@ SETTINGS_SECTIONS: List[str] = [
     "ops",
     "update",
     "feishu_sync",
+    "calendar",
 ]
 TASK_TYPES: List[str] = ["one-time", "periodic_instance"]
 REVIEW_PREFIXES: List[str] = ["plan", "review"]

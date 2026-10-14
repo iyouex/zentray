@@ -127,7 +127,7 @@ class TaskService:
             )
         except Exception:
             pass
-        self._enqueue_feishu(task, "upsert")
+        self._after_task_change(task, "upsert")
         return task
 
     def create_template(self, data: dict) -> PeriodicTemplate:
@@ -145,6 +145,7 @@ class TaskService:
                 break
         self.template_repo.save_all(templates)
         self._refresh_scheduler()
+        self._refresh_calendar()
         return tmpl
 
     def update_template(
@@ -172,6 +173,7 @@ class TaskService:
                         break
                 self.template_repo.save_all(templates)
                 self._refresh_scheduler()
+                self._refresh_calendar()
                 return tmpl
         return None
 
@@ -181,7 +183,10 @@ class TaskService:
         ]
         before = len(self.template_repo.find_all())
         self.template_repo.save_all(templates)
-        return len(templates) < before
+        changed = len(templates) < before
+        if changed:
+            self._refresh_calendar()
+        return changed
 
     def skip_template(
         self, template_id: str, count: int
@@ -203,6 +208,7 @@ class TaskService:
                 break
         self.template_repo.save_all(templates)
         self._refresh_scheduler()
+        self._refresh_calendar()
         return tmpl
 
     def find_template(self, template_id: str) -> Optional[PeriodicTemplate]:
@@ -255,7 +261,7 @@ class TaskService:
                     )
                 except Exception:
                     pass
-                self._enqueue_feishu(updated, "upsert")
+                self._after_task_change(updated, "upsert")
                 return updated
         return None
 
@@ -301,7 +307,7 @@ class TaskService:
             except Exception:
                 pass
             self._dispatch_plugin_event("task_done", task)
-            self._enqueue_feishu(task, "done")
+            self._after_task_change(task, "done")
 
     @staticmethod
     def _dispatch_plugin_event(event: str, task) -> None:
@@ -313,13 +319,24 @@ class TaskService:
         except Exception:
             pass
 
-    @staticmethod
-    def _enqueue_feishu(task, action: str) -> None:
-        """飞书同步入队挂点（upsert/done/deleted）。未启用/未配置时队列自行丢弃。"""
+    def _after_task_change(self, task, action: str) -> None:
+        """任务变更挂点：飞书同步入队 + 系统日历订阅源刷新。绝不抛错。"""
         try:
             from zentray.services.feishu_sync import FeishuSyncService
 
             FeishuSyncService.instance().enqueue(task, action)
+        except Exception:
+            pass
+        self._refresh_calendar()
+
+    def _refresh_calendar(self) -> None:
+        """系统日历订阅源全量重写（未启用时自行跳过/清空）。"""
+        try:
+            from zentray.services.calendar_feed import CalendarFeedService
+
+            CalendarFeedService.instance().refresh(
+                self.task_repo.find_all(), self.template_repo.find_all()
+            )
         except Exception:
             pass
 
@@ -342,7 +359,7 @@ class TaskService:
                 )
             except Exception:
                 pass
-            self._enqueue_feishu(task, "deleted")
+            self._after_task_change(task, "deleted")
 
     def add_subtask(self, task_id: str, title: str) -> Optional[Task]:
         """为任务追加一个子任务（status=active）。"""
@@ -412,7 +429,7 @@ class TaskService:
             except Exception:
                 pass
             self._dispatch_plugin_event("task_done", res["t"])
-            self._enqueue_feishu(res["t"], "done")
+            self._after_task_change(res["t"], "done")
         else:
             self._refresh_scheduler()
         return res["t"], bool(res.get("auto"))
@@ -485,6 +502,9 @@ class TaskService:
             last_generated_period=data.get("last_generated_period"),
             subtasks=self._normalize_subtasks(data.get("subtasks")),
             plugin_id=(data.get("plugin_id") or None) or None,
+            calendar_enabled=bool(data.get("calendar_enabled", False)),
+            calendar_horizon_mode=(data.get("calendar_horizon_mode") or "count"),
+            calendar_horizon_value=(data.get("calendar_horizon_value", 4)),
         )
 
     def _normalize_category_fields(self, data: dict) -> dict:
@@ -580,6 +600,6 @@ class TaskService:
                 t.reminder = reminder
                 tasks[i] = t
                 self.task_repo.save_all(tasks)
-                self._enqueue_feishu(t, "upsert")
+                self._after_task_change(t, "upsert")
                 return t
         return None

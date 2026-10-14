@@ -113,6 +113,28 @@
                 <a-form-item v-if="!form.long_term" label="停止派发日">
                   <a-input v-model="form.schedule_end_date" placeholder="YYYY-MM-DD" />
                 </a-form-item>
+                <a-form-item label="日历未来日程">
+                  <a-checkbox v-model="form.calendar_enabled">
+                    生成未来日程到系统日历
+                  </a-checkbox>
+                </a-form-item>
+                <a-form-item v-if="form.calendar_enabled" label="投影范围">
+                  <a-space>
+                    <a-select v-model="form.calendar_horizon_mode" style="width: 110px" @change="onHorizonModeChange">
+                      <a-option value="count">未来几次</a-option>
+                      <a-option value="days">未来几天</a-option>
+                    </a-select>
+                    <NumberSpinner
+                      v-model="form.calendar_horizon_value"
+                      :min="form.calendar_horizon_mode === 'days' ? 7 : 1"
+                      :max="form.calendar_horizon_mode === 'days' ? 365 : 60"
+                    />
+                    <span>{{ form.calendar_horizon_mode === 'days' ? '天' : '次' }}</span>
+                  </a-space>
+                  <p class="muted" style="margin: 6px 0 0">
+                    需在 设置 → 任务 开启「系统日历」后写入日历源文件；已派发的真实实例不重复投影。
+                  </p>
+                </a-form-item>
               </template>
 
               <a-form-item label="关联插件">
@@ -446,6 +468,9 @@ const form = reactive({
   interval: 1,
   long_term: true,
   schedule_end_date: '',
+  calendar_enabled: false,
+  calendar_horizon_mode: 'count',
+  calendar_horizon_value: 4,
   reminder_enabled: false,
   reminder_time: '17:00',
   reminder_slots: [],
@@ -486,6 +511,11 @@ const secondaryOpts = computed(() => {
 const intervalUnit = computed(
   () => ({ daily: '天', weekly: '周', monthly: '月' })[form.periodicity] || '天',
 )
+
+/** 投影范围模式切换时回填该模式默认值（count=4 次 / days=30 天） */
+function onHorizonModeChange(mode) {
+  form.calendar_horizon_value = mode === 'days' ? 30 : 4
+}
 
 const isWeeklyOrMonthly = computed(
   () =>
@@ -867,6 +897,9 @@ function buildPayload() {
       interval: form.interval || 1,
       long_term: form.long_term,
       schedule_end_date: form.long_term ? null : form.schedule_end_date || null,
+      calendar_enabled: form.calendar_enabled,
+      calendar_horizon_mode: form.calendar_horizon_mode || 'count',
+      calendar_horizon_value: form.calendar_horizon_value || 4,
     }
   }
 
@@ -1018,6 +1051,9 @@ onMounted(async () => {
         form.interval = t.interval || 1
         form.long_term = t.long_term !== false
         form.schedule_end_date = t.schedule_end_date || ''
+        form.calendar_enabled = !!t.calendar_enabled
+        form.calendar_horizon_mode = t.calendar_horizon_mode || 'count'
+        form.calendar_horizon_value = t.calendar_horizon_value || 4
         form.auto_abandon_on_overdue = !!t.auto_abandon_on_overdue
         form.subtasks = (t.subtasks || []).map((s) => ({ ...s }))
         form.plugin_id = t.plugin_id || null

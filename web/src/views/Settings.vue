@@ -321,6 +321,35 @@
               <span v-if="form.feishu_sync.enabled" class="hint-sm">「测试连接 / 全量重同步」会先保存本卡片配置再执行；全量重同步不清远端旧对象，需要干净重来时先在飞书侧清空 ZenTray 日历/清单。</span>
             </section>
 
+            <section class="compact-block">
+              <div class="compact-head">系统日历</div>
+              <div class="field-table">
+                <div class="field-line">
+                  <span class="field-k">自动同步到系统日历</span>
+                  <a-switch v-model="form.calendar.enabled" />
+                </div>
+                <span class="hint-sm">
+                  开启后任务增删改与周期模板变更自动重写日历源文件，日历应用订阅该文件即保持同步
+                  （Linux Evolution/KOrganizer 订阅本地文件、macOS 日历「新建日历订阅」粘贴链接）；
+                  Windows Outlook 不支持文件订阅，用「导出一次」手动导入。改动随「保存设置」生效。
+                </span>
+                <template v-if="form.calendar.enabled">
+                  <div class="field-line">
+                    <span class="field-k">源文件</span>
+                    <span class="hint-sm" style="word-break: break-all">{{ calendarFeedPath || '…' }}</span>
+                  </div>
+                  <div class="field-line">
+                    <span class="field-k">订阅与导出</span>
+                    <a-space size="small">
+                      <a-button size="small" @click="onCalendarOpenFolder">打开所在文件夹</a-button>
+                      <a-button size="small" @click="onCalendarCopyLink">复制订阅链接</a-button>
+                      <a-button size="small" :loading="calendarExporting" @click="onCalendarExport">导出一次</a-button>
+                    </a-space>
+                  </div>
+                </template>
+              </div>
+            </section>
+
             <div class="compact-page">
               <section class="compact-block">
                 <div class="compact-head">轮播设置</div>
@@ -984,20 +1013,6 @@
                 </div>
               </a-card>
 
-              <a-card class="sys-card" :bordered="false" title="系统日历">
-                <div class="sys-row">
-                  <div>
-                    <div class="sys-title">把任务添加到系统日历</div>
-                    <div class="sys-desc">
-                      将带截止日期/提醒的活跃任务导出为日历事件（.ics），用系统日历应用打开，确认后写入系统日历。
-                    </div>
-                  </div>
-                  <a-button type="primary" :loading="calendarExporting" @click="onCalendarExport">
-                    导出任务到系统日历
-                  </a-button>
-                </div>
-              </a-card>
-
               <a-card class="sys-card" :bordered="false" title="软件更新">
                 <div class="sys-row">
                   <div>
@@ -1398,6 +1413,40 @@ const feishuStatusText = computed(() => {
   if (f.last_sync_at) return `上次同步：${f.last_sync_at}`
   return ''
 })
+
+// —— 系统日历订阅源（任务页卡片）——
+const sysDataDir = ref('')
+const calendarFeedPath = computed(() =>
+  sysDataDir.value ? `${sysDataDir.value}/calendar/zentray.ics` : ''
+)
+
+async function onCalendarOpenFolder() {
+  const dir = calendarFeedPath.value.replace(/\/[^/]*$/, '')
+  if (!dir) return
+  try {
+    await openAttachment(dir)
+  } catch (e) {
+    Message.error(e?.response?.data?.error || e?.message || '打开失败（先保存设置生成源文件）')
+  }
+}
+
+async function onCalendarCopyLink() {
+  const url = `file://${calendarFeedPath.value}`
+  try {
+    await navigator.clipboard.writeText(url)
+    Message.success('已复制订阅链接')
+  } catch {
+    // WebEngine 剪贴板权限缺失时退回 execCommand
+    const ta = document.createElement('textarea')
+    ta.value = url
+    document.body.appendChild(ta)
+    ta.select()
+    const ok = document.execCommand('copy')
+    document.body.removeChild(ta)
+    if (ok) Message.success('已复制订阅链接')
+    else Message.warning(`复制失败，请手动复制：${url}`)
+  }
+}
 
 // —— 系统页 ——
 const autostartEnabled = ref(false)
@@ -2054,6 +2103,7 @@ function emptyForm() {
       report_tray_minutes: 60,
     },
     update: { proxy: '' },
+    calendar: { enabled: false },
   }
 }
 
@@ -2222,6 +2272,7 @@ async function onOpenTaskbarSettings() {
 async function loadSystemStatus() {
   try {
     const data = await getSystemStatus()
+    sysDataDir.value = data?.data_dir || ''
     autostartEnabled.value = !!data?.autostart?.enabled
     form.appearance.autostart = !!data?.autostart?.preference
     const target = data?.autostart?.launch_target
@@ -2444,6 +2495,7 @@ const importTree = computed(() => {
     ops: '插件运行时',
     update: '软件更新',
     feishu_sync: '飞书同步',
+    calendar: '系统日历',
   }
   const nodes = []
   for (const c of data.categories || []) {
@@ -2751,6 +2803,7 @@ function normalizeLoaded(s) {
   }
   if (!form.quick_add) form.quick_add = emptyForm().quick_add
   if (!form.feishu_sync) form.feishu_sync = emptyForm().feishu_sync
+  if (!form.calendar) form.calendar = emptyForm().calendar
   // 备份：normalize 时补默认 + 钳制（trigger_hour 0 点合法，不能用 || 兜底）
   const bk = { ...emptyForm().backup, ...(s.backup || {}) }
   if (![1, 3, 7].includes(bk.interval_days)) bk.interval_days = 1
