@@ -14,7 +14,8 @@
     <div class="page-body">
       <a-spin :loading="loading" style="width: 100%">
         <div class="two-col">
-          <a-card title="基本信息" :bordered="false">
+          <a-card>
+  <template #title><h3 class="zt-h3">基本信息</h3></template> :bordered="false">
             <a-form :model="form" layout="vertical">
               <a-form-item v-if="!isEdit || isTemplate" label="任务模式">
                 <a-radio-group v-model="form.mode" :disabled="isTemplate">
@@ -169,7 +170,8 @@
             </a-form>
           </a-card>
 
-          <a-card title="详情与提醒" :bordered="false">
+          <a-card>
+  <template #title><h3 class="zt-h3">详情与提醒</h3></template> :bordered="false">
             <a-form :model="form" layout="vertical">
               <a-form-item v-if="aiOcrOn">
                 <div
