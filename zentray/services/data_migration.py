@@ -67,6 +67,8 @@ SETTINGS_SECTIONS: List[str] = [
     "appearance",
     "backup",
     "ops",
+    "update",
+    "feishu_sync",
 ]
 TASK_TYPES: List[str] = ["one-time", "periodic_instance"]
 REVIEW_PREFIXES: List[str] = ["plan", "review"]
@@ -172,17 +174,28 @@ def _stamp() -> str:
     return datetime.now().strftime("%Y%m%d_%H%M%S")
 
 
-def _extract_member(zf, name: str, target: Path) -> None:
-    """落盘单个成员并恢复可执行位（open("wb") 按 umask 落盘丢 +x，
+def _restore_exec_bit(info, target: Path) -> None:
+    """落盘后恢复可执行位（open("wb") 按 umask 落盘丢 +x，
     插件 entry 校验要求可执行——同 api/handlers._extract_plugin_zip）。"""
-    info = zf.getinfo(name)
-    with zf.open(name) as src_f, open(target, "wb") as out_f:
-        shutil.copyfileobj(src_f, out_f)
     if (info.external_attr >> 16) & 0o111:
         try:
             target.chmod(target.stat().st_mode | 0o111)
         except OSError:
             pass
+
+
+def _mirror_bak(dest: Path) -> None:
+    """单文件导入后镜像 .bak：导入件不带 .bak，会断了 load_json_list 的丢失自愈链。"""
+    try:
+        shutil.copy2(dest, dest.with_suffix(dest.suffix + ".bak"))
+    except OSError:
+        pass
+
+
+def _extract_member(zf, name: str, target: Path) -> None:
+    with zf.open(name) as src_f, open(target, "wb") as out_f:
+        shutil.copyfileobj(src_f, out_f)
+    _restore_exec_bit(zf.getinfo(name), target)
 
 
 def _add_path_to_zip(zf: zipfile.ZipFile, src: Path, arcname: str) -> None:
@@ -351,6 +364,7 @@ def _replace_tasks_partition(zf, root: Path, rel: str, types: Set[str]) -> str:
     keep = [t for t in local if (t.get("task_type") or "one-time") not in types]
     picked = [t for t in backup if (t.get("task_type") or "one-time") in types]
     local_path.write_text(json.dumps(keep + picked, ensure_ascii=False, indent=2), encoding="utf-8")
+    _mirror_bak(local_path)
     return "replaced_partition"
 
 
@@ -368,6 +382,7 @@ def _replace_settings_partition(zf, root: Path, rel: str, sections: List[str]) -
             return "local_read_error"
     local.update({s: backup[s] for s in applied})
     local_path.write_text(json.dumps(local, ensure_ascii=False, indent=2), encoding="utf-8")
+    _mirror_bak(local_path)
     return "replaced_partition"
 
 
@@ -488,17 +503,11 @@ def import_replace(
         with pyzipper.AESZipFile(src, "r") as zf:
             if password:
                 zf.setpassword(password.encode("utf-8"))
-            # 裸键整类替换
+            # 裸键整类替换：先把包内容全部读入内存，成功后再动本地文件——
+            # 条目损坏/密码错等读取失败会抛错返回，本地数据原样保留（先删后读会丢数据）
             for key, _ in [e for e in available if e[1] is None]:
                 rel = INCLUDE_MAP[key]
                 dest = root / rel
-                # 清理目标
-                if dest.is_file():
-                    dest.unlink()
-                elif dest.is_dir():
-                    shutil.rmtree(dest)
-
-                # 提取
                 members = [
                     n for n in zf.namelist() if n == rel or n.startswith(rel.rstrip("/") + "/")
                 ]
@@ -508,20 +517,32 @@ def import_replace(
 
                 # 单文件
                 if rel in members and not rel.endswith("/"):
+                    payload = zf.read(rel)
+                    if dest.is_dir():
+                        shutil.rmtree(dest)
                     dest.parent.mkdir(parents=True, exist_ok=True)
-                    _extract_member(zf, rel, dest)
+                    dest.write_bytes(payload)
+                    _restore_exec_bit(zf.getinfo(rel), dest)
+                    _mirror_bak(dest)
                     details[key] = "replaced_file"
                     continue
 
-                # 目录
+                # 目录：成员全部读出后整体换入
+                payloads = [
+                    (name, zf.read(name), zf.getinfo(name))
+                    for name in members
+                    if not name.endswith("/")
+                ]
+                if dest.is_file():
+                    dest.unlink()
+                elif dest.is_dir():
+                    shutil.rmtree(dest)
                 dest.mkdir(parents=True, exist_ok=True)
-                for name in members:
-                    if name.endswith("/"):
-                        (root / name).mkdir(parents=True, exist_ok=True)
-                        continue
+                for name, blob, info in payloads:
                     target = root / name
                     target.parent.mkdir(parents=True, exist_ok=True)
-                    _extract_member(zf, name, target)
+                    target.write_bytes(blob)
+                    _restore_exec_bit(info, target)
                 details[key] = "replaced_dir"
 
             # 子键分区替换（同键合并执行）

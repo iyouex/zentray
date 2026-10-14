@@ -229,6 +229,98 @@
           </template>
 
           <template v-else-if="mainKey === 'polling'">
+            <section class="compact-block">
+              <div class="compact-head">新建任务</div>
+              <div class="field-table">
+                <div class="field-line">
+                  <span class="field-k">打开新建任务表单</span>
+                  <a-button type="primary" size="small" @click="goNewTask">＋ 新建任务</a-button>
+                </div>
+              </div>
+            </section>
+
+            <section class="compact-block">
+              <div class="compact-head">闪电添加</div>
+              <div class="field-table">
+                <div class="field-line">
+                  <span class="field-k">启用全局快捷键</span>
+                  <a-switch v-model="form.quick_add.enabled" />
+                </div>
+                <template v-if="form.quick_add.enabled">
+                  <div class="field-line">
+                    <span class="field-k">快捷键</span>
+                    <a-input v-model="form.quick_add.hotkey" placeholder="<ctrl>+<alt>+t（留空 = 默认）" style="max-width: 220px" />
+                  </div>
+                  <div class="field-line">
+                    <span class="field-k">默认分类</span>
+                    <a-input v-model="form.quick_add.default_category" style="max-width: 220px" />
+                  </div>
+                  <div class="field-line">
+                    <span class="field-k">默认优先级</span>
+                    <a-select v-model="form.quick_add.default_priority" style="width: 120px">
+                      <a-option value="high">高</a-option>
+                      <a-option value="medium">中</a-option>
+                      <a-option value="low">低</a-option>
+                    </a-select>
+                  </div>
+                </template>
+              </div>
+              <span class="hint-sm">快捷键格式如 &lt;ctrl&gt;+&lt;alt&gt;+t（macOS 如 &lt;alt&gt;+&lt;space&gt;）；随「保存设置」生效；与系统/输入法同键位冲突时换组合。</span>
+            </section>
+
+            <section class="compact-block">
+              <div class="compact-head">飞书同步</div>
+              <div class="field-table">
+                <div class="field-line">
+                  <span class="field-k">启用飞书同步</span>
+                  <a-switch v-model="form.feishu_sync.enabled" />
+                </div>
+                <span class="hint-sm">
+                  把任务单向推送到飞书「ZenTray」日历与任务清单（完成/删除自动撤下，不回读）；
+                  需飞书开放平台自建应用，<a class="doc-link" @click.prevent="openFeishuDoc">配置步骤见文档</a>。
+                  改动随「保存设置」生效。
+                </span>
+                <template v-if="form.feishu_sync.enabled">
+                  <div class="field-line">
+                    <span class="field-k">App ID</span>
+                    <a-input v-model="form.feishu_sync.app_id" placeholder="cli_a…（自建应用凭证）" style="max-width: 220px" />
+                  </div>
+                  <div class="field-line">
+                    <span class="field-k">App Secret</span>
+                    <a-input-password v-model="form.feishu_sync.app_secret" placeholder="自建应用密钥" style="max-width: 220px" allow-clear />
+                  </div>
+                  <div class="field-line">
+                    <span class="field-k">同步日程到日历</span>
+                    <a-switch v-model="form.feishu_sync.sync_calendar" size="small" />
+                  </div>
+                  <div class="field-line">
+                    <span class="field-k">同步任务到清单</span>
+                    <a-switch v-model="form.feishu_sync.sync_tasks" size="small" />
+                  </div>
+                  <div class="field-line">
+                    <span class="field-k">接收人 Open ID</span>
+                    <a-input v-model="form.feishu_sync.feishu_user_id" placeholder="可选，用于日历共享/任务指派" style="max-width: 220px" allow-clear />
+                  </div>
+                  <div class="field-line">
+                    <span class="field-k">连接与同步</span>
+                    <a-space size="small">
+                      <a-button size="small" :loading="feishuTesting" :disabled="!form.feishu_sync.app_id || !form.feishu_sync.app_secret" @click="onFeishuTest">
+                        测试连接
+                      </a-button>
+                      <a-button size="small" :loading="feishuResyncing" @click="onFeishuResync">
+                        全量重同步
+                      </a-button>
+                    </a-space>
+                  </div>
+                  <div v-if="feishuStatusText" class="field-line">
+                    <span class="field-k">同步状态</span>
+                    <span class="hint-sm" :style="form.feishu_sync.last_error ? 'color: #f53f3f' : ''">{{ feishuStatusText }}</span>
+                  </div>
+                </template>
+              </div>
+              <span v-if="form.feishu_sync.enabled" class="hint-sm">「测试连接 / 全量重同步」会先保存本卡片配置再执行；全量重同步不清远端旧对象，需要干净重来时先在飞书侧清空 ZenTray 日历/清单。</span>
+            </section>
+
             <div class="compact-page">
               <section class="compact-block">
                 <div class="compact-head">轮播设置</div>
@@ -906,6 +998,52 @@
                 </div>
               </a-card>
 
+              <a-card class="sys-card" :bordered="false" title="软件更新">
+                <div class="sys-row">
+                  <div>
+                    <div class="sys-title">检查并安装新版本（当前 v{{ appVersion || '…' }}）</div>
+                    <div class="sys-desc">
+                      检查 GitHub Releases 新版本，下载安装包后在应用内完成安装并重启
+                      （Linux 将弹出系统认证，Windows/macOS 自动替换文件后重启）。
+                    </div>
+                    <div v-if="upd.result && !upd.result.has_update" class="sys-hint muted">
+                      已是最新版本 v{{ upd.result.version }}
+                    </div>
+                    <div v-if="upd.result && upd.result.has_update" class="sys-hint">
+                      发现新版本 <strong>v{{ upd.result.version }}</strong>
+                      （{{ (upd.result.asset_size / 1048576).toFixed(1) }}MB）
+                      <a :href="upd.result.notes_url" target="_blank" rel="noreferrer">发布说明</a>
+                    </div>
+                    <div v-if="upd.error" class="sys-hint" style="color: #f53f3f">{{ upd.error }}</div>
+                    <a-progress
+                      v-if="upd.state === 'downloading'"
+                      :percent="upd.progress"
+                      size="small"
+                      style="max-width: 320px; margin-top: 4px"
+                    />
+                  </div>
+                  <div class="upd-actions">
+                    <a-button :loading="upd.checking" @click="onUpdatesCheck">检查更新</a-button>
+                    <a-button
+                      v-if="upd.result && upd.result.has_update && upd.state !== 'downloading' && upd.state !== 'ready'"
+                      type="primary"
+                      @click="onUpdatesDownload"
+                    >
+                      下载更新
+                    </a-button>
+                    <a-button v-if="upd.state === 'ready'" type="primary" status="warning" @click="onUpdatesInstall">
+                      安装并重启
+                    </a-button>
+                  </div>
+                </div>
+                <div class="sys-row" style="margin-top: 8px">
+                  <div class="sys-desc">
+                    下载代理（访问 GitHub 失败时填写，如 http://127.0.0.1:7897；留空 = 直连），随「保存设置」生效。
+                  </div>
+                  <a-input v-model="form.update.proxy" placeholder="http://127.0.0.1:7897" style="max-width: 240px" />
+                </div>
+              </a-card>
+
               <!-- Windows 任务栏中央按钮（设计 §3.0）；后端探测不到时整卡隐藏 -->
               <a-card v-if="taskbarLabelVisible !== null" class="sys-card" :bordered="false" title="任务栏显示（Windows）">
                 <div class="sys-row">
@@ -1164,6 +1302,8 @@ import {
   deleteBackup,
   deletePlugin,
   exportBackup,
+  feishuSyncResync,
+  feishuSyncTest,
   getPluginRunLog,
   getSettings,
   getSystemStatus,
@@ -1172,9 +1312,11 @@ import {
   installPluginPath,
   installPluginZip,
   exportTasksCalendar,
+  getMeta,
   listBackups,
   listPluginRuns,
   listPlugins,
+  openAttachment,
   openPluginReport,
   packArchive,
   openTaskbarSettings,
@@ -1184,6 +1326,10 @@ import {
   saveSettings,
   setAutostart,
   updatePlugin,
+  updatesCheck,
+  updatesDownload,
+  updatesInstall,
+  updatesStatus,
   validatePluginPath,
 } from '@/api/client'
 import { applyAppearance, applyTheme } from '@/theme'
@@ -1191,7 +1337,9 @@ import JobEditor from '@/components/JobEditor.vue'
 import HistoryPanel from '@/components/HistoryPanel.vue'
 import NumberSpinner from '@/components/NumberSpinner.vue'
 import PluginDocDrawer from '@/components/PluginDocDrawer.vue'
+import { useRouter } from 'vue-router'
 
+const router = useRouter()
 const setThemeMode = inject('setThemeMode', null)
 const loading = ref(false)
 const saving = ref(false)
@@ -1199,6 +1347,59 @@ const mainKey = ref('ai')
 const aiTab = ref('plan')
 const apiExpandKeys = ref([])
 const notifyExpandKeys = ref([])
+
+function goNewTask() {
+  router.push('/tasks/new?from=list')
+}
+
+// —— 飞书同步（任务页卡片）——
+const feishuTesting = ref(false)
+const feishuResyncing = ref(false)
+const FEISHU_DOC_URL = 'https://github.com/iyouex/zentray/blob/staging/docs/FEISHU_SYNC.md'
+
+function openFeishuDoc() {
+  openAttachment(FEISHU_DOC_URL).catch(() => {})
+}
+
+/** 测试/重同步读的是已保存配置：先局部保存本卡片再执行（同 saveOpsPatch 惯例，只动本节避免覆盖后台写入的状态） */
+async function saveFeishuSection() {
+  await saveSettings({ feishu_sync: { ...form.feishu_sync } })
+}
+
+async function onFeishuTest() {
+  feishuTesting.value = true
+  try {
+    await saveFeishuSection()
+    const r = await feishuSyncTest()
+    form.feishu_sync.last_error = r.ok ? '' : (r.message || '连接失败')
+    if (r.ok) Message.success(r.message || '连接成功')
+    else Message.error(r.message || '连接失败')
+  } catch (e) {
+    Message.error(e?.response?.data?.error || e?.message || '保存或测试失败')
+  } finally {
+    feishuTesting.value = false
+  }
+}
+
+async function onFeishuResync() {
+  feishuResyncing.value = true
+  try {
+    await saveFeishuSection()
+    const r = await feishuSyncResync()
+    Message.success(`已入队 ${r.queued ?? 0} 条任务重推，稍后在飞书查看`)
+  } catch (e) {
+    Message.error(e?.response?.data?.error || e?.message || '重同步失败')
+  } finally {
+    feishuResyncing.value = false
+  }
+}
+
+const feishuStatusText = computed(() => {
+  const f = form.feishu_sync
+  if (f.last_error) return `最近错误：${f.last_error}`
+  if (f.last_sync_at) return `上次同步：${f.last_sync_at}`
+  return ''
+})
 
 // —— 系统页 ——
 const autostartEnabled = ref(false)
@@ -1822,7 +2023,19 @@ function emptyForm() {
       level_separator: '-',
       primary_list: [],
     },
-    quick_add: { default_category: '工作', default_priority: 'medium' },
+    quick_add: { enabled: true, hotkey: '', default_category: '工作', default_priority: 'medium' },
+    feishu_sync: {
+      enabled: false,
+      app_id: '',
+      app_secret: '',
+      sync_calendar: true,
+      sync_tasks: true,
+      feishu_user_id: '',
+      calendar_id: '',
+      task_list_guid: '',
+      last_error: '',
+      last_sync_at: '',
+    },
     appearance: {
       theme: 'system',
       autostart: false,
@@ -1842,6 +2055,7 @@ function emptyForm() {
       report_tray_enabled: true,
       report_tray_minutes: 60,
     },
+    update: { proxy: '' },
   }
 }
 
@@ -2041,6 +2255,63 @@ async function onCalendarExport() {
   }
 }
 
+/** —— 软件更新：检查 → 下载（轮询进度）→ 安装并重启 —— */
+const appVersion = ref('')
+const upd = reactive({ checking: false, state: 'idle', progress: 0, error: '', result: null })
+let updTimer = null
+
+async function onUpdatesCheck() {
+  upd.checking = true
+  upd.error = ''
+  try {
+    upd.result = await updatesCheck()
+  } catch (e) {
+    upd.error = e?.response?.data?.error || e?.message || '检查失败'
+  } finally {
+    upd.checking = false
+  }
+}
+
+async function onUpdatesDownload() {
+  if (!upd.result || !upd.result.asset_url) return
+  upd.error = ''
+  upd.state = 'downloading'
+  try {
+    await updatesDownload({ url: upd.result.asset_url, version: upd.result.version })
+    clearInterval(updTimer)
+    updTimer = setInterval(async () => {
+      try {
+        const s = await updatesStatus()
+        upd.state = s.state
+        upd.progress = s.progress
+        if (s.error) upd.error = s.error
+        if (s.state === 'ready' || s.state === 'error') clearInterval(updTimer)
+      } catch {
+        clearInterval(updTimer)
+      }
+    }, 500)
+  } catch (e) {
+    upd.state = 'idle'
+    upd.error = e?.response?.data?.error || e?.message || '下载启动失败'
+  }
+}
+
+function onUpdatesInstall() {
+  Modal.confirm({
+    title: '安装并重启 ZenTray？',
+    content: '安装完成后应用将自动重启（Linux 会先弹出系统认证窗口）。',
+    okText: '安装并重启',
+    onOk: async () => {
+      try {
+        await updatesInstall()
+        Message.info('正在安装，应用即将重启…')
+      } catch (e) {
+        upd.error = e?.response?.data?.error || e?.message || '安装失败'
+      }
+    },
+  })
+}
+
 async function onAutostartChange(val) {
   autostartLoading.value = true
   try {
@@ -2171,6 +2442,8 @@ const importTree = computed(() => {
     appearance: '外观',
     backup: '备份',
     ops: '插件运行时',
+    update: '软件更新',
+    feishu_sync: '飞书同步',
   }
   const nodes = []
   for (const c of data.categories || []) {
@@ -2477,6 +2750,7 @@ function normalizeLoaded(s) {
     form.categories.wrap_right = ']'
   }
   if (!form.quick_add) form.quick_add = emptyForm().quick_add
+  if (!form.feishu_sync) form.feishu_sync = emptyForm().feishu_sync
   // 备份：normalize 时补默认 + 钳制（trigger_hour 0 点合法，不能用 || 兜底）
   const bk = { ...emptyForm().backup, ...(s.backup || {}) }
   if (![1, 3, 7].includes(bk.interval_days)) bk.interval_days = 1
@@ -2547,6 +2821,7 @@ onMounted(async () => {
   try {
     const s = await getSettings()
     normalizeLoaded(s)
+    getMeta().then(m => { appVersion.value = m.version }).catch(() => {})
     onThemePreview()
     await loadSystemStatus()
   } catch (e) {
@@ -2826,6 +3101,13 @@ body.zt-skin-clay .nav-main :deep(.arco-menu-item.arco-menu-selected) {
   color: var(--color-text-3);
   line-height: 1.4;
 }
+.doc-link {
+  color: var(--color-primary);
+  cursor: pointer;
+}
+.doc-link:hover {
+  text-decoration: underline;
+}
 /* 番茄钟节奏预设标签：可点击回填 */
 .pomo-preset {
   cursor: pointer;
@@ -2894,6 +3176,12 @@ body.zt-skin-clay .nav-main :deep(.arco-menu-item.arco-menu-selected) {
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
+}
+.upd-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
 }
 .sys-title {
   font-weight: 600;

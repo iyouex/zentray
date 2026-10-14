@@ -221,6 +221,16 @@ def handle_request(
         if method == "POST" and path == "/api/reminders/check-conflicts":
             return _check_reminder_conflicts(body)
 
+        # —— 应用内自更新：检查 / 下载 / 进度 / 安装重启 ——
+        if method == "GET" and path == "/api/updates/check":
+            return _updates_check()
+        if method == "POST" and path == "/api/updates/download":
+            return _updates_download(body or {})
+        if method == "GET" and path == "/api/updates/status":
+            return _updates_status()
+        if method == "POST" and path == "/api/updates/install":
+            return _updates_install()
+
         if method == "POST" and path == "/api/pomodoro/start":
             return _pomodoro_start(body)
 
@@ -305,6 +315,10 @@ def handle_request(
             return _system_archive_pack()
         if method == "POST" and path == "/api/system/calendar-export":
             return _system_calendar_export()
+        if method == "POST" and path == "/api/feishu-sync/test":
+            return _feishu_sync_test()
+        if method == "POST" and path == "/api/feishu-sync/resync":
+            return _feishu_sync_resync()
         if method == "GET" and path == "/api/system/backups":
             return _system_backups()
         if method == "POST" and path == "/api/system/backups/delete":
@@ -500,6 +514,8 @@ def _settings_dict() -> dict:
         "appearance": asdict(s.appearance),
         "backup": asdict(s.backup),
         "ops": asdict(s.ops),
+        "update": asdict(s.update),
+        "feishu_sync": asdict(s.feishu_sync),
     }
 
 
@@ -534,6 +550,47 @@ def _check_reminder_conflicts(body: dict) -> tuple[int, dict]:
         "has_conflict": bool(conflicts),
         "conflicts": conflicts,
     }
+
+
+def _updates_check() -> tuple[int, dict]:
+    """查 GitHub latest release（代理取自设置 update.proxy）。"""
+    from zentray.services.settings_manager import SettingsManager
+    from zentray.services.updater import UpdaterService
+
+    try:
+        result = UpdaterService.instance().check(SettingsManager().update.proxy)
+        return 200, result
+    except Exception as e:
+        return 502, {"error": str(e)}
+
+
+def _updates_download(body: dict) -> tuple[int, dict]:
+    from zentray.services.updater import UpdaterService
+
+    url = str(body.get("url") or "")
+    version = str(body.get("version") or "").strip().lstrip("v")
+    if not url or not version:
+        return 400, {"error": "url 与 version 必填"}
+    try:
+        UpdaterService.instance().start_download(url, version)
+        return 200, {"started": True}
+    except Exception as e:
+        return 400, {"error": str(e)}
+
+
+def _updates_status() -> tuple[int, dict]:
+    from zentray.services.updater import UpdaterService
+
+    return 200, UpdaterService.instance().status()
+
+
+def _updates_install() -> tuple[int, dict]:
+    from zentray.services.updater import UpdaterService
+
+    try:
+        return 200, UpdaterService.instance().install_and_restart()
+    except Exception as e:
+        return 500, {"error": str(e)}
 
 
 def _scanned_loader():
@@ -1709,6 +1766,22 @@ def _system_calendar_export() -> tuple[int, dict]:
     out.write_text(ics, encoding="utf-8")
     _open_with_system(out)
     return 200, {"ok": True, "count": count, "file": str(out)}
+
+
+def _feishu_sync_test() -> tuple[int, dict]:
+    """设置页「测试连接」：实时调飞书开放平台，错误原文回显。"""
+    from zentray.services.feishu_sync import FeishuSyncService
+
+    ok, msg = FeishuSyncService.instance().test_connection()
+    return (200 if ok else 400), {"ok": ok, "message": msg}
+
+
+def _feishu_sync_resync() -> tuple[int, dict]:
+    """设置页「立即全量同步」：清引用后整表重推。"""
+    from zentray.services.feishu_sync import FeishuSyncService
+
+    count = FeishuSyncService.instance().resync_all(_ctx.task_service)
+    return 200, {"ok": True, "queued": count}
 
 
 def _system_backup_delete(body: dict) -> tuple[int, dict]:

@@ -1,0 +1,47 @@
+{
+  "accounts": [
+    {
+      "name": "个人",
+      "host": "imap.qq.com",
+      "port": 993,
+      "ssl": true,
+      "auth": "password",
+      "user": "you@example.com",
+      "password": "在邮箱服务商处生成的授权码/应用专用密码",
+      "webmail": "网页版邮箱登录地址（可省略，主流 host 有默认值；用于详情页查看/恢复邮件）",
+      "folders": ["INBOX"]
+    },
+    {
+      "name": "Gmail",
+      "host": "imap.gmail.com",
+      "port": 993,
+      "ssl": true,
+      "auth": "xoauth2",
+      "user": "you@gmail.com",
+      "oauth2": {
+        "provider": "gmail",
+        "client_id": "OAuth 桌面应用的 client_id（Google Cloud Console）",
+        "client_secret": "桌面应用可无 secret，不需要则删掉此行",
+        "refresh_token": "OAuth Playground / gcloud 换取的 refresh_token"
+      },
+      "folders": ["INBOX"]
+    },
+    {
+      "name": "公司",
+      "host": "outlook.office365.com",
+      "port": 993,
+      "ssl": true,
+      "auth": "xoauth2",
+      "user": "you@corp.example.com",
+      "oauth2": {
+        "provider": "microsoft",
+        "tenant": "common 或公司 tenant id",
+        "client_id": "Azure AD 应用的 client_id（application id）",
+        "client_secret": "公共客户端无 secret 则删掉此行",
+        "refresh_token": "授权码流程换得的 refresh_token"
+      },
+      "folders": ["INBOX", "Archive"]
+    }
+  ],
+  "ai_summary": false
+}

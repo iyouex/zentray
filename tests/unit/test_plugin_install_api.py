@@ -14,29 +14,28 @@ from zentray.api.handlers import (
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_validate_bundled_net_cleanup():
-    path = ROOT / "bundled_plugins" / "net-cleanup"
+def test_validate_bundled_text_toolbox():
+    path = ROOT / "bundled_plugins" / "text-toolbox"
     code, body = _validate_plugin_path({"path": str(path)})
     assert code == 200
     assert body["ok"] is True
-    assert body["preview"]["id"] == "net-cleanup"
+    assert body["preview"]["id"] == "text-toolbox"
 
 
-def test_validate_bundled_param_demo(tmp_data_dir):
-    """v2.1 内置参数演示：校验通过，列表元数据含 params。"""
-    path = ROOT / "bundled_plugins" / "param-demo"
+def test_validate_bundled_ai_news_digest(tmp_data_dir):
+    """v2 内置脚本：校验通过，列表元数据含 params。"""
+    path = ROOT / "bundled_plugins" / "ai-news-digest"
     code, body = _validate_plugin_path({"path": str(path)})
     assert code == 200
     assert body["ok"] is True
-    assert body["preview"]["id"] == "param-demo"
+    assert body["preview"]["id"] == "ai-news-digest"
 
     from zentray.api.handlers import _plugins_list
 
     items = {i["id"]: i for i in _plugins_list(scan_always=True)["items"]}
-    pd = items["param-demo"]
-    assert [(p["name"], p["default"]) for p in pd["params"]] == [
-        ("message", "你好"),
-        ("times", "3"),
+    news = items["ai-news-digest"]
+    assert [(p["name"], p["default"]) for p in news["params"]] == [
+        ("top_n", "12"),
     ]
 
 
@@ -228,23 +227,23 @@ def test_plugins_list_v21_metadata(tmp_data_dir, monkeypatch):
     monkeypatch.setattr(_triggers, "STATE_FILE", tmp_data_dir / "pt.json")
     body = _plugins_list(scan_always=True)
     items = {i["id"]: i for i in body["items"]}
-    nc = items["net-cleanup"]
+    tt = items["text-toolbox"]
     # 新字段齐备
-    assert nc["category"] == "网络"  # 阶段 5：内置示例补分类
-    assert nc["params"] == []
-    assert nc["updated_at"]  # mtime 兜底
-    assert nc["trigger_override"] is False
-    assert isinstance(nc["triggers"], list)
+    assert tt["category"] == "工具"
+    assert tt["params"] == []
+    assert tt["updated_at"]  # mtime 兜底
+    assert tt["trigger_override"] is False
+    assert isinstance(tt["triggers"], list)
 
     # 覆盖层生效：triggers 展示 effective，trigger_override 置位
     from zentray.services.settings_manager import SettingsManager
 
     sm = SettingsManager.reload()
-    sm.ops.trigger_overrides = {"net-cleanup": [{"type": "interval", "minutes": 15}]}
+    sm.ops.trigger_overrides = {"text-toolbox": [{"type": "interval", "minutes": 15}]}
     body = _plugins_list(scan_always=True)
-    nc = {i["id"]: i for i in body["items"]}["net-cleanup"]
-    assert nc["triggers"] == ["每 15 分钟"]
-    assert nc["trigger_override"] is True
+    tt = {i["id"]: i for i in body["items"]}["text-toolbox"]
+    assert tt["triggers"] == ["每 15 分钟"]
+    assert tt["trigger_override"] is True
 
 
 def test_preview_zip_validates_without_installing(tmp_data_dir):

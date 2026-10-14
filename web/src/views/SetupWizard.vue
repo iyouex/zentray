@@ -10,7 +10,7 @@
       <a-step title="欢迎" />
       <a-step title="通知" />
       <a-step title="AI" />
-      <a-step title="完成" />
+      <a-step title="快速上手" />
     </a-steps>
 
     <div v-show="step === 0" class="step-body">
@@ -44,7 +44,12 @@
     </div>
 
     <div v-show="step === 3" class="step-body">
-      <a-result status="success" title="配置完成" subtitle="点击完成开始使用。可随时在托盘 → 设置中修改。" />
+      <a-result status="success" title="配置完成" subtitle="三种方式新建你的第一个任务：" />
+      <div class="guide">
+        <div class="guide-item">🧭 托盘图标<b>右键</b> → 📋 任务列表 → 页面右上「＋ 新建」</div>
+        <div class="guide-item">⌨️ 任意位置按 <b>Ctrl+Alt+T</b> 闪电添加，输入标题回车即建</div>
+        <div class="guide-item">⚙️ 设置 → 📋 任务 → 「新建任务」按钮</div>
+      </div>
     </div>
 
     <div class="page-footer">
@@ -52,7 +57,10 @@
       <a-space>
         <a-button v-if="step > 0" @click="step--">← 上一步</a-button>
         <a-button v-if="step < 3" type="primary" @click="step++">下一步 →</a-button>
-        <a-button v-else type="primary" :loading="saving" @click="finish">完成</a-button>
+        <template v-else>
+          <a-button :loading="saving" @click="finish(false)">完成</a-button>
+          <a-button type="primary" :loading="saving" @click="finish(false, true)">打开任务列表试试</a-button>
+        </template>
       </a-space>
     </div>
   </div>
@@ -73,12 +81,12 @@ const form = reactive({
   ai_model: '',
 })
 
-async function finish(skip = false) {
+async function finish(skip = false, openTasks = false) {
   saving.value = true
   try {
     await completeSetup(skip ? {} : { ...form })
     Message.success('已完成')
-    closeHost({ action: 'setup_done' })
+    closeHost({ action: 'setup_done', open_tasks: openTasks })
   } catch (e) {
     Message.error(e?.message || '保存失败')
   } finally {
@@ -98,5 +106,19 @@ function skipAll() {
 }
 .step-body {
   min-height: 200px;
+}
+.guide {
+  max-width: 480px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.guide-item {
+  padding: 10px 14px;
+  border: 1px solid var(--color-border-2);
+  border-radius: 8px;
+  background: var(--color-fill-1);
+  font-size: 13px;
 }
 </style>

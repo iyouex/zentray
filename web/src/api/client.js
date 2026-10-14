@@ -183,6 +183,22 @@ export async function exportTasksCalendar() {
   return data
 }
 
+/** 飞书同步：测试连接（实时调开放平台，失败返回 400 + message） */
+export async function feishuSyncTest() {
+  try {
+    const { data } = await http.post('/api/feishu-sync/test', {})
+    return data
+  } catch (e) {
+    return e?.response?.data || { ok: false, message: e?.message || '连接失败' }
+  }
+}
+
+/** 飞书同步：清引用整表重推；返回入队条数 */
+export async function feishuSyncResync() {
+  const { data } = await http.post('/api/feishu-sync/resync', {})
+  return data
+}
+
 export async function setAutostart(enabled) {
   const { data } = await http.post('/api/system/autostart', { enabled: !!enabled })
   return data
@@ -342,6 +358,12 @@ export function cancelHost() {
   closeHost({ cancelled: true })
 }
 
+/** 浮层窗口高度随内容自适应（Qt WebEngine）：宿主拦截 console 消息调整窗口
+ * 高度（quick-add AI 预览展开/收起，免滚动条）；非浮层宿主忽略 */
+export function reportHostHeight(px) {
+  console.log(`zentray:size:${JSON.stringify({ h: Math.max(0, Math.round(px)) })}`)
+}
+
 // ---- 插件 ----
 
 /** 插件列表（含 failures；设置页可扫描） */
@@ -413,5 +435,29 @@ export async function updatePlugin(id, { name, description }) {
 /** 删除用户目录插件（含目录与调度/预设覆盖） */
 export async function deletePlugin(id) {
   const { data } = await http.delete(`/api/plugins/${id}`)
+  return data
+}
+
+/** 检查 GitHub Release 新版本（代理取设置 update.proxy） */
+export async function updatesCheck() {
+  const { data } = await http.get('/api/updates/check')
+  return data
+}
+
+/** 开始下载更新包（后台线程，进度走 updatesStatus 轮询） */
+export async function updatesDownload(body) {
+  const { data } = await http.post('/api/updates/download', body)
+  return data
+}
+
+/** 下载进度/状态轮询 */
+export async function updatesStatus() {
+  const { data } = await http.get('/api/updates/status')
+  return data
+}
+
+/** 安装并重启（平台分派：Linux pkexec / Win bat / macOS sh） */
+export async function updatesInstall() {
+  const { data } = await http.post('/api/updates/install')
   return data
 }

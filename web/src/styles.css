@@ -277,6 +277,7 @@ body,
 /* 闪电快捷添加框 */
 .quick-add-page {
   min-height: 100%;
+  box-sizing: border-box; /* padding 计入 100%，否则页面恒比视口高 24px（永久滚动条根因） */
   display: flex;
   align-items: center;
   justify-content: center;

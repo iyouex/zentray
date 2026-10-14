@@ -133,14 +133,14 @@ def try_vue_plugin_panel(controller: "TrayController") -> bool:
     return True
 
 
-def try_vue_setup_wizard() -> bool:
-    """首次配置向导。返回 True 表示已由 Vue 处理（无论完成或取消）。"""
+def try_vue_setup_wizard():
+    """首次配置向导。返回 False 表示未由 Vue 处理；True/dict 表示已处理（dict 为结束 payload）。"""
     if not use_vue_ui():
         return False
-    open_vue_route(
+    ok, payload = open_vue_route(
         "/setup",
         title="欢迎使用 ZenTray — 初始配置",
         width=680,
         height=480,
     )
-    return True
+    return payload if isinstance(payload, dict) else True
