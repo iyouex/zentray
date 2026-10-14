@@ -15,8 +15,8 @@
 
     <div class="page-body page-body--cols">
       <div class="two-col">
-        <a-card>
-  <template #title><h3 class="zt-h3">活跃任务</h3></template> :bordered="true">
+        <section class="zt-block">
+          <div class="zt-block-head"><h3 class="zt-h3">活跃任务</h3></div>
           <div class="filter-row" role="group" aria-label="视图切换">
             <button
               v-for="c in tabChips"
@@ -140,16 +140,22 @@
               <a-empty v-else-if="!loading" :description="emptyText" />
             </a-spin>
           </div>
-        </a-card>
+        </section>
 
-        <a-card>
-  <template #title><h3 class="zt-h3">任务详情与操作</h3></template> :bordered="true">
-          <template v-if="suggestOn" #extra>
-            <a-button size="small" type="outline" :loading="suggestLoading" @click="onAiSuggest">
+        <section class="zt-block">
+          <div class="zt-block-head">
+            <h3 class="zt-h3">任务详情与操作</h3>
+            <a-button
+              v-if="suggestOn"
+              size="small"
+              type="outline"
+              :loading="suggestLoading"
+              @click="onAiSuggest"
+            >
               <template #icon><PhLightbulb :size="15" /></template>
               AI 建议
             </a-button>
-          </template>
+          </div>
           <div class="col-scroll">
             <!-- AI 建议卡片：应用即改任务，忽略即消失 -->
             <div v-if="suggestOn && (aiSuggestions.length || suggestLoading)" class="ai-suggest-box">
@@ -380,7 +386,7 @@
 
             <a-empty v-else description="请选择左侧任务" />
           </div>
-        </a-card>
+        </section>
       </div>
     </div>
   </div>
