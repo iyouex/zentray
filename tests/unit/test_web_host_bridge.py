@@ -298,3 +298,28 @@ def test_open_vue_route_parks_cancelled_dialog_and_reuses(qapp):
         web_host._PARKED_VUE_DIALOGS.clear()
         for d in created:
             d.deleteLater()
+
+
+def test_apply_host_height_relaxes_chrome_minimum(qapp):
+    """开窗 chrome 按预估高设了 minimum/maximum（apply_dialog_chrome），
+    内容实测高到达后必须放开边界——收窗被 minimumHeight 钳住即提醒甲板
+    空白下巴的根因（预估 120+n*170 恒大于实际内容高）。"""
+    from PySide6.QtWidgets import QDialog
+
+    from zentray.ui.web_host import apply_host_height
+
+    dlg = QDialog()
+    dlg.setMinimumSize(440, 290)  # n=1 提醒甲板开窗预估
+    dlg.setMaximumSize(440, 291)
+    dlg.resize(440, 290)
+    try:
+        apply_host_height(dlg, 212)  # 实际内容高 < 预估
+        assert dlg.height() == 212, "收窗不得被开窗 minimumHeight 钳住（空白下巴根因）"
+        assert dlg.minimumHeight() <= 212
+        assert getattr(dlg, "_chrome_size", None) == (440, 212)
+
+        apply_host_height(dlg, 320)  # 增高越过开窗上限
+        assert dlg.height() == 320, "增高不得被开窗 maximumHeight 钳住"
+        assert dlg.minimumHeight() < dlg.maximumHeight(), "min==max 触发 mutter 固定尺寸折半，须避免"
+    finally:
+        dlg.deleteLater()
