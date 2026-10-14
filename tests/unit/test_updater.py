@@ -97,6 +97,23 @@ def test_download_rejects_foreign_url():
         UpdaterService.instance().start_download("https://evil.example/x.deb", "9.9.9")
 
 
+def test_download_proxy_passed_through(tmp_path):
+    svc = UpdaterService.instance()
+    with patch.object(updater, "UPDATES_DIR", tmp_path), \
+         patch.object(updater.requests, "get",
+                      return_value=_fake_stream_response([b"a" * 10], 10)) as g:
+        svc.start_download(
+            "https://github.com/iyouex/zentray/releases/download/v9.9.9/zentray_9.9.9_amd64.deb",
+            "9.9.9", "http://127.0.0.1:7897")
+        import time
+        for _ in range(100):
+            if svc.status()["state"] in ("ready", "error"):
+                break
+            time.sleep(0.02)
+    assert g.call_args.kwargs["proxies"] == {
+        "http": "http://127.0.0.1:7897", "https": "http://127.0.0.1:7897"}
+
+
 def test_download_state_machine(tmp_path):
     svc = UpdaterService.instance()
     with patch.object(updater, "UPDATES_DIR", tmp_path), \

@@ -1001,23 +1001,19 @@
               <a-card class="sys-card" :bordered="false" title="软件更新">
                 <div class="sys-row">
                   <div>
-                    <div class="sys-title">检查并安装新版本（当前 v{{ appVersion || '…' }}）</div>
-                    <div class="sys-desc">
-                      检查 GitHub Releases 新版本，下载安装包后在应用内完成安装并重启
-                      （Linux 将弹出系统认证，Windows/macOS 自动替换文件后重启）。
-                    </div>
-                    <div v-if="upd.result && !upd.result.has_update" class="sys-hint muted">
+                    <div class="sys-title">当前版本 v{{ appVersion || '…' }}</div>
+                    <a-alert v-if="upd.result && !upd.result.has_update" type="success" class="upd-alert">
                       已是最新版本 v{{ upd.result.version }}
-                    </div>
-                    <div v-if="upd.result && upd.result.has_update" class="sys-hint">
-                      发现新版本 <strong>v{{ upd.result.version }}</strong>
-                      （{{ (upd.result.asset_size / 1048576).toFixed(1) }}MB）
-                      <a :href="upd.result.notes_url" target="_blank" rel="noreferrer">发布说明</a>
-                    </div>
-                    <div v-if="upd.error" class="sys-hint" style="color: #f53f3f">{{ upd.error }}</div>
+                    </a-alert>
+                    <a-alert v-if="upd.result && upd.result.has_update" type="warning" class="upd-alert">
+                      发现新版本 v{{ upd.result.version }}（{{ (upd.result.asset_size / 1048576).toFixed(1) }}MB）
+                      <a :href="upd.result.notes_url" target="_blank" rel="noreferrer" style="margin-left: 8px">查看发布说明</a>
+                    </a-alert>
+                    <a-alert v-if="upd.error" type="error" class="upd-alert">{{ upd.error }}</a-alert>
+                    <!-- Arco progress 百分比取 0~1，后端 0~100 需除 100 -->
                     <a-progress
-                      v-if="upd.state === 'downloading'"
-                      :percent="upd.progress"
+                      v-if="upd.state === 'downloading' || upd.state === 'ready'"
+                      :percent="upd.progress / 100"
                       size="small"
                       style="max-width: 320px; margin-top: 4px"
                     />
@@ -1036,11 +1032,13 @@
                     </a-button>
                   </div>
                 </div>
-                <div class="sys-row" style="margin-top: 8px">
-                  <div class="sys-desc">
-                    下载代理（访问 GitHub 失败时填写，如 http://127.0.0.1:7897；留空 = 直连），随「保存设置」生效。
-                  </div>
-                  <a-input v-model="form.update.proxy" placeholder="http://127.0.0.1:7897" style="max-width: 240px" />
+                <div class="field-line" style="margin-top: 8px">
+                  <span class="field-k">下载代理</span>
+                  <a-input
+                    v-model="form.update.proxy"
+                    placeholder="http://127.0.0.1:7897（访问 GitHub 失败时填写，留空直连）"
+                    style="max-width: 320px"
+                  />
                 </div>
               </a-card>
 
@@ -1293,7 +1291,7 @@
 </template>
 
 <script setup>
-import { computed, inject, onMounted, reactive, ref, watch } from 'vue'
+import { computed, inject, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { Message, Modal } from '@arco-design/web-vue'
 import {
   authorizePlugin,
@@ -2260,6 +2258,8 @@ const appVersion = ref('')
 const upd = reactive({ checking: false, state: 'idle', progress: 0, error: '', result: null })
 let updTimer = null
 
+onBeforeUnmount(() => clearInterval(updTimer))
+
 async function onUpdatesCheck() {
   upd.checking = true
   upd.error = ''
@@ -3182,6 +3182,10 @@ body.zt-skin-clay .nav-main :deep(.arco-menu-item.arco-menu-selected) {
   flex-direction: column;
   gap: 8px;
   flex-shrink: 0;
+}
+.upd-alert {
+  margin-top: 10px;
+  width: fit-content;
 }
 .sys-title {
   font-weight: 600;
