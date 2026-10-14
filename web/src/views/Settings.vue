@@ -3006,7 +3006,6 @@ body.zt-skin-aurora .nav-main :deep(.arco-menu-item.arco-menu-selected)::before 
   background: linear-gradient(180deg, var(--color-primary), #818cf8);
 }
 /* Neo：设置页容器去描边纯阴影 */
-body.zt-skin-neo .settings-page-body :deep(.arco-card),
 body.zt-skin-neo .settings-page-body .zt-block {
   border: none;
 }

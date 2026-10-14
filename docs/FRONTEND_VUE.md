@@ -89,6 +89,45 @@ cd web && npm run dev    # Vite :5173，代理 /api → 17890
 - 宿主 Qt：保存设置后仍调用 `apply_app_theme()` 同步 QSS  
 - 托盘/系统指示器：非 Web UI，保持系统原生样式
 
+## UI 约定（2026-10 UI 重构起）
+
+新页面/新卡片一律遵循以下范式（回归断言见 `tests/unit/test_ui_p*_conventions.py`）：
+
+**字阶**（`styles.css` 全局 token，一处改全局生效）：
+
+| token | 值 | 用途 | 载体 |
+|-------|-----|------|------|
+| `--zt-t1` | 18px/650 | 页标题（每窗唯一） | `.page-header h2` |
+| `--zt-t2` | 15px/650 | 区块标题 | `h3.zt-h3` |
+| `--zt-t3` | 13px/600 | 行标题/行标签 | `h4/div.zt-h4`、`.field-k` |
+| `--zt-note` | 12px | 说明文字 | `.hint` |
+
+**容器与分组**（设置类区块的唯一结构，不再用 `a-card`）：
+
+```html
+<section class="zt-block">
+  <div class="zt-block-head">
+    <h3 class="zt-h3">区块标题</h3>
+    <a-button size="small">右侧操作位（可选）</a-button>
+  </div>
+  <!-- 行：label 用 .field-k，说明用 .hint -->
+</section>
+
+<!-- 页内性质分组：裸组头不入表面，组放在 .zt-stack 内 -->
+<div class="zt-stack">
+  <div class="zt-group">
+    <h3 class="zt-h3">组名</h3>
+    <section class="zt-block">…</section>
+  </div>
+</div>
+```
+
+**其余约定**：
+
+- 选中态结构全局统一（主导航左竖条、tabs 底部指示条、筛选 chips 主色 pill）——不要局部另造选中样式；四皮肤只改色不改结构
+- 即时生效的开关行尾加 `<span class="zt-instant">即时</span>`；保存条只管未标记项
+- 弹窗类微排版（速览/提醒/闪电添加）不强制套字阶，保持密度
+
 ## 打包
 
 1. `cd web && npm ci && npm run build`

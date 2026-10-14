@@ -180,17 +180,10 @@ body,
   min-height: 0;
   grid-template-rows: minmax(0, 1fr);
 }
-.page-body--cols .arco-card {
+.page-body--cols .zt-block {
   display: flex;
   flex-direction: column;
   min-height: 0;
-}
-.page-body--cols .arco-card .arco-card-body {
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
 }
 .page-body--cols .col-scroll {
   flex: 1;
@@ -357,11 +350,6 @@ body.zt-shape-crisp .quick-add-box {
   color: var(--color-text-primary);
 }
 
-/* 卡片 #title 槽内的 zt-h3 去外距（Arco 头部自带留白） */
-.arco-card-header .zt-h3 {
-  margin: 0;
-}
-
 .zt-h4 {
   margin: 0;
   font-size: var(--zt-t3);
@@ -457,10 +445,6 @@ body.zt-shape-crisp {
 }
 
 /* 大表面接线：Arco 不消费 radius 变量的部分直接接 zt 令牌 */
-.arco-card {
-  border-radius: var(--zt-radius-card);
-}
-
 .arco-tag {
   border-radius: var(--zt-radius-pill);
 }
