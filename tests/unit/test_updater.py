@@ -82,6 +82,62 @@ def test_check_network_error():
             UpdaterService.instance().check()
 
 
+# —— 检查：共享代理出口下 API 匿名 403 限额，网页 302 探测兜底 ——
+
+
+def _redirect_resp(tag):
+    m = MagicMock()
+    m.status_code = 302
+    m.headers = {"Location": f"https://github.com/iyouex/zentray/releases/tag/{tag}"}
+    m.raise_for_status.return_value = None
+    return m
+
+
+def _rate_limited_resp():
+    import requests as _r
+    m = MagicMock()
+    m.status_code = 403
+    m.raise_for_status.side_effect = _r.HTTPError("403 rate limit exceeded")
+    return m
+
+
+def test_check_rate_limited_falls_back_to_redirect():
+    head = MagicMock()
+    head.status_code = 200
+    head.headers = {"content-length": "115"}
+    with patch.object(updater, "platform_suffix", return_value="_amd64.deb"), \
+         patch.object(updater.requests, "get",
+                      side_effect=[_redirect_resp("v9.9.9"), _rate_limited_resp()]) as g, \
+         patch.object(updater.requests, "head", return_value=head):
+        r = UpdaterService.instance().check()
+    assert r["has_update"] and r["version"] == "9.9.9"
+    assert r["asset_url"] == (
+        "https://github.com/iyouex/zentray/releases/download/v9.9.9/zentray_9.9.9_amd64.deb")
+    assert r["asset_size"] == 115
+    assert g.call_count == 2  # 探测 + 一次 API（403 后不再重试）
+
+
+def test_check_no_update_skips_api():
+    with patch.object(updater.requests, "get",
+                      return_value=_redirect_resp("v0.0.1")) as g, \
+         patch.object(updater.requests, "head") as h:
+        r = UpdaterService.instance().check()
+    assert not r["has_update"] and r["version"] == "0.0.1"
+    assert g.call_count == 1  # 已是最新：零 API 调用
+    h.assert_not_called()
+
+
+def test_check_rate_limited_asset_missing():
+    head = MagicMock()
+    head.status_code = 404
+    with patch.object(updater, "platform_suffix", return_value="_amd64.deb"), \
+         patch.object(updater.requests, "get",
+                      side_effect=[_redirect_resp("v9.9.9"), _rate_limited_resp()]), \
+         patch.object(updater.requests, "head", return_value=head):
+        with pytest.raises(RuntimeError, match="尚未上传"):
+            UpdaterService.instance().check()
+
+
 # —— 下载：URL 白名单 + 状态机 ——
 
 
