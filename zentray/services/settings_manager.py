@@ -226,6 +226,14 @@ class UpdateSettings:
 
 
 @dataclass
+class CalendarSettings:
+    """系统日历订阅源（任务页开关）。开启后任务/模板变更自动重写 .ics 源文件，
+    日历应用订阅该文件即保持同步（Windows Outlook 用「导出一次」兜底）。"""
+
+    enabled: bool = False
+
+
+@dataclass
 class FeishuSyncSettings:
     """飞书单向同步（ZenTray → 飞书开放平台自建应用）。
     与通知用的飞书机器人 webhook 无关；配置步骤见 docs/FEISHU_SYNC.md。"""
@@ -462,6 +470,7 @@ class AppSettings:
     ops: OpsSettings = field(default_factory=OpsSettings)
     update: UpdateSettings = field(default_factory=UpdateSettings)
     feishu_sync: FeishuSyncSettings = field(default_factory=FeishuSyncSettings)
+    calendar: CalendarSettings = field(default_factory=CalendarSettings)
 
 
 class SettingsManager:
@@ -737,6 +746,11 @@ class SettingsManager:
                 last_error=str(f.get("last_error") or ""),
                 last_sync_at=str(f.get("last_sync_at") or ""),
             )
+        if "calendar" in data:
+            c = data["calendar"] or {}
+            self._settings.calendar = CalendarSettings(
+                enabled=bool(c.get("enabled", False))
+            )
 
         # 用 review 回写 nightly 兼容
         self._sync_nightly_from_review()
@@ -839,6 +853,7 @@ class SettingsManager:
             "ops": asdict(self._settings.ops),
             "update": asdict(self._settings.update),
             "feishu_sync": asdict(self._settings.feishu_sync),
+            "calendar": asdict(self._settings.calendar),
         }
         with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
@@ -890,6 +905,10 @@ class SettingsManager:
     @property
     def feishu_sync(self) -> FeishuSyncSettings:
         return self._settings.feishu_sync
+
+    @property
+    def calendar(self) -> CalendarSettings:
+        return self._settings.calendar
 
     def get_ops_user_plugins_dir(self) -> Path:
         """用户插件目录（绝对路径）。"""

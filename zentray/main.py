@@ -525,6 +525,16 @@ def main():
     runtime.watcher.task_overdue.connect(runtime.on_task_overdue)
     runtime.watcher.start()
 
+    # 系统日历订阅源：启动即对齐一次（未启用时无操作）
+    try:
+        from zentray.services.calendar_feed import CalendarFeedService
+
+        CalendarFeedService.instance().refresh(
+            task_repo.find_all(), template_repo.find_all()
+        )
+    except Exception:
+        logger.exception("日历订阅源启动刷新失败")
+
     _start_nightly_if_needed(runtime, task_repo)
     _start_plugin_trigger_worker_if_needed(runtime)
 

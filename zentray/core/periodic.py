@@ -144,6 +144,50 @@ def next_spawn_date(
     return None
 
 
+def project_future_instances(
+    tmpl: "PeriodicTemplate", today: datetime.date
+) -> list:
+    """
+    模板未来日程投影：[(spawn_date, deadline_str)]，只读不改水位。
+
+    逐日步进 should_spawn（上限 400 天，同 next_spawn_date 惯例），跨周期桶
+    去重（同一桶内多日只投影一次）；count/days 两种截断；暂停/跳过水位/
+    结束日期经由 should_spawn 天然生效。calendar_enabled 关闭返回空。
+    """
+    if not getattr(tmpl, "calendar_enabled", False):
+        return []
+    mode = getattr(tmpl, "calendar_horizon_mode", "count") or "count"
+    try:
+        value = int(getattr(tmpl, "calendar_horizon_value", 4))
+    except (TypeError, ValueError):
+        value = 4
+    if mode == "days":
+        days = max(7, min(365, value))
+        limit_day = today + datetime.timedelta(days=days - 1)
+        count = None
+    else:
+        mode = "count"
+        count = max(1, min(60, value))
+        limit_day = None
+    n = max(1, int(getattr(tmpl, "interval", 1) or 1))
+    last_bucket: Optional[int] = None
+    out = []
+    for i in range(400):
+        d = today + datetime.timedelta(days=i)
+        if limit_day is not None and d > limit_day:
+            break
+        b = _bucket_index(tmpl.periodicity or "daily", d, n)
+        if last_bucket is not None and b <= last_bucket:
+            continue
+        if not should_spawn(tmpl, d):
+            continue
+        out.append((d, compute_instance_deadline(tmpl, d)))
+        last_bucket = b
+        if count is not None and len(out) >= count:
+            break
+    return out
+
+
 def compute_instance_deadline(
     tmpl: "PeriodicTemplate",
     today: datetime.date,
