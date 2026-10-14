@@ -35,7 +35,7 @@
                 >
                   <span class="feat-icon">{{ f.icon }}</span>
                   <div class="feat-info">
-                    <span class="feat-name">{{ f.name }}</span>
+                    <span class="zt-h4">{{ f.name }}</span>
                     <span class="feat-desc">{{ f.desc }}</span>
                   </div>
                   <a-switch v-model="form.ai.features[f.key]" size="small" />
@@ -85,7 +85,7 @@
                             使用中
                           </a-tag>
                           <a-tag v-else color="gray" size="small">未启用</a-tag>
-                          <span class="api-name">{{ p.name || '未命名' }}</span>
+                          <span class="zt-h4">{{ p.name || '未命名' }}</span>
                           <span class="api-meta">{{ p.model || '—' }} · {{ shortKey(p.api_key) }}</span>
                           <a-button
                             v-if="form.ai.active_api_id !== p.id"
@@ -163,7 +163,7 @@
                 >
                   <template #header>
                     <div class="ch-row-header" @click.stop>
-                      <span class="ch-title">{{ ch.name }}</span>
+                      <span class="zt-h4">{{ ch.name }}</span>
                       <a-tag size="small" :color="ch.enabled ? 'green' : 'gray'">
                         {{ ch.enabled ? '已开启' : '已关闭' }}
                       </a-tag>
@@ -230,7 +230,7 @@
 
           <template v-else-if="mainKey === 'polling'">
             <section class="compact-block">
-              <div class="compact-head">新建任务</div>
+              <div class="zt-h3">新建任务</div>
               <div class="field-table">
                 <div class="field-line">
                   <span class="field-k">打开新建任务表单</span>
@@ -240,7 +240,7 @@
             </section>
 
             <section class="compact-block">
-              <div class="compact-head">闪电添加</div>
+              <div class="zt-h3">闪电添加</div>
               <div class="field-table">
                 <div class="field-line">
                   <span class="field-k">启用全局快捷键</span>
@@ -265,17 +265,17 @@
                   </div>
                 </template>
               </div>
-              <span class="hint-sm">快捷键格式如 &lt;ctrl&gt;+&lt;alt&gt;+t（macOS 如 &lt;alt&gt;+&lt;space&gt;）；随「保存设置」生效；与系统/输入法同键位冲突时换组合。</span>
+              <span class="hint">快捷键格式如 &lt;ctrl&gt;+&lt;alt&gt;+t（macOS 如 &lt;alt&gt;+&lt;space&gt;）；随「保存设置」生效；与系统/输入法同键位冲突时换组合。</span>
             </section>
 
             <section class="compact-block">
-              <div class="compact-head">飞书同步</div>
+              <div class="zt-h3">飞书同步</div>
               <div class="field-table">
                 <div class="field-line">
                   <span class="field-k">启用飞书同步</span>
                   <a-switch v-model="form.feishu_sync.enabled" />
                 </div>
-                <span class="hint-sm">
+                <span class="hint">
                   把任务单向推送到飞书「ZenTray」日历与任务清单（完成/删除自动撤下，不回读）；
                   需飞书开放平台自建应用，<a class="doc-link" @click.prevent="openFeishuDoc">配置步骤见文档</a>。
                   改动随「保存设置」生效。
@@ -314,21 +314,21 @@
                   </div>
                   <div v-if="feishuStatusText" class="field-line">
                     <span class="field-k">同步状态</span>
-                    <span class="hint-sm" :style="form.feishu_sync.last_error ? 'color: #f53f3f' : ''">{{ feishuStatusText }}</span>
+                    <span class="hint" :style="form.feishu_sync.last_error ? 'color: #f53f3f' : ''">{{ feishuStatusText }}</span>
                   </div>
                 </template>
               </div>
-              <span v-if="form.feishu_sync.enabled" class="hint-sm">「测试连接 / 全量重同步」会先保存本卡片配置再执行；全量重同步不清远端旧对象，需要干净重来时先在飞书侧清空 ZenTray 日历/清单。</span>
+              <span v-if="form.feishu_sync.enabled" class="hint">「测试连接 / 全量重同步」会先保存本卡片配置再执行；全量重同步不清远端旧对象，需要干净重来时先在飞书侧清空 ZenTray 日历/清单。</span>
             </section>
 
             <section class="compact-block">
-              <div class="compact-head">系统日历</div>
+              <div class="zt-h3">系统日历</div>
               <div class="field-table">
                 <div class="field-line">
                   <span class="field-k">自动同步到系统日历</span>
                   <a-switch v-model="form.calendar.enabled" />
                 </div>
-                <span class="hint-sm">
+                <span class="hint">
                   开启后任务增删改与周期模板变更自动重写日历源文件，日历应用订阅该文件即保持同步
                   （Linux Evolution/KOrganizer 订阅本地文件、macOS 日历「新建日历订阅」粘贴链接）；
                   Windows Outlook 不支持文件订阅，用「导出一次」手动导入。改动随「保存设置」生效。
@@ -336,7 +336,7 @@
                 <template v-if="form.calendar.enabled">
                   <div class="field-line">
                     <span class="field-k">源文件</span>
-                    <span class="hint-sm" style="word-break: break-all">{{ calendarFeedPath || '…' }}</span>
+                    <span class="hint" style="word-break: break-all">{{ calendarFeedPath || '…' }}</span>
                   </div>
                   <div class="field-line">
                     <span class="field-k">订阅与导出</span>
@@ -352,7 +352,7 @@
 
             <div class="compact-page">
               <section class="compact-block">
-                <div class="compact-head">轮播设置</div>
+                <div class="zt-h3">轮播设置</div>
                 <div class="field-table">
                   <div class="field-line">
                     <span class="field-k">🔴 高优先停留</span>
@@ -385,7 +385,7 @@
               <div class="compact-sep" />
 
               <section class="compact-block">
-                <div class="compact-head">逾期设置</div>
+                <div class="zt-h3">逾期设置</div>
                 <div class="field-table">
                   <div class="field-line">
                     <span class="field-k">逾期优先轮播</span>
@@ -409,7 +409,7 @@
 
             <div class="cat-page">
               <section class="poll-block">
-                <h3 class="block-title">标题格式</h3>
+                <h3 class="zt-h3">标题格式</h3>
                 <a-form layout="vertical" style="max-width: 480px">
                   <a-form-item label="标题括号（成对选择）">
                     <a-radio-group
@@ -439,7 +439,7 @@
 
               <section class="poll-block">
                 <div class="cat-head">
-                  <h3 class="block-title" style="margin: 0">一级分类</h3>
+                  <h3 class="zt-h3" style="margin: 0">一级分类</h3>
                   <a-button type="primary" size="small" @click="addPrimary">➕ 添加一级</a-button>
                 </div>
                 <p class="hint">可编辑名称；开启二级后，可在各级下添加/删除二级分类。</p>
@@ -511,7 +511,7 @@
           <template v-else-if="mainKey === 'pomodoro'">
             <div class="compact-page">
               <section class="compact-block">
-                <div class="compact-head">时长</div>
+                <div class="zt-h3">时长</div>
                 <div class="field-table">
                   <div class="field-line">
                     <span class="field-k">专注时长</span>
@@ -535,8 +535,8 @@
               <div class="compact-sep" />
 
               <section class="compact-block">
-                <div class="compact-head">专注-休息循环</div>
-                <p class="hint-sm">专注结束自动进入休息；长休在每 N 个专注后替代短休。</p>
+                <div class="zt-h3">专注-休息循环</div>
+                <p class="hint">专注结束自动进入休息；长休在每 N 个专注后替代短休。</p>
                 <div class="field-table">
                   <div class="field-line">
                     <span class="field-k">短休时长</span>
@@ -549,7 +549,7 @@
                   <div class="field-line">
                     <span class="field-k">长休间隔</span>
                     <NumberSpinner v-model="form.pomodoro.long_break_every" :min="0" :max="12" suffix="个" />
-                    <span class="hint-sm">每 N 个专注进长休，0 = 只用短休</span>
+                    <span class="hint">每 N 个专注进长休，0 = 只用短休</span>
                   </div>
                   <div class="field-line">
                     <span class="field-k">专注结束自动休息</span>
@@ -562,7 +562,7 @@
                   <div class="field-line">
                     <span class="field-k">每日目标</span>
                     <NumberSpinner v-model="form.pomodoro.daily_goal_pomodoros" :min="0" :max="50" suffix="个" />
-                    <span class="hint-sm">达标当次通知，0 = 不启用</span>
+                    <span class="hint">达标当次通知，0 = 不启用</span>
                   </div>
                 </div>
               </section>
@@ -570,8 +570,8 @@
               <div class="compact-sep" />
 
               <section class="compact-block">
-                <div class="compact-head">托盘显示</div>
-                <p class="hint-sm">左侧专注为番茄饼图、休息为茶绿饼图；右侧可选倒计时或文案（休息恒为倒计时）。</p>
+                <div class="zt-h3">托盘显示</div>
+                <p class="hint">左侧专注为番茄饼图、休息为茶绿饼图；右侧可选倒计时或文案（休息恒为倒计时）。</p>
                 <div class="field-table">
                   <div class="field-line">
                     <span class="field-k">右侧文字</span>
@@ -593,7 +593,7 @@
                   <div class="field-line">
                     <span class="field-k">图标叠加倒计时</span>
                     <a-switch v-model="form.pomodoro.tray_icon_countdown" size="small" />
-                    <span class="hint-sm">Windows：饼图内叠加剩余分钟数字</span>
+                    <span class="hint">Windows：饼图内叠加剩余分钟数字</span>
                   </div>
                 </div>
               </section>
@@ -601,8 +601,8 @@
               <div class="compact-sep" />
 
               <section class="compact-block">
-                <div class="compact-head">菜单按钮</div>
-                <p class="hint-sm">
+                <div class="zt-h3">菜单按钮</div>
+                <p class="hint">
                   托盘菜单「专注」按钮空闲时融合今日统计。占位符：{focus}=本次专注分钟、{today}=今日专注分钟、{count}=今日番茄数。
                 </p>
                 <div class="field-table">
@@ -624,7 +624,8 @@
           <template v-else-if="mainKey === 'ops'">
             <div class="plugin-settings">
               <!-- 总开关走页面底部「保存设置」 -->
-              <a-card class="plugin-card" :bordered="false" title="总开关">
+              <a-card class="plugin-card" :bordered="false">
+  <template #title><h3 class="zt-h3">总开关</h3></template>>
                 <div class="plugin-switch-row">
                   <div>
                     <div class="plugin-title">启用插件</div>
@@ -959,7 +960,8 @@
 
           <template v-else-if="mainKey === 'system'">
             <div class="system-settings">
-              <a-card class="sys-card" :bordered="false" title="外观">
+              <a-card class="sys-card" :bordered="false">
+  <template #title><h3 class="zt-h3">外观</h3></template>>
                 <a-form layout="vertical" style="max-width: 420px">
                   <a-form-item label="主题">
                     <a-radio-group v-model="form.appearance.theme" @change="onThemePreview">
@@ -996,10 +998,11 @@
                 </a-form>
               </a-card>
 
-              <a-card class="sys-card" :bordered="false" title="启动">
+              <a-card class="sys-card" :bordered="false">
+  <template #title><h3 class="zt-h3">启动</h3></template>>
                 <div class="sys-row">
                   <div>
-                    <div class="sys-title">开机自启</div>
+                    <div class="zt-h4">开机自启</div>
                     <div class="sys-desc">
                       开启后登录系统时自动启动 ZenTray。开关立即生效，无需点保存。
                     </div>
@@ -1013,10 +1016,11 @@
                 </div>
               </a-card>
 
-              <a-card class="sys-card" :bordered="false" title="软件更新">
+              <a-card class="sys-card" :bordered="false">
+  <template #title><h3 class="zt-h3">软件更新</h3></template>>
                 <div class="sys-row">
                   <div>
-                    <div class="sys-title">当前版本 v{{ appVersion || '…' }}</div>
+                    <div class="zt-h4">当前版本 v{{ appVersion || '…' }}</div>
                     <a-alert v-if="upd.result && !upd.result.has_update" type="success" class="upd-alert">
                       已是最新版本 v{{ upd.result.version }}
                     </a-alert>
@@ -1058,10 +1062,11 @@
               </a-card>
 
               <!-- Windows 任务栏中央按钮（设计 §3.0）；后端探测不到时整卡隐藏 -->
-              <a-card v-if="taskbarLabelVisible !== null" class="sys-card" :bordered="false" title="任务栏显示（Windows）">
+              <a-card v-if="taskbarLabelVisible !== null" class="sys-card" :bordered="false">
+  <template #title><h3 class="zt-h3">任务栏显示（Windows）</h3></template>>
                 <div class="sys-row">
                   <div>
-                    <div class="sys-title">任务栏中央显示</div>
+                    <div class="zt-h4">任务栏中央显示</div>
                     <div class="sys-desc">
                       任务栏正中常驻 ZenTray 按钮：动态图标 + 完整文字标签，与任务轮播同拍；
                       关闭则退回仅通知区图标。
@@ -1091,10 +1096,11 @@
           <!-- 备份：五卡片（存储目录 / 手动备份 / 自动策略 / 恢复 / 历史快照） -->
           <template v-else-if="mainKey === 'backup'">
             <div class="system-settings">
-              <a-card class="sys-card" :bordered="false" title="备份存储目录">
+              <a-card class="sys-card" :bordered="false">
+  <template #title><h3 class="zt-h3">备份存储目录</h3></template>>
                 <div class="sys-row">
                   <div style="min-width: 0">
-                    <div class="sys-title">
+                    <div class="zt-h4">
                       {{ backupDirDirty ? '待保存' : backupStatus.custom ? '自定义目录' : '默认目录' }}
                       <a-tag v-if="backupDirDirty" size="small" color="orange">未保存</a-tag>
                     </div>
@@ -1110,7 +1116,8 @@
                 </div>
               </a-card>
 
-              <a-card class="sys-card" :bordered="false" title="手动即时备份">
+              <a-card class="sys-card" :bordered="false">
+  <template #title><h3 class="zt-h3">手动即时备份</h3></template>>
                 <div class="sys-section-label">备份内容</div>
                 <a-checkbox-group v-model="exportInclude" direction="vertical" class="export-checks">
                   <a-checkbox v-for="opt in includeOptions" :key="opt.key" :value="opt.key">
@@ -1145,10 +1152,11 @@
                 </p>
               </a-card>
 
-              <a-card class="sys-card" :bordered="false" title="自动周期备份策略">
+              <a-card class="sys-card" :bordered="false">
+  <template #title><h3 class="zt-h3">自动周期备份策略</h3></template>>
                 <div class="sys-row">
                   <div>
-                    <div class="sys-title">自动备份</div>
+                    <div class="zt-h4">自动备份</div>
                     <div class="sys-desc">
                       按周期自动全量备份（明文，默认六项）。到点未开机会在下次启动后补跑；改动需点底部保存。
                     </div>
@@ -1178,7 +1186,8 @@
                 </p>
               </a-card>
 
-              <a-card class="sys-card" :bordered="false" title="从备份文件恢复">
+              <a-card class="sys-card" :bordered="false">
+  <template #title><h3 class="zt-h3">从备份文件恢复</h3></template>>
                 <div class="sys-import-row">
                   <a-input
                     v-model="importPath"
@@ -1221,7 +1230,8 @@
                 <p v-if="lastImportMsg" class="sys-path">{{ lastImportMsg }}</p>
               </a-card>
 
-              <a-card class="sys-card bk-snapshots" :bordered="false" title="历史备份快照">
+              <a-card class="sys-card bk-snapshots" :bordered="false">
+  <template #title><h3 class="zt-h3">历史备份快照</h3></template>>
                 <template #extra>
                   <a-space>
                     <a-tag size="small">{{ snapshots.length }} 个备份</a-tag>
@@ -2931,8 +2941,26 @@ onMounted(async () => {
   top: 0;
   overflow: auto;
 }
-/* ---- 皮肤变体（body.zt-skin-* 门控） ---- */
-/* Aurora：导航玻璃 + 激活项极光渐变拖尾 */
+/* 选中态统一结构（UI 重构 P1）：左 3px 主色竖条 + 主色文字 + 600 + 8% 主色底；
+   四皮肤只在下方改竖条配色，不改结构 */
+.nav-main :deep(.arco-menu-item.arco-menu-selected) {
+  position: relative;
+  font-weight: 600;
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+}
+.nav-main :deep(.arco-menu-item.arco-menu-selected)::before {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 22%;
+  bottom: 22%;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--color-primary);
+}
+/* ---- 皮肤变体（body.zt-skin-* 门控，仅改色） ---- */
+/* Aurora：导航玻璃 + 选中竖条极光渐变 */
 body.zt-skin-aurora .nav-main {
   border: 1px solid color-mix(in srgb, var(--color-text-primary) 9%, transparent);
   background: color-mix(in srgb, var(--color-surface) 55%, transparent);
@@ -2941,12 +2969,8 @@ body.zt-skin-aurora .nav-main {
   box-shadow: 0 8px 32px rgba(2, 6, 23, 0.35),
     inset 0 1px 0 color-mix(in srgb, #ffffff 6%, transparent);
 }
-body.zt-skin-aurora .nav-main :deep(.arco-menu-selected) {
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--color-primary) 22%, transparent),
-    transparent
-  );
+body.zt-skin-aurora .nav-main :deep(.arco-menu-item.arco-menu-selected)::before {
+  background: linear-gradient(180deg, var(--color-primary), #818cf8);
 }
 /* Neo：设置页容器去描边纯阴影 */
 body.zt-skin-neo .settings-page-body :deep(.arco-card) {
@@ -2963,35 +2987,15 @@ body.zt-skin-neo .nav-main {
   box-shadow: var(--zt-shadow-card);
   background: var(--color-surface);
 }
-/* Synth：选中项霓虹渐变竖条 + 提亮 */
-body.zt-skin-synth .nav-main :deep(.arco-menu-item.arco-menu-selected) {
-  position: relative;
-  font-weight: 600;
-  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
-}
+/* Synth：选中竖条霓虹渐变 + 辉光 */
 body.zt-skin-synth .nav-main :deep(.arco-menu-item.arco-menu-selected)::before {
-  content: "";
-  position: absolute;
-  left: 6px;
-  top: 22%;
-  bottom: 22%;
-  width: 3px;
-  border-radius: 999px;
   background: linear-gradient(180deg, var(--color-primary), var(--zt-neon-pink));
   box-shadow: 0 0 8px var(--color-primary-glow);
 }
-/* Clay：导航项 tonal 胶囊（M3 navigation 样式） */
+/* Clay：导航容器描边投影（选中态走统一结构） */
 body.zt-skin-clay .nav-main {
   border: 1px solid var(--color-border);
   box-shadow: var(--zt-shadow-card);
-}
-body.zt-skin-clay .nav-main :deep(.arco-menu-item) {
-  border-radius: 999px;
-}
-body.zt-skin-clay .nav-main :deep(.arco-menu-item.arco-menu-selected) {
-  background: color-mix(in srgb, var(--color-primary) 18%, var(--color-surface));
-  color: var(--color-primary);
-  font-weight: 700;
 }
 .settings-body {
   min-width: 0;
@@ -3067,19 +3071,10 @@ body.zt-skin-clay .nav-main :deep(.arco-menu-item.arco-menu-selected) {
   flex-direction: column;
   gap: 2px;
 }
-.feat-name {
-  font-weight: 600;
-  font-size: 13.5px;
-}
 .feat-desc {
   font-size: 12px;
   color: var(--color-text-3);
   line-height: 1.4;
-}
-.hint {
-  color: var(--color-text-3);
-  font-size: 13px;
-  margin: 0 0 12px;
 }
 .api-row-header,
 .ch-row-header {
@@ -3089,11 +3084,6 @@ body.zt-skin-clay .nav-main :deep(.arco-menu-item.arco-menu-selected) {
   width: 100%;
   flex-wrap: wrap;
   padding-right: 8px;
-}
-.api-name,
-.ch-title {
-  font-weight: 600;
-  min-width: 72px;
 }
 .api-meta {
   color: var(--color-text-3);
@@ -3120,12 +3110,6 @@ body.zt-skin-clay .nav-main :deep(.arco-menu-item.arco-menu-selected) {
 .compact-block {
   margin: 0;
 }
-.compact-head {
-  font-size: 13px;
-  font-weight: 600;
-  margin: 0 0 8px;
-  color: var(--color-text-1);
-}
 .compact-sep {
   height: 1px;
   background: var(--color-border-2);
@@ -3144,15 +3128,9 @@ body.zt-skin-clay .nav-main :deep(.arco-menu-item.arco-menu-selected) {
   min-height: 32px;
 }
 .field-k {
-  font-size: 13px;
+  font-size: var(--zt-t3);
   color: var(--color-text-2);
   flex-shrink: 0;
-}
-.hint-sm {
-  margin: 0 0 8px;
-  font-size: 12px;
-  color: var(--color-text-3);
-  line-height: 1.4;
 }
 .doc-link {
   color: var(--color-primary);
@@ -3169,11 +3147,6 @@ body.zt-skin-clay .nav-main :deep(.arco-menu-item.arco-menu-selected) {
 /* 分类页仍用 poll-block 类名 */
 .poll-block {
   margin-bottom: 8px;
-}
-.block-title {
-  margin: 0 0 8px;
-  font-size: 15px;
-  font-weight: 600;
 }
 .cat-page {
   max-width: 640px;
@@ -3239,10 +3212,6 @@ body.zt-skin-clay .nav-main :deep(.arco-menu-item.arco-menu-selected) {
 .upd-alert {
   margin-top: 10px;
   width: fit-content;
-}
-.sys-title {
-  font-weight: 600;
-  font-size: 14px;
 }
 .sys-desc {
   margin-top: 4px;

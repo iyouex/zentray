@@ -134,8 +134,8 @@ body,
 
 .page-header h2 {
   margin: 0;
-  font-size: 18px;
-  font-weight: 600;
+  font-size: var(--zt-t1);
+  font-weight: 650;
   letter-spacing: -0.01em;
   color: var(--color-text-primary);
 }
@@ -335,6 +335,40 @@ body.zt-shape-crisp .quick-add-box {
   --zt-pri-low: #94a3b8;
   --zt-due-soon: #fbbf24;
   --zt-due-late: #f87171;
+  /* 字阶四档（UI 重构 P1）：页 18 / 区块 15 / 行 13 / 说明 12，
+     层级链恒定 h2 页标题 → .zt-h3 区块 → .zt-h4/.field-k 行 → .hint 说明 */
+  --zt-t1: 18px;
+  --zt-t2: 15px;
+  --zt-t3: 13px;
+  --zt-note: 12px;
+}
+
+/* ---- 字阶全局类（UI 重构 P1） ---- */
+.zt-h3 {
+  margin: 0 0 8px;
+  font-size: var(--zt-t2);
+  font-weight: 650;
+  line-height: 1.4;
+  color: var(--color-text-primary);
+}
+
+/* 卡片 #title 槽内的 zt-h3 去外距（Arco 头部自带留白） */
+.arco-card-header .zt-h3 {
+  margin: 0;
+}
+
+.zt-h4 {
+  margin: 0;
+  font-size: var(--zt-t3);
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.hint {
+  margin: 0 0 8px;
+  font-size: var(--zt-note);
+  color: var(--color-text-muted);
+  line-height: 1.5;
 }
 
 /* 形状两档：利落（spec §5 shape=crisp） */
@@ -388,6 +422,47 @@ body.zt-shape-crisp .arco-btn {
 /* 空状态图标区圆角化（spec §3） */
 .arco-empty .arco-empty-image {
   border-radius: var(--zt-radius-md);
+}
+
+/* rounded 标签选中态（UI 重构 P1）：主色文字 + 600 + 8% 主色底 + 底部 2px 指示条，
+   未选中为 ghost；替换 Arco 默认仅 4% 亮度差的灰底 */
+.arco-tabs-nav-type-rounded .arco-tabs-tab {
+  border-radius: var(--zt-radius-md);
+}
+
+.arco-tabs-nav-type-rounded .arco-tabs-tab-active,
+.arco-tabs-nav-type-rounded .arco-tabs-tab-active:hover {
+  position: relative;
+  color: var(--color-primary);
+  font-weight: 600;
+  background-color: color-mix(in srgb, var(--color-primary) 8%, transparent);
+}
+
+.arco-tabs-nav-type-rounded .arco-tabs-tab-active::after {
+  content: "";
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 2px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--color-primary);
+}
+
+/* 折叠行展开指示（UI 重构 P1）：header 左 3px 主色竖条，与导航选中态同构 */
+.arco-collapse-item-header {
+  position: relative;
+}
+
+.arco-collapse-item-active > .arco-collapse-item-header::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 24%;
+  bottom: 24%;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--color-primary);
 }
 
 /* 主按钮 hover 弹性放大（spec §3 / §1 支柱 3）。transition 在 Arco 默认

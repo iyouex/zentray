@@ -15,7 +15,8 @@
 
     <div class="page-body page-body--cols">
       <div class="two-col">
-        <a-card title="活跃任务" :bordered="true">
+        <a-card>
+  <template #title><h3 class="zt-h3">活跃任务</h3></template> :bordered="true">
           <div class="filter-row" role="group" aria-label="视图切换">
             <button
               v-for="c in tabChips"
@@ -141,7 +142,8 @@
           </div>
         </a-card>
 
-        <a-card title="任务详情与操作" :bordered="true">
+        <a-card>
+  <template #title><h3 class="zt-h3">任务详情与操作</h3></template> :bordered="true">
           <template v-if="suggestOn" #extra>
             <a-button size="small" type="outline" :loading="suggestLoading" @click="onAiSuggest">
               <template #icon><PhLightbulb :size="15" /></template>
@@ -1113,9 +1115,10 @@ async function applySuggest(i) {
   color: var(--color-text-primary);
 }
 .filter-row .fchip[aria-pressed='true'] {
-  background: var(--color-primary-glow);
-  color: var(--color-primary-hover);
-  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  color: var(--color-primary);
+  border-color: color-mix(in srgb, var(--color-primary) 45%, transparent);
+  font-weight: 600;
 }
 .flip-gone {
   display: none;
@@ -1199,16 +1202,6 @@ body.zt-skin-aurora .task-card-item.active {
   border-color: color-mix(in srgb, var(--color-primary, #0d9488) 60%, transparent);
   background: color-mix(in srgb, var(--color-primary, #0d9488) 10%, transparent);
 }
-body.zt-skin-aurora .filter-row .fchip[aria-pressed='true'] {
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--color-primary) 28%, transparent),
-    color-mix(in srgb, #818cf8 26%, transparent)
-  );
-  color: var(--color-text-primary);
-  border-color: color-mix(in srgb, var(--color-primary) 55%, transparent);
-  box-shadow: 0 2px 10px var(--color-primary-glow);
-}
 body.zt-skin-aurora .sub-row {
   border-top: 1px solid color-mix(in srgb, var(--color-text-primary) 8%, transparent);
 }
@@ -1216,30 +1209,6 @@ body.zt-skin-aurora .sub-row {
 body.zt-skin-neo .task-card-item.active {
   border-color: var(--zt-lime, #c8f542);
   background: color-mix(in srgb, var(--zt-lime, #c8f542) 7%, var(--color-surface));
-}
-/* kbd 键帽风格筛选 chip：小圆角 + 1.5px 描边 + 加粗底边 */
-body.zt-skin-neo .filter-row .fchip {
-  background: var(--color-surface);
-  border: 1.5px solid var(--color-border);
-  border-bottom-width: 3px;
-  border-radius: 4px;
-  padding: 4px 12px;
-  transition: color var(--zt-dur-fast, 120ms) var(--zt-ease-out, ease),
-    background-color var(--zt-dur-fast, 120ms) var(--zt-ease-out, ease),
-    border-color var(--zt-dur-fast, 120ms) var(--zt-ease-out, ease),
-    transform var(--zt-dur-fast, 120ms) var(--zt-ease-out, ease);
-}
-body.zt-skin-neo .filter-row .fchip:hover {
-  border-color: var(--zt-cyan, #53e0d9);
-  transform: translate(1px, 1px);
-  border-bottom-width: 2px;
-}
-body.zt-skin-neo .filter-row .fchip[aria-pressed='true'] {
-  background: var(--zt-lime, #c8f542);
-  color: var(--zt-ink, #0b0d10);
-  border-color: var(--zt-lime, #c8f542);
-  border-bottom-color: color-mix(in srgb, var(--zt-ink, #0b0d10) 45%, var(--zt-lime, #c8f542));
-  font-weight: 600;
 }
 body.zt-skin-neo .zt-card-prog {
   border-radius: 0;
