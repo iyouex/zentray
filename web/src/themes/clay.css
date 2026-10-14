@@ -82,13 +82,13 @@ body.zt-skin-clay.zt-shape-crisp {
 }
 
 /* 卡面通用：顶高光内描边（软糖受光面） */
-body.zt-skin-clay .arco-card,
+body.zt-skin-clay body.zt-skin-clay .zt-block,
 body.zt-skin-clay .task-card-item,
 body.zt-skin-clay .quick-add-box {
   box-shadow: var(--zt-shadow-card),
     inset 0 2px 0 rgba(255, 255, 255, 0.06);
 }
-body.zt-skin-clay.theme-light .arco-card,
+body.zt-skin-clay.theme-light body.zt-skin-clay.theme-light .zt-block,
 body.zt-skin-clay.theme-light .task-card-item,
 body.zt-skin-clay.theme-light .quick-add-box {
   box-shadow: var(--zt-shadow-card),

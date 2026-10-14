@@ -67,7 +67,7 @@ body.zt-skin-aurora.zt-motion-off::before {
 }
 
 /* ---- 玻璃表面：卡片/胶囊半透明 + 背景模糊 + 高光内描边 ---- */
-body.zt-skin-aurora .arco-card,
+body.zt-skin-aurora body.zt-skin-aurora .zt-block,
 body.zt-skin-aurora .quick-add-box {
   background: color-mix(in srgb, var(--color-surface) 58%, transparent);
   backdrop-filter: blur(18px) saturate(1.5);
@@ -78,7 +78,7 @@ body.zt-skin-aurora .quick-add-box {
 }
 
 /* 冰璃浅色玻璃面：白 72% + 放大饱和增益 + 白内高光，模糊里透出粉彩极光 */
-body.zt-skin-aurora.theme-light .arco-card,
+body.zt-skin-aurora.theme-light body.zt-skin-aurora.theme-light .zt-block,
 body.zt-skin-aurora.theme-light .quick-add-box,
 body.zt-skin-aurora.theme-light .task-card-item {
   background: rgba(255, 255, 255, 0.72);
@@ -86,7 +86,7 @@ body.zt-skin-aurora.theme-light .task-card-item {
   -webkit-backdrop-filter: blur(20px) saturate(1.6);
   border-color: rgba(15, 23, 42, 0.1);
 }
-body.zt-skin-aurora.theme-light .arco-card,
+body.zt-skin-aurora.theme-light body.zt-skin-aurora.theme-light .zt-block,
 body.zt-skin-aurora.theme-light .quick-add-box {
   box-shadow: 0 8px 28px rgba(15, 23, 42, 0.12),
     inset 0 1px 0 rgba(255, 255, 255, 0.65);

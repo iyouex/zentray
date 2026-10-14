@@ -25,6 +25,8 @@ from zentray.config import DATA_DIR, VERSION
 logger = logging.getLogger(__name__)
 
 RELEASES_API = "https://api.github.com/repos/iyouex/zentray/releases/latest"
+HTML_LATEST = "https://github.com/iyouex/zentray/releases/latest"
+TAG_URL = "https://github.com/iyouex/zentray/releases/tag/"
 # 下载 URL 白名单：仅接受本仓库 Release 资产地址（防任意 URL 下载）
 DOWNLOAD_PREFIX = "https://github.com/iyouex/zentray/releases/download/"
 
@@ -56,6 +58,28 @@ def _proxies(proxy: str) -> dict | None:
     """空代理 = requests 默认（环境变量）；GUI 进程读不到系统代理时由设置填入。"""
     p = (proxy or "").strip()
     return {"http": p, "https": p} if p else None
+
+
+def _latest_tag(proxy: str) -> str | None:
+    """经 releases/latest 网页 302 跳转取最新 tag；任何失败返回 None（退回 API 路径）。"""
+    try:
+        resp = requests.get(HTML_LATEST, allow_redirects=False, timeout=10,
+                            proxies=_proxies(proxy))
+        m = re.search(r"/releases/tag/(v[\w.\-]+)",
+                      resp.headers.get("Location") or "")
+        return m.group(1) if m else None
+    except Exception:
+        return None
+
+
+def _try_release_json(proxy: str) -> dict | None:
+    """尽力取 latest release 富信息（资产/说明/时间）；403 限额等任何失败仅返回 None。"""
+    try:
+        resp = requests.get(RELEASES_API, timeout=10, proxies=_proxies(proxy))
+        resp.raise_for_status()
+        return resp.json()
+    except Exception:
+        return None
 
 
 # —— helper 脚本（纯字符串构造，便于测试断言） ————————————————
@@ -122,32 +146,66 @@ class UpdaterService:
     # —— 检查 ——
 
     def check(self, proxy: str = "") -> dict:
-        """查 latest release，返回是否有更新与资产信息；失败抛 RuntimeError。"""
-        try:
-            resp = requests.get(RELEASES_API, timeout=10, proxies=_proxies(proxy))
-            resp.raise_for_status()
-            rel = resp.json()
-        except Exception as e:
-            raise RuntimeError(f"检查更新失败：{e}") from e
-        tag = str(rel.get("tag_name") or "")
+        """查 latest release，返回是否有更新与资产信息；失败抛 RuntimeError。
+
+        优先用 releases/latest 网页 302 跳转取 tag（不受 API 匿名 60 次/时限额，
+        共享代理出口下匿名 API 常年 403）；有新版再调 API 取资产与说明，
+        API 失败则按确定性规则合成下载地址并以 HEAD 验存在性。
+        """
+        rel = None
+        tag = _latest_tag(proxy)
+        if tag is None:
+            try:
+                resp = requests.get(RELEASES_API, timeout=10, proxies=_proxies(proxy))
+                resp.raise_for_status()
+                rel = resp.json()
+                tag = str(rel.get("tag_name") or "")
+            except Exception as e:
+                raise RuntimeError(f"检查更新失败：{e}") from e
         version = tag.lstrip("v")
         want = f"zentray_{version}{platform_suffix()}"
-        asset = next(
-            (a for a in rel.get("assets", []) if a.get("name") == want), None
-        )
-        if is_newer(tag) and asset is None:
+        if not is_newer(tag):
+            return {
+                "version": version, "has_update": False, "asset_url": "",
+                "asset_name": "", "asset_size": 0, "notes_url": TAG_URL + tag,
+                "published_at": "", "body": "",
+            }
+        if rel is None:
+            rel = _try_release_json(proxy)
+        if rel is not None:
+            asset = next(
+                (a for a in rel.get("assets", []) if a.get("name") == want), None
+            )
+            if asset is None:
+                raise RuntimeError(
+                    f"新版本 v{version} 的本平台安装包尚未上传（CI 构建中），请稍后再试"
+                )
+            return {
+                "version": version,
+                "has_update": True,
+                "asset_url": asset.get("browser_download_url") or "",
+                "asset_name": asset.get("name") or "",
+                "asset_size": asset.get("size") or 0,
+                "notes_url": rel.get("html_url") or TAG_URL + tag,
+                "published_at": rel.get("published_at") or "",
+                "body": (rel.get("body") or "")[:800],
+            }
+        # API 拿不到（匿名 403 限额等）：下载地址确定性合成，HEAD 保住「尚未上传」提示
+        url = f"{DOWNLOAD_PREFIX}v{version}/{want}"
+        try:
+            head = requests.head(url, allow_redirects=True, timeout=10,
+                                 proxies=_proxies(proxy))
+        except Exception as e:
+            raise RuntimeError(f"检查更新失败：{e}") from e
+        if head.status_code == 404:
             raise RuntimeError(
                 f"新版本 v{version} 的本平台安装包尚未上传（CI 构建中），请稍后再试"
             )
         return {
-            "version": version,
-            "has_update": is_newer(tag),
-            "asset_url": (asset or {}).get("browser_download_url") or "",
-            "asset_name": (asset or {}).get("name") or "",
-            "asset_size": (asset or {}).get("size") or 0,
-            "notes_url": rel.get("html_url") or "",
-            "published_at": rel.get("published_at") or "",
-            "body": (rel.get("body") or "")[:800],
+            "version": version, "has_update": True, "asset_url": url,
+            "asset_name": want,
+            "asset_size": int(head.headers.get("content-length") or 0),
+            "notes_url": TAG_URL + tag, "published_at": "", "body": "",
         }
 
     # —— 下载 ——
