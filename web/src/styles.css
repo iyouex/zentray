@@ -159,6 +159,11 @@ body,
   background: inherit;
 }
 
+/* 保存条左侧说明（UI 重构 P2）：即时项与保存项的生效边界 */
+.save-hint {
+  margin-right: auto;
+}
+
 .two-col {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -369,6 +374,60 @@ body.zt-shape-crisp .quick-add-box {
   font-size: var(--zt-note);
   color: var(--color-text-muted);
   line-height: 1.5;
+}
+
+/* ---- 统一容器与分组（UI 重构 P2）----
+   设置类页面唯一容器 section.zt-block（表面 + zt-h3 标题）；
+   .zt-group 为裸分组头（不入表面，与块内标题拉开层级）；
+   .zt-stack 为纵向排布容器（块间 14px）；组间距 = 栈间隙 14 + 组自 margin 10 = 24px */
+.zt-block {
+  background: var(--color-bg-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--zt-radius-card);
+  padding: 14px 16px;
+}
+
+.zt-block > .zt-h3:last-child,
+.zt-block > .zt-block-head:last-child {
+  margin-bottom: 0;
+}
+
+.zt-block-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.zt-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.zt-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.zt-group:not(:last-child) {
+  margin-bottom: 10px;
+}
+
+/* 即时生效标记（UI 重构 P2）：灰描边 mini pill，标在改动立即生效的行尾 */
+.zt-instant {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 7px;
+  font-size: 11px;
+  line-height: 18px;
+  color: var(--color-text-3);
+  border: 1px solid var(--color-border-2);
+  border-radius: var(--zt-radius-pill);
+  vertical-align: 1px;
+  user-select: none;
 }
 
 /* 形状两档：利落（spec §5 shape=crisp） */
