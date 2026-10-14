@@ -565,6 +565,7 @@ def _updates_check() -> tuple[int, dict]:
 
 
 def _updates_download(body: dict) -> tuple[int, dict]:
+    from zentray.services.settings_manager import SettingsManager
     from zentray.services.updater import UpdaterService
 
     url = str(body.get("url") or "")
@@ -572,7 +573,7 @@ def _updates_download(body: dict) -> tuple[int, dict]:
     if not url or not version:
         return 400, {"error": "url 与 version 必填"}
     try:
-        UpdaterService.instance().start_download(url, version)
+        UpdaterService.instance().start_download(url, version, SettingsManager().update.proxy)
         return 200, {"started": True}
     except Exception as e:
         return 400, {"error": str(e)}
