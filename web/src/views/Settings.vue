@@ -29,10 +29,101 @@
           </a-menu-item-group>
         </a-menu>
 
-        <div class="settings-body" :class="{ 'is-ai': mainKey === 'ai', 'is-history': mainKey === 'history' }">
+        <div class="settings-body" :class="{ 'is-history': mainKey === 'history' }">
           <template v-if="mainKey === 'ai'">
-            <!-- 场景能力开关：卡片网格，默认全关 -->
-            <section class="feat-section zt-block">
+            <!-- ① 模型接入（前置条件，首块） -->
+            <section class="zt-block">
+              <div class="zt-block-head">
+                <h3 class="zt-h3">模型接入</h3>
+                <a-button
+                  v-if="form.ai.api_profiles.length"
+                  type="primary"
+                  size="small"
+                  @click="addApiProfile"
+                >
+                  ➕ 添加 API
+                </a-button>
+              </div>
+              <p class="hint">
+                可配置多个 API（名称区分），<b>同时只能启用一个</b>。点击行展开编辑。
+              </p>
+
+              <template v-if="form.ai.api_profiles.length">
+                <a-collapse
+                  v-model:active-key="apiExpandKeys"
+                  :bordered="true"
+                  expand-icon-position="right"
+                >
+                  <a-collapse-item
+                    v-for="p in form.ai.api_profiles"
+                    :key="p.id"
+                    :name="p.id"
+                  >
+                    <template #header>
+                      <div class="api-row-header" @click.stop>
+                        <span
+                          class="api-dot"
+                          :class="{ on: form.ai.active_api_id === p.id }"
+                          :title="form.ai.active_api_id === p.id ? '使用中' : '未启用'"
+                        />
+                        <span class="zt-h4">{{ p.name || '未命名' }}</span>
+                        <span class="api-meta">{{ p.model || '—' }} · {{ shortKey(p.api_key) }}</span>
+                        <a-button
+                          v-if="form.ai.active_api_id !== p.id"
+                          size="mini"
+                          type="outline"
+                          @click.stop="form.ai.active_api_id = p.id"
+                        >
+                          启用
+                        </a-button>
+                        <span v-else class="muted">当前</span>
+                      </div>
+                    </template>
+
+                    <a-form layout="vertical" size="small" class="api-edit-form api-edit-grid">
+                      <a-form-item label="名称">
+                        <a-input v-model="p.name" placeholder="配置名称" />
+                      </a-form-item>
+                      <a-form-item label="API Key">
+                        <a-input-password v-model="p.api_key" placeholder="sk-..." />
+                      </a-form-item>
+                      <a-form-item label="Base URL">
+                        <a-input v-model="p.base_url" placeholder="https://api.openai.com/v1" />
+                      </a-form-item>
+                      <a-form-item label="模型">
+                        <a-input v-model="p.model" placeholder="gpt-4o" />
+                      </a-form-item>
+                      <div class="api-edit-actions">
+                        <a-button
+                          v-if="form.ai.active_api_id !== p.id"
+                          size="small"
+                          type="primary"
+                          @click="form.ai.active_api_id = p.id"
+                        >
+                          设为当前使用
+                        </a-button>
+                        <a-button
+                          size="small"
+                          status="danger"
+                          :disabled="form.ai.api_profiles.length <= 1"
+                          @click="removeApiProfile(p.id)"
+                        >
+                          删除此配置
+                        </a-button>
+                      </div>
+                    </a-form>
+                  </a-collapse-item>
+                </a-collapse>
+              </template>
+              <div v-else class="api-empty">
+                <p class="hint">尚未配置模型 API——AI 功能需先在此接入一个可用 API。</p>
+                <a-button type="primary" size="small" @click="addApiProfile">➕ 添加 API</a-button>
+              </div>
+            </section>
+
+            <!-- ② 场景能力开关：卡片网格，默认全关 -->
+            <section class="zt-block">
+              <div class="zt-h3">场景能力</div>
               <div class="feat-grid">
                 <div
                   v-for="f in AI_FEATURES"
@@ -49,108 +140,30 @@
                 </div>
               </div>
               <p class="hint">
-                场景能力默认关闭；开启后立即出现在对应入口，模型调用复用下方「模型接入」中的当前 API。
+                场景能力默认关闭；开启后立即出现在对应入口，模型调用复用上方「模型接入」中的当前 API。
               </p>
             </section>
 
-            <a-tabs class="ai-tabs" type="rounded" v-model:active-key="aiTab">
-              <a-tab-pane key="plan" title="每日计划">
-                <JobEditor v-model="form.ai.plan" kind-label="每日计划" />
-              </a-tab-pane>
-
-              <a-tab-pane key="review" title="每日复盘">
-                <JobEditor v-model="form.ai.review" kind-label="每日复盘" />
-              </a-tab-pane>
-
-              <!-- 模型接入：折叠行 + 当前配置可编辑 -->
-              <a-tab-pane key="api" title="模型接入">
-                <section class="zt-block" style="max-width: 900px">
-                  <div class="zt-h3">模型接入</div>
-                  <p class="hint">
-                    可配置多个 API（名称区分），<b>同时只能启用一个</b>。折叠时各占一行，展开可编辑。
-                  </p>
-                  <a-space style="margin-bottom: 12px">
-                    <a-button type="primary" size="small" @click="addApiProfile">➕ 添加 API</a-button>
-                  </a-space>
-
-                  <a-collapse
-                    v-model:active-key="apiExpandKeys"
-                    :bordered="true"
-                    expand-icon-position="right"
-                  >
-                    <a-collapse-item
-                      v-for="p in form.ai.api_profiles"
-                      :key="p.id"
-                      :name="p.id"
-                    >
-                      <template #header>
-                        <div class="api-row-header" @click.stop>
-                          <a-tag
-                            v-if="form.ai.active_api_id === p.id"
-                            color="arcoblue"
-                            size="small"
-                          >
-                            使用中
-                          </a-tag>
-                          <a-tag v-else color="gray" size="small">未启用</a-tag>
-                          <span class="zt-h4">{{ p.name || '未命名' }}</span>
-                          <span class="api-meta">{{ p.model || '—' }} · {{ shortKey(p.api_key) }}</span>
-                          <a-button
-                            v-if="form.ai.active_api_id !== p.id"
-                            size="mini"
-                            type="outline"
-                            @click.stop="form.ai.active_api_id = p.id"
-                          >
-                            启用
-                          </a-button>
-                          <a-button
-                            v-else
-                            size="mini"
-                            type="primary"
-                            disabled
-                          >
-                            当前
-                          </a-button>
-                        </div>
-                      </template>
-
-                      <a-form layout="vertical" size="small" class="api-edit-form">
-                        <a-form-item label="名称">
-                          <a-input v-model="p.name" placeholder="配置名称" />
-                        </a-form-item>
-                        <a-form-item label="API Key">
-                          <a-input-password v-model="p.api_key" placeholder="sk-..." />
-                        </a-form-item>
-                        <a-form-item label="Base URL">
-                          <a-input v-model="p.base_url" placeholder="https://api.openai.com/v1" />
-                        </a-form-item>
-                        <a-form-item label="模型">
-                          <a-input v-model="p.model" placeholder="gpt-4o" />
-                        </a-form-item>
-                        <a-space>
-                          <a-button
-                            v-if="form.ai.active_api_id !== p.id"
-                            size="small"
-                            type="primary"
-                            @click="form.ai.active_api_id = p.id"
-                          >
-                            设为当前使用
-                          </a-button>
-                          <a-button
-                            size="small"
-                            status="danger"
-                            :disabled="form.ai.api_profiles.length <= 1"
-                            @click="removeApiProfile(p.id)"
-                          >
-                            删除此配置
-                          </a-button>
-                        </a-space>
-                      </a-form>
-                    </a-collapse-item>
-                  </a-collapse>
-                </section>
-              </a-tab-pane>
-            </a-tabs>
+            <!-- ③ 每日计划与复盘（合并双栏） -->
+            <section class="zt-block">
+              <div class="zt-h3">每日计划与复盘</div>
+              <div class="ai-jobs">
+                <div class="ai-job-col">
+                  <div class="ai-job-head">
+                    <span class="zt-h4">📋 每日计划</span>
+                    <a-switch v-model="form.ai.plan.enabled" size="small" />
+                  </div>
+                  <JobEditor v-model="form.ai.plan" kind-label="每日计划" headless />
+                </div>
+                <div class="ai-job-col">
+                  <div class="ai-job-head">
+                    <span class="zt-h4">📝 每日复盘</span>
+                    <a-switch v-model="form.ai.review.enabled" size="small" />
+                  </div>
+                  <JobEditor v-model="form.ai.review" kind-label="每日复盘" headless />
+                </div>
+              </div>
+            </section>
           </template>
 
           <!-- 通知：从 AI 页拆出的独立页（固定渠道，不可增删，可折叠） -->
@@ -525,9 +538,9 @@
           </template>
 
           <template v-else-if="mainKey === 'pomodoro'">
-            <div class="zt-stack" style="max-width: 420px">
+            <div class="pomo-grid">
               <section class="zt-block">
-                <div class="zt-h3">时长</div>
+                <div class="zt-h3">专注时长</div>
                 <div class="field-table">
                   <div class="field-line">
                     <span class="field-k">专注时长</span>
@@ -540,16 +553,23 @@
                   <div class="field-line">
                     <span class="field-k">节奏预设</span>
                     <a-space size="mini">
-                      <a-tag class="pomo-preset" size="small" @click="applyPomodoroPreset(25, 5, 15)">经典 25/5</a-tag>
-                      <a-tag class="pomo-preset" size="small" @click="applyPomodoroPreset(50, 10, 30)">深度 50/10</a-tag>
-                      <a-tag class="pomo-preset" size="small" @click="applyPomodoroPreset(90, 20, 30)">超长 90/20</a-tag>
+                      <a-tag
+                        v-for="preset in POMO_PRESETS"
+                        :key="preset.key"
+                        class="pomo-preset"
+                        :class="{ on: activePreset === preset.key }"
+                        size="small"
+                        @click="applyPomodoroPreset(preset.focus, preset.short, preset.long)"
+                      >
+                        {{ preset.label }}
+                      </a-tag>
                     </a-space>
                   </div>
                 </div>
               </section>
 
               <section class="zt-block">
-                <div class="zt-h3">专注-休息循环</div>
+                <div class="zt-h3">休息与循环</div>
                 <p class="hint">专注结束自动进入休息；长休在每 N 个专注后替代短休。</p>
                 <div class="field-table">
                   <div class="field-line">
@@ -582,8 +602,10 @@
               </section>
 
               <section class="zt-block">
-                <div class="zt-h3">托盘显示</div>
-                <p class="hint">左侧专注为番茄饼图、休息为茶绿饼图；右侧可选倒计时或文案（休息恒为倒计时）。</p>
+                <div class="zt-h3">托盘与菜单</div>
+                <p class="hint">
+                  左侧专注为番茄饼图、休息为茶绿饼图；右侧可选倒计时或文案（休息恒为倒计时）。托盘菜单「专注」按钮空闲时融合今日统计。
+                </p>
                 <div class="field-table">
                   <div class="field-line">
                     <span class="field-k">右侧文字</span>
@@ -607,25 +629,16 @@
                     <a-switch v-model="form.pomodoro.tray_icon_countdown" size="small" />
                     <span class="hint">Windows：饼图内叠加剩余分钟数字</span>
                   </div>
-                </div>
-              </section>
-
-              <section class="zt-block">
-                <div class="zt-h3">菜单按钮</div>
-                <p class="hint">
-                  托盘菜单「专注」按钮空闲时融合今日统计。占位符：{focus}=本次专注分钟、{today}=今日专注分钟、{count}=今日番茄数。
-                </p>
-                <div class="field-table">
-                  <div class="field-line">
+                  <div class="field-line pomo-menu-line">
                     <span class="field-k">按钮文案</span>
                     <a-input
                       v-model="form.pomodoro.menu_label_format"
                       size="small"
                       placeholder="🍅 专注{focus}mins -- 今日{today}mins"
                       :max-length="64"
-                      style="width: 320px"
                     />
                   </div>
+                  <p class="hint">占位符：{focus}=本次专注分钟、{today}=今日专注分钟、{count}=今日番茄数。</p>
                 </div>
               </section>
             </div>
@@ -1390,7 +1403,6 @@ const setThemeMode = inject('setThemeMode', null)
 const loading = ref(false)
 const saving = ref(false)
 const mainKey = ref('ai')
-const aiTab = ref('plan')
 const apiExpandKeys = ref([])
 const notifyExpandKeys = ref([])
 
@@ -2044,6 +2056,24 @@ const AI_FEATURES = [
 const fixedChannels = computed(() => ensureFixedChannels(form.notification))
 
 /** 番茄钟节奏预设：回填时长数字框（非独立模式） */
+const POMO_PRESETS = [
+  { key: 'classic', label: '经典 25/5', focus: 25, short: 5, long: 15 },
+  { key: 'deep', label: '深度 50/10', focus: 50, short: 10, long: 30 },
+  { key: 'long', label: '超长 90/20', focus: 90, short: 20, long: 30 },
+]
+
+/** 当前三值恰好等于某预设时返回其 key（选中态反馈） */
+const activePreset = computed(() => {
+  const p = form.pomodoro
+  const hit = POMO_PRESETS.find(
+    (x) =>
+      p.duration_minutes === x.focus &&
+      p.short_break_minutes === x.short &&
+      p.long_break_minutes === x.long,
+  )
+  return hit?.key || ''
+})
+
 function applyPomodoroPreset(focus, shortBreak, longBreak) {
   form.pomodoro.duration_minutes = focus
   form.pomodoro.short_break_minutes = shortBreak
@@ -3040,41 +3070,12 @@ body.zt-skin-clay .nav-main {
 .settings-body.is-history {
   overflow: hidden;
 }
-/* AI 页：场景开关 + 标签栏固定，仅 pane 内容滚动 */
-.settings-body.is-ai {
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-.settings-body.is-ai :deep(.ai-tabs),
-.settings-body.is-ai :deep(.arco-tabs) {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-.settings-body.is-ai :deep(.arco-tabs-nav) {
-  flex-shrink: 0;
-  margin-bottom: 8px;
-}
-.settings-body.is-ai :deep(.arco-tabs-content) {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  padding-top: 0;
-}
-.settings-body.is-ai :deep(.arco-tabs-content-list) {
-  height: auto;
-}
 /* AI 场景能力开关卡片网格 */
-.feat-section {
-  flex: none;
-  margin-bottom: 4px;
-}
 .feat-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 10px;
+  margin-bottom: 8px;
 }
 .feat-card {
   display: flex;
@@ -3123,6 +3124,53 @@ body.zt-skin-clay .nav-main {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* 模型接入行状态点：使用中=主色实心，未启用=灰（替换文字 tag） */
+.api-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--color-fill-3, #c9cdd4);
+}
+.api-dot.on {
+  background: var(--color-primary);
+}
+.api-empty {
+  padding: 8px 0 2px;
+}
+/* 展开区 2×2 grid（名称/Key/BaseURL/模型），动作行通栏 */
+.api-edit-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 16px;
+  max-width: 640px;
+}
+.api-edit-grid :deep(.arco-form-item) {
+  margin-bottom: 8px;
+}
+.api-edit-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 8px;
+}
+/* 每日计划与复盘：左右双栏（窄窗单列） */
+.ai-jobs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 24px;
+}
+@media (max-width: 900px) {
+  .ai-jobs {
+    grid-template-columns: 1fr;
+  }
+}
+.ai-job-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
 .api-edit-form,
 .ch-body {
   max-width: 520px;
@@ -3158,10 +3206,28 @@ body.zt-skin-clay .nav-main {
 .doc-link:hover {
   text-decoration: underline;
 }
-/* 番茄钟节奏预设标签：可点击回填 */
+/* 番茄钟页：满宽多栏网格（窄窗自动单列） */
+.pomo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  gap: 16px 24px;
+  max-width: 1040px;
+  align-items: start;
+}
+/* 菜单按钮文案行：输入框随列宽伸缩 */
+.pomo-menu-line :deep(.arco-input-wrapper) {
+  flex: 1;
+}
+/* 番茄钟节奏预设标签：可点击回填；恰等于预设值时主色 pill（chips 选中范式） */
 .pomo-preset {
   cursor: pointer;
   user-select: none;
+}
+.pomo-preset.on {
+  color: var(--color-primary) !important;
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent) !important;
+  border-color: color-mix(in srgb, var(--color-primary) 45%, transparent) !important;
+  font-weight: 600;
 }
 .cat-head {
   display: flex;

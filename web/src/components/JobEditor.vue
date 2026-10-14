@@ -1,16 +1,18 @@
 <template>
   <div class="job-editor">
-    <a-form layout="vertical" style="max-width: 720px">
-      <a-form-item :label="`启用${kindLabel}`">
-        <a-switch v-model="model.enabled" />
-        <span class="muted" style="margin-left: 10px">
-          关闭时下方设置不可改；开启后才可配置
+    <fieldset class="job-fields" :disabled="!model.enabled">
+      <div v-if="!headless" class="field-line">
+        <span class="field-k">{{ `启用${kindLabel}` }}</span>
+        <span class="field-v">
+          <a-switch v-model="model.enabled" />
+          <span class="muted">开启后才可配置</span>
         </span>
-      </a-form-item>
+      </div>
 
-      <fieldset class="job-fields" :disabled="!model.enabled">
-        <a-form-item label="调度时间">
-          <!-- 单一时间控件：可输入 HH:mm，也可用上下调节 -->
+      <div class="field-line">
+        <span class="field-k">调度时间</span>
+        <!-- 单一时间控件：可输入 HH:mm，也可用上下调节 -->
+        <span class="field-v">
           <div class="time-fused" :class="{ disabled: !model.enabled }">
             <button
               type="button"
@@ -58,108 +60,124 @@
               ▼
             </button>
           </div>
-          <div class="muted tiny">格式 08:30；左侧调小时、右侧调分钟，也可直接输入</div>
-        </a-form-item>
+        </span>
+      </div>
+      <p class="muted line-hint">格式 08:30；左侧调小时、右侧调分钟，也可直接输入</p>
 
-        <a-form-item label="跳过公休日">
+      <div class="field-line">
+        <span class="field-k">跳过公休日</span>
+        <span class="field-v">
           <a-switch
             :model-value="skipPublicRest"
             :disabled="!model.enabled"
             @change="onSkipPublicRest"
           />
-          <span class="muted" style="margin-left: 10px">
-            含周末与法定节假日（自动调度跳过；手动触发不受影响）
-          </span>
-        </a-form-item>
+        </span>
+      </div>
+      <p class="muted line-hint">含周末与法定节假日（自动调度跳过；手动触发不受影响）</p>
 
-        <a-form-item label="保存到本地 reviews/">
+      <div class="field-line">
+        <span class="field-k">保存到本地 reviews/</span>
+        <span class="field-v">
           <a-switch v-model="model.save_local" :disabled="!model.enabled" />
-        </a-form-item>
+        </span>
+      </div>
 
-        <a-form-item label="完成通知渠道">
+      <div class="field-line">
+        <span class="field-k">完成通知渠道</span>
+        <span class="field-v">
           <a-checkbox-group v-model="model.notify_channels" :disabled="!model.enabled" @change="onChannelsChange">
             <a-checkbox value="app_popup">应用弹窗</a-checkbox>
             <a-checkbox value="wxpusher">WxPusher</a-checkbox>
             <a-checkbox value="feishu_bot">飞书机器人</a-checkbox>
           </a-checkbox-group>
-          <div class="muted tiny">可多选，至少保留一项；WxPusher / 飞书机器人需在 设置 → 🔔 通知 中启用才实际推送</div>
-        </a-form-item>
+        </span>
+      </div>
+      <p class="muted line-hint">可多选，至少保留一项；WxPusher / 飞书机器人需在 设置 → 🔔 通知 中启用才实际推送</p>
 
-        <a-form-item label="报告托盘轮播">
-          <a-space size="small">
-            <a-switch v-model="model.report_tray_enabled" :disabled="!model.enabled" />
-            <a-input-number
-              v-model="model.report_tray_minutes"
-              :disabled="!model.enabled || !model.report_tray_enabled"
-              :min="1"
-              :max="1440"
-              :step="5"
-              size="small"
-              style="width: 104px"
-            />
-            <span class="muted">分钟</span>
-          </a-space>
-          <div class="muted tiny">
-            完成通知未点击查看时，报告提示进入顶栏任务轮播，到期自动退出
-          </div>
-        </a-form-item>
-
-        <a-divider>风格（毒舌 / 温柔 / 干练 + 自定义）</a-divider>
-        <p class="muted">内置三套默认风格，提示词均可改；也可新增自定义风格。</p>
-
-        <a-form-item label="当前使用风格">
-          <a-select
-            v-model="model.active_style_id"
-            :options="styleOptions"
-            :disabled="!model.enabled"
-            style="width: 240px"
+      <div class="field-line">
+        <span class="field-k">报告托盘轮播</span>
+        <span class="field-v">
+          <a-switch v-model="model.report_tray_enabled" :disabled="!model.enabled" />
+          <a-input-number
+            v-model="model.report_tray_minutes"
+            :disabled="!model.enabled || !model.report_tray_enabled"
+            :min="1"
+            :max="1440"
+            :step="5"
+            size="small"
+            style="width: 104px"
           />
-        </a-form-item>
+          <span class="muted">分钟</span>
+        </span>
+      </div>
+      <p class="muted line-hint">完成通知未点击查看时，报告提示进入顶栏任务轮播，到期自动退出</p>
 
-        <a-space style="margin-bottom: 8px">
+      <!-- 风格（毒舌/温柔/干练 + 自定义）：默认收起，作为栏尾 -->
+      <a-collapse class="style-collapse" :bordered="false">
+        <a-collapse-item
+          key="styles"
+          header="风格（毒舌 / 温柔 / 干练 + 自定义）"
+          :disabled="!model.enabled"
+        >
+          <p class="muted">内置三套默认风格，提示词均可改；也可新增自定义风格。</p>
+
+          <div class="field-line">
+            <span class="field-k">当前使用风格</span>
+            <span class="field-v">
+              <a-select
+                v-model="model.active_style_id"
+                :options="styleOptions"
+                :disabled="!model.enabled"
+                style="width: 240px"
+              />
+            </span>
+          </div>
+
           <a-button
             size="small"
             type="outline"
+            style="margin: 8px 0"
             :disabled="!model.enabled"
             @click="addCustomStyle"
           >
             ➕ 自定义风格
           </a-button>
-        </a-space>
 
-        <a-collapse :default-active-key="[model.active_style_id]">
-          <a-collapse-item
-            v-for="s in model.styles"
-            :key="s.id"
-            :header="`${s.name}${s.is_builtin ? '（内置）' : '（自定义）'}${s.id === model.active_style_id ? ' · 使用中' : ''}`"
-            :disabled="!model.enabled"
-          >
-            <a-form layout="vertical" size="small">
-              <a-form-item label="名称">
-                <a-input v-model="s.name" :disabled="!model.enabled" />
-              </a-form-item>
-              <a-form-item label="系统提示词（可自定义）">
-                <a-textarea
-                  v-model="s.system_prompt"
+          <a-collapse :default-active-key="[model.active_style_id]">
+            <a-collapse-item
+              v-for="s in model.styles"
+              :key="s.id"
+              :header="`${s.name}${s.is_builtin ? '（内置）' : '（自定义）'}${s.id === model.active_style_id ? ' · 使用中' : ''}`"
+              :disabled="!model.enabled"
+            >
+              <a-form layout="vertical" size="small">
+                <a-form-item label="名称">
+                  <a-input v-model="s.name" :disabled="!model.enabled" />
+                </a-form-item>
+                <a-form-item label="系统提示词（可自定义）">
+                  <a-textarea
+                    v-model="s.system_prompt"
+                    :disabled="!model.enabled"
+                    :auto-size="{ minRows: 4, maxRows: 10 }"
+                    placeholder="System prompt"
+                  />
+                </a-form-item>
+                <a-button
+                  v-if="!s.is_builtin"
+                  size="mini"
+                  status="danger"
                   :disabled="!model.enabled"
-                  :auto-size="{ minRows: 4, maxRows: 10 }"
-                  placeholder="System prompt"
-                />
-              </a-form-item>
-              <a-button
-                v-if="!s.is_builtin"
-                size="mini"
-                status="danger"
-                :disabled="!model.enabled"
-                @click="removeStyle(s.id)"
-              >
-                删除风格
-              </a-button>
-            </a-form>
-          </a-collapse-item>
-        </a-collapse>
-      </fieldset>
-    </a-form>
+                  @click="removeStyle(s.id)"
+                >
+                  删除风格
+                </a-button>
+              </a-form>
+            </a-collapse-item>
+          </a-collapse>
+        </a-collapse-item>
+      </a-collapse>
+    </fieldset>
   </div>
 </template>
 
@@ -170,6 +188,8 @@ const model = defineModel({ type: Object, required: true })
 defineProps({
   kindLabel: { type: String, default: '任务' },
   defaultTime: { type: String, default: '08:00' },
+  // 启用开关已提升到外层栏头时置 true，不再渲染本组件内的启用行
+  headless: { type: Boolean, default: false },
 })
 
 const timeText = ref('08:00')
@@ -295,10 +315,38 @@ watch(timeText, (v) => {
   margin: 0;
   padding: 0;
   min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 .job-fields:disabled {
   opacity: 0.55;
   pointer-events: none;
+}
+/* field-line 行式（与 Settings 页 zt 体系同构：标签左、控件右） */
+.field-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 32px;
+}
+.field-k {
+  font-size: var(--zt-t3);
+  color: var(--color-text-2);
+  flex-shrink: 0;
+}
+.field-v {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.line-hint {
+  margin: -2px 0 0;
+}
+.style-collapse :deep(.arco-collapse-item) {
+  border: none;
 }
 .time-fused {
   display: inline-grid;
@@ -365,8 +413,5 @@ watch(timeText, (v) => {
 .muted {
   color: var(--color-text-3);
   font-size: 12px;
-}
-.tiny {
-  margin-top: 6px;
 }
 </style>
