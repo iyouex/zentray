@@ -12,20 +12,27 @@
           :selected-keys="[mainKey]"
           @menu-item-click="onMainNav"
         >
-          <a-menu-item key="ai">✨ AI 能力</a-menu-item>
-          <a-menu-item key="notify">🔔 通知</a-menu-item>
-          <a-menu-item key="polling">📋 任务</a-menu-item>
-          <a-menu-item key="pomodoro">🍅 番茄钟</a-menu-item>
-          <a-menu-item key="ops">🧩 插件</a-menu-item>
-          <a-menu-item key="system">🖥️ 系统</a-menu-item>
-          <a-menu-item key="backup">💾 备份</a-menu-item>
-          <a-menu-item key="history">📜 历史</a-menu-item>
+          <!-- 导航三组（UI 重构 P2）：日常 / 集成与通知 / 应用与数据 -->
+          <a-menu-item-group title="日常工作">
+            <a-menu-item key="polling">📋 任务</a-menu-item>
+            <a-menu-item key="pomodoro">🍅 番茄钟</a-menu-item>
+          </a-menu-item-group>
+          <a-menu-item-group title="集成与通知">
+            <a-menu-item key="ai">✨ AI 能力</a-menu-item>
+            <a-menu-item key="notify">🔔 通知</a-menu-item>
+            <a-menu-item key="ops">🧩 插件</a-menu-item>
+          </a-menu-item-group>
+          <a-menu-item-group title="应用与数据">
+            <a-menu-item key="system">🖥️ 系统</a-menu-item>
+            <a-menu-item key="backup">💾 备份</a-menu-item>
+            <a-menu-item key="history">📜 历史</a-menu-item>
+          </a-menu-item-group>
         </a-menu>
 
         <div class="settings-body" :class="{ 'is-ai': mainKey === 'ai', 'is-history': mainKey === 'history' }">
           <template v-if="mainKey === 'ai'">
             <!-- 场景能力开关：卡片网格，默认全关 -->
-            <section class="feat-section">
+            <section class="feat-section zt-block">
               <div class="feat-grid">
                 <div
                   v-for="f in AI_FEATURES"
@@ -57,7 +64,8 @@
 
               <!-- 模型接入：折叠行 + 当前配置可编辑 -->
               <a-tab-pane key="api" title="模型接入">
-                <section class="section">
+                <section class="zt-block" style="max-width: 900px">
+                  <div class="zt-h3">模型接入</div>
                   <p class="hint">
                     可配置多个 API（名称区分），<b>同时只能启用一个</b>。折叠时各占一行，展开可编辑。
                   </p>
@@ -147,7 +155,8 @@
 
           <!-- 通知：从 AI 页拆出的独立页（固定渠道，不可增删，可折叠） -->
           <template v-else-if="mainKey === 'notify'">
-            <section class="section">
+            <section class="zt-block" style="max-width: 900px">
+              <div class="zt-h3">通知渠道</div>
               <p class="hint">
                 内置渠道（不可增删），可同时开启。点击行展开配置。
               </p>
@@ -229,7 +238,11 @@
           </template>
 
           <template v-else-if="mainKey === 'polling'">
-            <section class="compact-block">
+            <div class="zt-stack">
+            <!-- 页内分组（UI 重构 P2）：录入 / 集成 / 托盘与分类 -->
+            <div class="zt-group">
+              <h3 class="zt-h3">录入</h3>
+              <section class="zt-block">
               <div class="zt-h3">新建任务</div>
               <div class="field-table">
                 <div class="field-line">
@@ -239,7 +252,7 @@
               </div>
             </section>
 
-            <section class="compact-block">
+              <section class="zt-block">
               <div class="zt-h3">闪电添加</div>
               <div class="field-table">
                 <div class="field-line">
@@ -268,7 +281,10 @@
               <span class="hint">快捷键格式如 &lt;ctrl&gt;+&lt;alt&gt;+t（macOS 如 &lt;alt&gt;+&lt;space&gt;）；随「保存设置」生效；与系统/输入法同键位冲突时换组合。</span>
             </section>
 
-            <section class="compact-block">
+            </div>
+            <div class="zt-group">
+              <h3 class="zt-h3">集成</h3>
+              <section class="zt-block">
               <div class="zt-h3">飞书同步</div>
               <div class="field-table">
                 <div class="field-line">
@@ -321,7 +337,7 @@
               <span v-if="form.feishu_sync.enabled" class="hint">「测试连接 / 全量重同步」会先保存本卡片配置再执行；全量重同步不清远端旧对象，需要干净重来时先在飞书侧清空 ZenTray 日历/清单。</span>
             </section>
 
-            <section class="compact-block">
+              <section class="zt-block">
               <div class="zt-h3">系统日历</div>
               <div class="field-table">
                 <div class="field-line">
@@ -350,8 +366,11 @@
               </div>
             </section>
 
-            <div class="compact-page">
-              <section class="compact-block">
+            </div>
+            <div class="zt-group">
+              <h3 class="zt-h3">托盘与分类</h3>
+              <div class="zt-stack" style="max-width: 420px">
+              <section class="zt-block">
                 <div class="zt-h3">轮播设置</div>
                 <div class="field-table">
                   <div class="field-line">
@@ -382,9 +401,7 @@
                 </div>
               </section>
 
-              <div class="compact-sep" />
-
-              <section class="compact-block">
+              <section class="zt-block">
                 <div class="zt-h3">逾期设置</div>
                 <div class="field-table">
                   <div class="field-line">
@@ -403,12 +420,10 @@
                   </div>
                 </div>
               </section>
-            </div>
+              </div>
 
-            <div class="compact-sep" />
-
-            <div class="cat-page">
-              <section class="poll-block">
+              <div class="zt-stack" style="max-width: 640px">
+              <section class="zt-block">
                 <h3 class="zt-h3">标题格式</h3>
                 <a-form layout="vertical" style="max-width: 480px">
                   <a-form-item label="标题括号（成对选择）">
@@ -435,9 +450,8 @@
                 </a-form>
               </section>
 
-              <a-divider />
 
-              <section class="poll-block">
+              <section class="zt-block">
                 <div class="cat-head">
                   <h3 class="zt-h3" style="margin: 0">一级分类</h3>
                   <a-button type="primary" size="small" @click="addPrimary">➕ 添加一级</a-button>
@@ -505,12 +519,14 @@
                 </a-collapse>
                 <a-empty v-else description="暂无一级分类，请点击添加" />
               </section>
+              </div>
+            </div>
             </div>
           </template>
 
           <template v-else-if="mainKey === 'pomodoro'">
-            <div class="compact-page">
-              <section class="compact-block">
+            <div class="zt-stack" style="max-width: 420px">
+              <section class="zt-block">
                 <div class="zt-h3">时长</div>
                 <div class="field-table">
                   <div class="field-line">
@@ -532,9 +548,7 @@
                 </div>
               </section>
 
-              <div class="compact-sep" />
-
-              <section class="compact-block">
+              <section class="zt-block">
                 <div class="zt-h3">专注-休息循环</div>
                 <p class="hint">专注结束自动进入休息；长休在每 N 个专注后替代短休。</p>
                 <div class="field-table">
@@ -567,9 +581,7 @@
                 </div>
               </section>
 
-              <div class="compact-sep" />
-
-              <section class="compact-block">
+              <section class="zt-block">
                 <div class="zt-h3">托盘显示</div>
                 <p class="hint">左侧专注为番茄饼图、休息为茶绿饼图；右侧可选倒计时或文案（休息恒为倒计时）。</p>
                 <div class="field-table">
@@ -598,9 +610,7 @@
                 </div>
               </section>
 
-              <div class="compact-sep" />
-
-              <section class="compact-block">
+              <section class="zt-block">
                 <div class="zt-h3">菜单按钮</div>
                 <p class="hint">
                   托盘菜单「专注」按钮空闲时融合今日统计。占位符：{focus}=本次专注分钟、{today}=今日专注分钟、{count}=今日番茄数。
@@ -622,10 +632,10 @@
           </template>
 
           <template v-else-if="mainKey === 'ops'">
-            <div class="plugin-settings">
+            <div class="zt-stack plugin-settings">
               <!-- 总开关走页面底部「保存设置」 -->
-              <a-card class="plugin-card" :bordered="false">
-  <template #title><h3 class="zt-h3">总开关</h3></template>>
+              <section class="zt-block">
+  <div class="zt-h3">总开关</div>
                 <div class="plugin-switch-row">
                   <div>
                     <div class="plugin-title">启用插件</div>
@@ -668,7 +678,7 @@
                     可多选，至少保留一项（随「保存设置」生效）；WxPusher / 飞书机器人需在 设置 → 🔔 通知 中启用才实际推送
                   </div>
                 </a-form-item>
-              </a-card>
+              </section>
 
               <a-collapse v-model:active-key="opsPanes" class="ops-collapse" :bordered="false">
                 <!-- ① 插件列表 -->
@@ -959,18 +969,22 @@
           </template>
 
           <template v-else-if="mainKey === 'system'">
-            <div class="system-settings">
-              <a-card class="sys-card" :bordered="false">
-  <template #title><h3 class="zt-h3">外观</h3></template>>
+            <div class="zt-stack system-settings">
+            <!-- 页内分组（UI 重构 P2）：外观 / 系统行为 / 软件更新 -->
+            <div class="zt-group">
+              <h3 class="zt-h3">外观</h3>
+              <section class="zt-block">
                 <a-form layout="vertical" style="max-width: 420px">
-                  <a-form-item label="主题">
+                  <a-form-item>
+                    <template #label>主题 <span class="zt-instant">即时</span></template>
                     <a-radio-group v-model="form.appearance.theme" @change="onThemePreview">
                       <a-radio value="system">跟随系统</a-radio>
                       <a-radio value="light">浅色</a-radio>
                       <a-radio value="dark">深色</a-radio>
                     </a-radio-group>
                   </a-form-item>
-                  <a-form-item label="界面皮肤">
+                  <a-form-item>
+                    <template #label>界面皮肤 <span class="zt-instant">即时</span></template>
                     <a-radio-group v-model="form.appearance.skin" @change="onAppearancePreview">
                       <a-radio value="neo">Neo</a-radio>
                       <a-radio value="aurora">Aurora</a-radio>
@@ -978,7 +992,8 @@
                       <a-radio value="clay">黏土 Clay</a-radio>
                     </a-radio-group>
                   </a-form-item>
-                  <a-form-item label="界面动效">
+                  <a-form-item>
+                    <template #label>界面动效 <span class="zt-instant">即时</span></template>
                     <a-switch
                       v-model="form.appearance.motion"
                       checked-value="full"
@@ -988,7 +1003,8 @@
                       @change="onAppearancePreview"
                     />
                   </a-form-item>
-                  <a-form-item label="形状风格">
+                  <a-form-item>
+                    <template #label>形状风格 <span class="zt-instant">即时</span></template>
                     <a-radio-group v-model="form.appearance.shape" @change="onAppearancePreview">
                       <a-radio value="round">圆润</a-radio>
                       <a-radio value="crisp">利落</a-radio>
@@ -996,13 +1012,16 @@
                   </a-form-item>
                   <a-alert type="info">主题预览立即生效；点底部「保存设置」写入配置。</a-alert>
                 </a-form>
-              </a-card>
+              </section>
 
-              <a-card class="sys-card" :bordered="false">
-  <template #title><h3 class="zt-h3">启动</h3></template>>
+              </div>
+            <div class="zt-group">
+              <h3 class="zt-h3">系统行为</h3>
+              <section class="zt-block">
+                <div class="zt-h3">启动</div>
                 <div class="sys-row">
                   <div>
-                    <div class="zt-h4">开机自启</div>
+                    <div class="zt-h4">开机自启 <span class="zt-instant">即时</span></div>
                     <div class="sys-desc">
                       开启后登录系统时自动启动 ZenTray。开关立即生效，无需点保存。
                     </div>
@@ -1014,10 +1033,42 @@
                     @change="onAutostartChange"
                   />
                 </div>
-              </a-card>
+              </section>
 
-              <a-card class="sys-card" :bordered="false">
-  <template #title><h3 class="zt-h3">软件更新</h3></template>>
+              <!-- Windows 任务栏中央按钮（设计 §3.0）；后端探测不到时整块隐藏 -->
+              <section v-if="taskbarLabelVisible !== null" class="zt-block">
+                <div class="zt-h3">任务栏显示（Windows）</div>
+                <div class="sys-row">
+                  <div>
+                    <div class="zt-h4">任务栏中央显示</div>
+                    <div class="sys-desc">
+                      任务栏正中常驻 ZenTray 按钮：动态图标 + 完整文字标签，与任务轮播同拍；
+                      关闭则退回仅通知区图标。
+                    </div>
+                  </div>
+                  <a-switch v-model="form.appearance.taskbar_center_enabled" />
+                </div>
+                <div class="field-table" style="margin-top: 12px">
+                  <div class="field-line">
+                    <span class="field-k">标签长度</span>
+                    <NumberSpinner v-model="form.appearance.taskbar_label_length" :min="8" :max="32" suffix="字" />
+                  </div>
+                  <div class="field-line">
+                    <span class="field-k">长标题跑马灯</span>
+                    <a-switch v-model="form.appearance.taskbar_label_marquee" size="small" />
+                  </div>
+                </div>
+                <p class="sys-desc" style="margin-top: 10px">超长标签默认截断加…；跑马灯开启后 400ms 步进滚动。改动随底部「保存设置」生效。</p>
+                <a-alert v-if="taskbarLabelVisible === false" type="warning" style="margin-top: 10px">
+                  任务栏当前为「合并按钮」模式，文字标签不显示（图标/速览面板不受影响）。
+                  <a-button size="mini" style="margin-left: 8px" @click="onOpenTaskbarSettings">前往任务栏设置</a-button>
+                </a-alert>
+              </section>
+              </div>
+
+              <div class="zt-group">
+              <h3 class="zt-h3">软件更新</h3>
+              <section class="zt-block">
                 <div class="sys-row">
                   <div>
                     <div class="zt-h4">当前版本 v{{ appVersion || '…' }}</div>
@@ -1059,45 +1110,16 @@
                     style="max-width: 320px"
                   />
                 </div>
-              </a-card>
-
-              <!-- Windows 任务栏中央按钮（设计 §3.0）；后端探测不到时整卡隐藏 -->
-              <a-card v-if="taskbarLabelVisible !== null" class="sys-card" :bordered="false">
-  <template #title><h3 class="zt-h3">任务栏显示（Windows）</h3></template>>
-                <div class="sys-row">
-                  <div>
-                    <div class="zt-h4">任务栏中央显示</div>
-                    <div class="sys-desc">
-                      任务栏正中常驻 ZenTray 按钮：动态图标 + 完整文字标签，与任务轮播同拍；
-                      关闭则退回仅通知区图标。
-                    </div>
-                  </div>
-                  <a-switch v-model="form.appearance.taskbar_center_enabled" />
-                </div>
-                <div class="field-table" style="margin-top: 12px">
-                  <div class="field-line">
-                    <span class="field-k">标签长度</span>
-                    <NumberSpinner v-model="form.appearance.taskbar_label_length" :min="8" :max="32" suffix="字" />
-                  </div>
-                  <div class="field-line">
-                    <span class="field-k">长标题跑马灯</span>
-                    <a-switch v-model="form.appearance.taskbar_label_marquee" size="small" />
-                  </div>
-                </div>
-                <p class="sys-desc" style="margin-top: 10px">超长标签默认截断加…；跑马灯开启后 400ms 步进滚动。改动随底部「保存设置」生效。</p>
-                <a-alert v-if="taskbarLabelVisible === false" type="warning" style="margin-top: 10px">
-                  任务栏当前为「合并按钮」模式，文字标签不显示（图标/速览面板不受影响）。
-                  <a-button size="mini" style="margin-left: 8px" @click="onOpenTaskbarSettings">前往任务栏设置</a-button>
-                </a-alert>
-              </a-card>
+              </section>
+              </div>
             </div>
           </template>
 
-          <!-- 备份：五卡片（存储目录 / 手动备份 / 自动策略 / 恢复 / 历史快照） -->
+          <!-- 备份：五块（存储目录 / 手动备份 / 自动策略 / 恢复 / 历史快照） -->
           <template v-else-if="mainKey === 'backup'">
-            <div class="system-settings">
-              <a-card class="sys-card" :bordered="false">
-  <template #title><h3 class="zt-h3">备份存储目录</h3></template>>
+            <div class="zt-stack system-settings">
+              <section class="zt-block">
+  <div class="zt-h3">备份存储目录</div>
                 <div class="sys-row">
                   <div style="min-width: 0">
                     <div class="zt-h4">
@@ -1114,10 +1136,10 @@
                     <a-button v-if="form.backup.dir" @click="form.backup.dir = ''">恢复默认</a-button>
                   </a-space>
                 </div>
-              </a-card>
+              </section>
 
-              <a-card class="sys-card" :bordered="false">
-  <template #title><h3 class="zt-h3">手动即时备份</h3></template>>
+              <section class="zt-block">
+  <div class="zt-h3">手动即时备份</div>
                 <div class="sys-section-label">备份内容</div>
                 <a-checkbox-group v-model="exportInclude" direction="vertical" class="export-checks">
                   <a-checkbox v-for="opt in includeOptions" :key="opt.key" :value="opt.key">
@@ -1150,10 +1172,10 @@
                 <p v-if="lastExportPath" class="sys-path">
                   最近导出：<code>{{ lastExportPath }}</code>
                 </p>
-              </a-card>
+              </section>
 
-              <a-card class="sys-card" :bordered="false">
-  <template #title><h3 class="zt-h3">自动周期备份策略</h3></template>>
+              <section class="zt-block">
+  <div class="zt-h3">自动周期备份策略</div>
                 <div class="sys-row">
                   <div>
                     <div class="zt-h4">自动备份</div>
@@ -1184,10 +1206,10 @@
                   上次自动备份：{{ backupStatus.last_backup_at || '尚未自动备份' }}。
                   轮转仅清理自动备份自身（zentray-auto-*），不影响手动导出。
                 </p>
-              </a-card>
+              </section>
 
-              <a-card class="sys-card" :bordered="false">
-  <template #title><h3 class="zt-h3">从备份文件恢复</h3></template>>
+              <section class="zt-block">
+  <div class="zt-h3">从备份文件恢复</div>
                 <div class="sys-import-row">
                   <a-input
                     v-model="importPath"
@@ -1228,16 +1250,16 @@
                   恢复为<strong>替换</strong>模式：覆盖本地所选数据；操作前会自动写入安全备份。
                 </a-alert>
                 <p v-if="lastImportMsg" class="sys-path">{{ lastImportMsg }}</p>
-              </a-card>
+              </section>
 
-              <a-card class="sys-card bk-snapshots" :bordered="false">
-  <template #title><h3 class="zt-h3">历史备份快照</h3></template>>
-                <template #extra>
+              <section class="zt-block bk-snapshots">
+                <div class="zt-block-head">
+                  <h3 class="zt-h3">历史备份快照</h3>
                   <a-space>
                     <a-tag size="small">{{ snapshots.length }} 个备份</a-tag>
                     <a-button size="small" :loading="snapshotsLoading" @click="loadBackups">刷新</a-button>
                   </a-space>
-                </template>
+                </div>
                 <a-table
                   :data="snapshots"
                   :loading="snapshotsLoading"
@@ -1279,7 +1301,7 @@
                   </template>
                 </a-table>
                 <p class="sys-hint muted">目录：<code>{{ backupStatus.dir || backupDirDisplay }}</code></p>
-              </a-card>
+              </section>
             </div>
           </template>
 
@@ -1293,6 +1315,7 @@
     </div>
 
     <div class="page-footer">
+      <span v-if="mainKey !== 'history'" class="hint save-hint">带「即时」标记的项改动立即生效，其余随「保存设置」写入</span>
       <a-button @click="cancelHost">取消</a-button>
       <a-button v-if="mainKey !== 'history'" type="primary" :loading="saving" @click="onSave">💾 保存设置</a-button>
     </div>
@@ -2941,6 +2964,16 @@ onMounted(async () => {
   top: 0;
   overflow: auto;
 }
+.nav-main :deep(.arco-menu-group-title) {
+  font-size: var(--zt-note);
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--color-text-3);
+  letter-spacing: 0.05em;
+  padding: 10px 12px 4px;
+  cursor: default;
+}
+
 /* 选中态统一结构（UI 重构 P1）：左 3px 主色竖条 + 主色文字 + 600 + 8% 主色底；
    四皮肤只在下方改竖条配色，不改结构 */
 .nav-main :deep(.arco-menu-item.arco-menu-selected) {
@@ -2973,7 +3006,8 @@ body.zt-skin-aurora .nav-main :deep(.arco-menu-item.arco-menu-selected)::before 
   background: linear-gradient(180deg, var(--color-primary), #818cf8);
 }
 /* Neo：设置页容器去描边纯阴影 */
-body.zt-skin-neo .settings-page-body :deep(.arco-card) {
+body.zt-skin-neo .settings-page-body :deep(.arco-card),
+body.zt-skin-neo .settings-page-body .zt-block {
   border: none;
 }
 body.zt-skin-neo .settings-page-body :deep(.arco-collapse) {
@@ -3032,9 +3066,6 @@ body.zt-skin-clay .nav-main {
 }
 .settings-body.is-ai :deep(.arco-tabs-content-list) {
   height: auto;
-}
-.section {
-  max-width: 900px;
 }
 /* AI 场景能力开关卡片网格 */
 .feat-section {
@@ -3103,18 +3134,7 @@ body.zt-skin-clay .nav-main {
   margin-left: 8px;
   font-size: 12px;
 }
-/* 紧凑设置页：标签左、控件右，一行一条 */
-.compact-page {
-  max-width: 420px;
-}
-.compact-block {
-  margin: 0;
-}
-.compact-sep {
-  height: 1px;
-  background: var(--color-border-2);
-  margin: 14px 0;
-}
+/* 设置行：标签左、控件右，一行一条 */
 .field-table {
   display: flex;
   flex-direction: column;
@@ -3143,13 +3163,6 @@ body.zt-skin-clay .nav-main {
 .pomo-preset {
   cursor: pointer;
   user-select: none;
-}
-/* 分类页仍用 poll-block 类名 */
-.poll-block {
-  margin-bottom: 8px;
-}
-.cat-page {
-  max-width: 640px;
 }
 .cat-head {
   display: flex;
@@ -3193,9 +3206,6 @@ body.zt-skin-clay .nav-main {
   display: flex;
   flex-direction: column;
   gap: 14px;
-}
-.sys-card :deep(.arco-card-body) {
-  padding-top: 12px;
 }
 .sys-row {
   display: flex;
@@ -3274,20 +3284,6 @@ body.zt-skin-clay .nav-main {
   gap: 14px;
   max-width: 880px;
   padding-bottom: 8px;
-}
-.plugin-card {
-  background: var(--color-fill-1, #f7f8fa);
-  border-radius: 10px;
-}
-.plugin-card :deep(.arco-card-header) {
-  padding: 12px 16px 0;
-  border: none;
-}
-.plugin-card :deep(.arco-card-body) {
-  padding: 12px 16px 16px;
-}
-.plugin-card-muted {
-  opacity: 0.65;
 }
 .plugin-switch-row {
   display: flex;
