@@ -539,51 +539,49 @@
 
           <template v-else-if="mainKey === 'pomodoro'">
             <div class="pomo-grid">
-              <section class="zt-block">
-                <div class="zt-h3">专注时长</div>
-                <div class="field-table">
-                  <div class="field-line">
-                    <span class="field-k">专注时长</span>
+              <section class="zt-block is-wide">
+                <div class="zt-block-head">
+                  <h3 class="zt-h3">专注节奏</h3>
+                  <a-space size="mini">
+                    <a-tag
+                      v-for="preset in POMO_PRESETS"
+                      :key="preset.key"
+                      class="pomo-preset"
+                      :class="{ on: activePreset === preset.key }"
+                      size="small"
+                      @click="applyPomodoroPreset(preset.focus, preset.short, preset.long)"
+                    >
+                      {{ preset.label }}
+                    </a-tag>
+                  </a-space>
+                </div>
+                <div class="pomo-dials">
+                  <div class="pomo-dial">
                     <NumberSpinner v-model="form.pomodoro.duration_minutes" :min="1" :max="180" suffix="分" />
+                    <div class="pomo-dial-k">专注时长</div>
                   </div>
-                  <div class="field-line">
-                    <span class="field-k">延长步长</span>
-                    <NumberSpinner v-model="form.pomodoro.extend_minutes" :min="1" :max="60" suffix="分" />
+                  <div class="pomo-dial">
+                    <NumberSpinner v-model="form.pomodoro.short_break_minutes" :min="1" :max="60" suffix="分" />
+                    <div class="pomo-dial-k">短休时长</div>
                   </div>
-                  <div class="field-line">
-                    <span class="field-k">节奏预设</span>
-                    <a-space size="mini">
-                      <a-tag
-                        v-for="preset in POMO_PRESETS"
-                        :key="preset.key"
-                        class="pomo-preset"
-                        :class="{ on: activePreset === preset.key }"
-                        size="small"
-                        @click="applyPomodoroPreset(preset.focus, preset.short, preset.long)"
-                      >
-                        {{ preset.label }}
-                      </a-tag>
-                    </a-space>
+                  <div class="pomo-dial">
+                    <NumberSpinner v-model="form.pomodoro.long_break_minutes" :min="1" :max="60" suffix="分" />
+                    <div class="pomo-dial-k">长休时长</div>
+                  </div>
+                  <div class="pomo-dial">
+                    <NumberSpinner v-model="form.pomodoro.long_break_every" :min="0" :max="12" suffix="个" />
+                    <div class="pomo-dial-k">长休间隔</div>
+                    <div class="hint">每 N 个专注进长休，0 = 只用短休</div>
                   </div>
                 </div>
               </section>
 
               <section class="zt-block">
-                <div class="zt-h3">休息与循环</div>
-                <p class="hint">专注结束自动进入休息；长休在每 N 个专注后替代短休。</p>
+                <div class="zt-h3">专注行为</div>
                 <div class="field-table">
                   <div class="field-line">
-                    <span class="field-k">短休时长</span>
-                    <NumberSpinner v-model="form.pomodoro.short_break_minutes" :min="1" :max="60" suffix="分" />
-                  </div>
-                  <div class="field-line">
-                    <span class="field-k">长休时长</span>
-                    <NumberSpinner v-model="form.pomodoro.long_break_minutes" :min="1" :max="60" suffix="分" />
-                  </div>
-                  <div class="field-line">
-                    <span class="field-k">长休间隔</span>
-                    <NumberSpinner v-model="form.pomodoro.long_break_every" :min="0" :max="12" suffix="个" />
-                    <span class="hint">每 N 个专注进长休，0 = 只用短休</span>
+                    <span class="field-k">延长步长</span>
+                    <NumberSpinner v-model="form.pomodoro.extend_minutes" :min="1" :max="60" suffix="分" />
                   </div>
                   <div class="field-line">
                     <span class="field-k">专注结束自动休息</span>
@@ -2865,13 +2863,33 @@ body.zt-skin-clay .nav-main {
 .doc-link:hover {
   text-decoration: underline;
 }
-/* 番茄钟页：满宽多栏网格（窄窗自动单列） */
+/* 番茄钟页：满宽多栏网格（窄窗自动单列）；节奏盘通栏占整行 */
 .pomo-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
   gap: 16px 24px;
   max-width: 1040px;
   align-items: start;
+}
+.pomo-grid > .is-wide {
+  grid-column: 1 / -1;
+}
+/* 节奏盘：四拨盘格（NumberSpinner + 下方 t3 标注） */
+.pomo-dials {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px 16px;
+}
+.pomo-dial {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+}
+.pomo-dial-k {
+  font-size: var(--zt-t3);
+  font-weight: 600;
+  color: var(--color-text-2);
 }
 /* 菜单按钮文案行：输入框随列宽伸缩 */
 .pomo-menu-line :deep(.arco-input-wrapper) {
