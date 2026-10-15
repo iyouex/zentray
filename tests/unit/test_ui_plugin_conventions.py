@@ -39,10 +39,14 @@ def test_plugin_row_four_actions():
         assert label in _SETTINGS, f"插件行动作缺失：{label}"
 
 
-def test_plugin_row_type_dot_and_trigger_hint():
-    # 行首类型色点（脚本=绿/服务=橙）+ manifest 触发的一行式提示
-    assert "plug-dot" in _SETTINGS and "is-script" in _SETTINGS and "is-service" in _SETTINGS
-    assert "plug-auto" in _SETTINGS and "trigLabel" in _SETTINGS
+def test_plugin_row_name_and_tags():
+    # 行=名称+标签组（类型/分类/写回/触发逐条），无简介行/触发小字/色点
+    assert ":color=\"p.type === 'service' ? 'orangered' : 'green'\"" in _SETTINGS
+    assert 'v-if="p.category" size="small" color="cyan"' in _SETTINGS
+    assert 'v-if="p.write_back" size="small" color="purple"' in _SETTINGS
+    assert "color=\"arcoblue\">{{ trigLabel(t) }}" in _SETTINGS
+    for dead in ("plug-desc", "plug-auto", "plug-dot"):
+        assert dead not in _SETTINGS, f"插件行残留已删展示元素：{dead}"
 
 
 def test_authorize_switch_survives():
