@@ -92,8 +92,12 @@ def try_vue_quick_add(controller: "TrayController") -> bool:
         transparent=True,
         modal=True,
     )
-    if ok and isinstance(payload, dict) and payload.get("action") == "added":
-        controller.reload_data()
+    if ok and isinstance(payload, dict):
+        if payload.get("action") == "added":
+            controller.reload_data()
+        elif payload.get("action") == "open_new_task":
+            # 浮层已关，链式开完整表单（同 Glance→quick_add 范式）
+            open_vue_route("/tasks/new", title="新建任务", width=880, height=540)
     return True
 
 

@@ -59,3 +59,19 @@ def test_pomodoro_full_width_grid():
     assert "minmax(380px, 1fr)" in _SETTINGS, "pomo-grid 应为 auto-fit 自适应列"
     assert "activePreset" in _SETTINGS, "节奏预设应有选中态反馈 activePreset"
     assert ".pomo-preset.on" in _SETTINGS, "预设选中态样式应存在（chips 范式）"
+
+
+def test_pomodoro_rhythm_dial_block():
+    """节奏盘（二轮重排）：预设 chips 上移 zt-block-head，四拨盘同块，预设 field-line 行删除。"""
+    pomo = _pomo_section()
+    assert 'class="pomo-dials"' in pomo, "专注节奏块应为四拨盘格 pomo-dials"
+    assert "minmax(150px, 1fr)" in _SETTINGS, "拨盘格应为 auto-fit minmax(150px,1fr)"
+    assert "pomo-dial-k" in pomo, "拨盘格应有 t3 级小标注 pomo-dial-k"
+    assert "0 = 只用短休" in pomo, "长休间隔格应保留 0=只用短休 尾注"
+    # 预设 chips 在 zt-block-head 内（块头操作位），不再占 field-line 行
+    head = re.search(r'<div class="zt-block-head">.*?</div>\s*<div class="pomo-dials">', pomo, re.S)
+    assert head, "节奏盘块头未找到（zt-block-head + pomo-dials 相邻结构）"
+    assert "pomo-preset" in head.group(0), "节奏预设 chips 应在 zt-block-head 操作位"
+    assert "节奏预设" not in pomo, "原「节奏预设」field-line 行应删除"
+    assert ".pomo-grid > .is-wide" in _SETTINGS, "节奏盘通栏规则 is-wide 应存在"
+    assert "专注行为" in pomo, "块2 应为「专注行为」"
