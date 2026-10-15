@@ -11,17 +11,28 @@
           @press-enter="onEnter"
           @keydown.esc="onEsc"
         />
-        <a-button
-          v-if="aiOn"
-          class="qa-ai-btn"
-          size="large"
-          :loading="aiLoading"
-          aria-label="AI 智能解析"
-          title="AI 智能解析：自动补分类/优先级/截止/子任务"
-          @click="onAiParse"
-        >
-          <template #icon><PhSparkle :size="18" /></template>
-        </a-button>
+        <div class="qa-actions">
+          <a-button
+            v-if="aiOn"
+            class="qa-ai-btn"
+            size="small"
+            :loading="aiLoading"
+            aria-label="AI 智能解析"
+            title="AI 智能解析：自动补分类/优先级/截止/子任务"
+            @click="onAiParse"
+          >
+            <template #icon><PhSparkle :size="16" /></template>
+          </a-button>
+          <a-button
+            class="qa-new-btn"
+            size="small"
+            aria-label="新建任务"
+            title="新建任务：打开完整表单（分类/提醒/子任务/附件）"
+            @click="onNewTask"
+          >
+            <template #icon><PhPlus :size="16" /></template>
+          </a-button>
+        </div>
       </div>
 
       <!-- AI 解析预览：字段 chips + 子任务，确认后带完整字段入库 -->
@@ -51,7 +62,7 @@
 <script setup>
 import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { Message } from '@arco-design/web-vue'
-import { PhSparkle } from '@phosphor-icons/vue'
+import { PhPlus, PhSparkle } from '@phosphor-icons/vue'
 import {
   aiParse,
   cancelHost,
@@ -152,6 +163,11 @@ function onCancel() {
   cancelHost()
 }
 
+/** 跳转完整表单：关浮层，宿主链式开 /tasks/new（同 Glance→quick_add 范式） */
+function onNewTask() {
+  closeHost({ action: 'open_new_task' })
+}
+
 onMounted(async () => {
   try {
     const meta = await getMeta()
@@ -217,8 +233,12 @@ onMounted(() => {
   gap: 8px;
   align-items: stretch;
 }
-.qa-ai-btn {
+/* 按钮栈与输入框并排；两钮均 small 防栈高撑爆紧凑行 */
+.qa-actions {
   flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 .qa-preview {
   margin-top: 12px;
