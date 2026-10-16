@@ -46,7 +46,7 @@ jobs:
             "$dir/python312.dll",
             "$dir/VCRUNTIME140.dll",
             "$dir/VCRUNTIME140_1.dll",
-            "$dir/PySide6/PySide6Core.pyd"
+            "$dir/PySide6/QtCore.pyd"
           ) + (Get-ChildItem "$dir" -Depth 1 -Filter "Qt6Core.dll" | Select-Object -First 1 -ExpandProperty FullName)
           $failed = @()
           foreach ($t in $targets) {
