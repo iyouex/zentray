@@ -251,6 +251,14 @@ class _TaskbarCenterWindow(QWidget):
     def __init__(self):
         super().__init__()
         self._resetting = False
+        # 自己的 show()（创建时与 _reset 复位）绝不自我激活：Windows 顶层窗口的
+        # SW_SHOWNORMAL 会引发 OS 级激活，而 WM_ACTIVATE 经消息队列异步投递、
+        # 落地时 _resetting 已同步复位 → ActivationChange 再次触发速览+复位 →
+        # 无限循环：任务栏按钮随 hide/show 狂闪、模态速览面板循环重开，其余
+        # 窗口全部唤起不了（v0.7.13 首个可启动 Windows 包实测）。
+        # WA_ShowWithoutActivating 在 Windows 仅映射为 SW_SHOWNOACTIVATE、不设
+        # WS_EX_NOACTIVATE（qwindowswindow.cpp），任务栏按钮点击仍正常激活。
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         self.setWindowFlags(
             Qt.WindowType.Window
             | Qt.WindowType.FramelessWindowHint
@@ -274,7 +282,8 @@ class _TaskbarCenterWindow(QWidget):
             def _reset():
                 self.hide()
                 self.show()
-                self._resetting = False
+                # 守卫延迟解除：show() 若仍引发激活，消息异步投递，同步复位会被绕过
+                QTimer.singleShot(150, self, lambda: setattr(self, "_resetting", False))
 
             QTimer.singleShot(0, _reset)
         super().changeEvent(ev)
