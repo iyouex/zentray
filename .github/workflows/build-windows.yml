@@ -62,24 +62,35 @@ jobs:
 
       # 探针2：真正启动 exe。windowed 引导器在 DLL 加载失败时只弹 MessageBox（挂住，
       # 无法自动判读），故用 console=True 变体重打——失败信息直写 stderr 且立即退出。
-      # 此前从未有任何环境验证过"bootloader 进程内加载 python312.dll"这一步。
-      - name: 冒烟探针2——实际启动 exe（console 引导器变体）
+      # 二分变量：strip=True（现状，疑为根因——GNU strip 削 MSVC PE）vs strip=False。
+      - name: 冒烟探针2——启动 exe + strip 双变量二分
         shell: pwsh
         run: |
-          (Get-Content zentray.spec -Raw) -replace 'console\s*=\s*False', 'console=True' |
-            Set-Content zentray-smoke.spec
-          pyinstaller zentray-smoke.spec --noconfirm --workpath build-smoke --distpath dist-smoke
-          $p = Start-Process "dist-smoke/ZenTray/ZenTray.exe" -WorkingDirectory "dist-smoke/ZenTray" -PassThru `
-               -RedirectStandardOutput smoke-out.log -RedirectStandardError smoke-err.log
-          Start-Sleep -Seconds 25
-          if ($p.HasExited) {
-            "EXE 已退出，退出码 $($p.ExitCode)"
-            "--- stdout ---"; Get-Content smoke-out.log -ErrorAction SilentlyContinue | Select-Object -First 30
-            "--- stderr ---"; Get-Content smoke-err.log -ErrorAction SilentlyContinue | Select-Object -First 30
-            exit 1
+          "strip 路径: " + (Get-Command strip -ErrorAction SilentlyContinue).Source
+          "源 python312.dll 哈希: " + (Get-FileHash "$env:pythonLocation\python312.dll").Hash
+          function Test-ZenTrayLaunch($spec, $tag) {
+            pyinstaller $spec --noconfirm --workpath "build-$tag" --distpath "dist-$tag"
+            if ($tag -eq 'nostrip') {
+              "nostrip python312.dll 哈希: " + (Get-FileHash "dist-$tag/ZenTray/_internal/python312.dll").Hash
+            }
+            $p = Start-Process "dist-$tag/ZenTray/ZenTray.exe" -WorkingDirectory "dist-$tag/ZenTray" -PassThru `
+                 -RedirectStandardOutput "$tag-out.log" -RedirectStandardError "$tag-err.log"
+            Start-Sleep -Seconds 25
+            if ($p.HasExited) {
+              "[$tag] FAIL 退出码 $($p.ExitCode)"
+              Get-Content "$tag-err.log" -ErrorAction SilentlyContinue | Select-Object -First 5
+              return $false
+            }
+            "[$tag] OK 存活 25s——bootloader 已加载 python312.dll 进入应用主循环"
+            Stop-Process -Id $p.Id -Force
+            return $true
           }
-          "OK: exe 存活 25s——bootloader 已加载 python312.dll 并进入应用主循环"
-          Stop-Process -Id $p.Id -Force
+          $specBase = Get-Content zentray.spec -Raw
+          $specBase -replace 'console\s*=\s*False', 'console=True' | Set-Content zentray-smoke-strip.spec
+          $specBase -replace 'console\s*=\s*False', 'console=True' -replace 'strip\s*=\s*True', 'strip=False' |
+            Set-Content zentray-smoke-nostrip.spec
+          Test-ZenTrayLaunch 'zentray-smoke-strip.spec' 'strip' | Out-Null   # 定罪用，失败不挡流程
+          if (-not (Test-ZenTrayLaunch 'zentray-smoke-nostrip.spec' 'nostrip')) { exit 1 }
 
       # 提交信息带 [smoke-only] 时跳过 zip+上传（排障探针运行不 churn release 资产）
       - name: 打 zip 并上传到 release v$ver（版本号取自 zentray/config.py）
