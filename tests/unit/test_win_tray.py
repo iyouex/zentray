@@ -105,6 +105,27 @@ def test_taskbar_label_visible_none_offscreen_linux():
         assert taskbar_label_visible() is None
 
 
+def test_taskbar_center_window_never_self_activates():
+    # v0.7.13 Windows 狂闪回归：中央按钮的 show()（含 _reset 的 hide/show 复位）
+    # 自我激活 → ActivationChange 死循环（任务栏图标狂闪、速览模态循环重开）。
+    # 必须带 WA_ShowWithoutActivating（Windows 映射 SW_SHOWNOACTIVATE，但不是
+    # WS_EX_NOACTIVATE——任务栏按钮点击仍能激活）。
+    import pytest
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QApplication
+
+    from zentray.ui.win_tray import _TaskbarCenterWindow
+
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication(["zentray-test"])
+    elif not isinstance(app, QApplication):
+        pytest.skip("进程已有 QGuiApplication（本模块 setup_module 先建），无法升级")
+    w = _TaskbarCenterWindow()
+    assert w.testAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+    w.close()
+
+
 def test_taskbar_center_settings_parse_and_clamp(tmp_path, monkeypatch):
     from zentray.services import settings_manager as sm
 
