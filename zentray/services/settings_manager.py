@@ -473,6 +473,17 @@ class AppSettings:
     calendar: CalendarSettings = field(default_factory=CalendarSettings)
 
 
+def _merge_dict(base: dict, override: dict) -> dict:
+    """字段级深合并：override 覆盖 base；双方均为 dict 的键递归合并，其余整体替换。"""
+    out = dict(base)
+    for k, v in override.items():
+        if isinstance(v, dict) and isinstance(out.get(k), dict):
+            out[k] = _merge_dict(out[k], v)
+        else:
+            out[k] = v
+    return out
+
+
 class SettingsManager:
     """应用设置管理器（单例）"""
 
@@ -576,6 +587,14 @@ class SettingsManager:
             pass
 
     def _apply_dict(self, data: dict) -> None:
+        if not isinstance(data, dict):
+            return
+        # 字段级合并：载荷省略的键沿用当前值，避免局部保存（设置页局部 PATCH、
+        # 向导、旧客户端/旧页面）把省略字段重置为默认值——历次升级丢设置的根因。
+        # ai 节除外：_parse_ai 依赖键的缺失判定旧格式并迁移，不能注入。
+        base = self._settings_payload()
+        base.pop("ai", None)
+        data = _merge_dict(base, data)
         if "polling" in data:
             p = data["polling"]
             self._settings.polling = PollingSettings(
@@ -625,7 +644,8 @@ class SettingsManager:
                     if isinstance(c, dict)
                 ]
             else:
-                channels = default_notify_channels()
+                # shortcut: 显式空渠道列表视为未携带（防误清），保留当前渠道
+                channels = self._settings.notification.channels or default_notify_channels()
             self._settings.notification = NotificationSettings(
                 channels=channels,
                 enabled=n.get("enabled", True),
@@ -835,7 +855,13 @@ class SettingsManager:
         self._sync_notif_channels_to_legacy()
         self._sync_nightly_from_review()
         self._settings.ai._sync_legacy_from_active()
-        data = {
+        data = self._settings_payload()
+        with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+
+    def _settings_payload(self) -> dict:
+        """当前设置的落盘形状（save 写盘与 _apply_dict 合并基线共用）。"""
+        return {
             "polling": asdict(self._settings.polling),
             "pomodoro": asdict(self._settings.pomodoro),
             "nightly": asdict(self._settings.nightly),
@@ -855,8 +881,6 @@ class SettingsManager:
             "feishu_sync": asdict(self._settings.feishu_sync),
             "calendar": asdict(self._settings.calendar),
         }
-        with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
 
     @property
     def polling(self) -> PollingSettings:

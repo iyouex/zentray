@@ -286,7 +286,10 @@ exe = EXE(
     name='ZenTray',
     debug=False,
     bootloader_ignore_signals=False,
-    strip=True,                 # strip 符号表，略减体积
+    # Windows 必须关闭：CI runner PATH 有 GNU strip（C:\mingw64\bin），它削 MSVC 构建的
+    # PE 会产生仅在 PyInstaller 引导器进程内 LoadLibrary 失败（错误 998）的坏文件——
+    # v0.7.3~v0.7.12 全部 Windows 包因此从未能启动。Linux/macOS 的 strip 是安全的。
+    strip=(sys.platform != 'win32'),
     console=False,              # 无控制台窗口（GUI 应用）
     disable_windowed_traceback=False,
     argv_emulation=False,
@@ -306,7 +309,7 @@ coll = COLLECT(
     a.binaries,
     a.zipfiles,
     a.datas,
-    strip=True,
+    strip=(sys.platform != 'win32'),  # Windows 关 strip：GNU strip 削 MSVC PE 致加载失败（同上）
     upx=False,                  # 本机无 upx 二进制，始终是 no-op
     name='ZenTray',             # 产物: dist/ZenTray/（可执行文件在其内）
 )
