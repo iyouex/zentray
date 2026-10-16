@@ -45,9 +45,10 @@ jobs:
           $targets = @(
             "$dir/python312.dll",
             "$dir/VCRUNTIME140.dll",
-            "$dir/VCRUNTIME140_1.dll",
-            "$dir/PySide6/QtCore.pyd"
+            "$dir/VCRUNTIME140_1.dll"
           ) + (Get-ChildItem "$dir" -Depth 1 -Filter "Qt6Core.dll" | Select-Object -First 1 -ExpandProperty FullName)
+          # 不直载 PySide6/*.pyd：依赖（Qt6Core.dll）在其上一级目录，flag 8 只搜
+          # 自身目录必解析失败；引导器关键路径由 python312.dll + Qt6Core.dll 覆盖
           $failed = @()
           foreach ($t in $targets) {
             if (-not (Test-Path $t)) { "SKIP(不存在): $t"; continue }
