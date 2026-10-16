@@ -33,7 +33,36 @@ jobs:
       - name: PyInstaller 打包
         run: pyinstaller zentray.spec --noconfirm
 
+      # 冒烟探针：直接 LoadLibraryEx 加载打包产物核心 DLL，复现/排除
+      # "python312.dll LoadLibrary: 内存位置访问无效"（998）类加载失败。
+      # CI 此前只打包不试运行，包能否加载从未被验证过。
+      - name: 冒烟探针——LoadLibraryEx 直载核心 DLL
+        shell: pwsh
+        run: |
+          Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public class K32 { [DllImport("kernel32", SetLastError=true, CharSet=CharSet.Unicode)] public static extern IntPtr LoadLibraryEx(string f, IntPtr h, uint flags); }'
+          "OS: " + [System.Environment]::OSVersion.VersionString
+          $dir = "dist/ZenTray/_internal"
+          $targets = @(
+            "$dir/python312.dll",
+            "$dir/VCRUNTIME140.dll",
+            "$dir/VCRUNTIME140_1.dll",
+            "$dir/PySide6/PySide6Core.pyd"
+          ) + (Get-ChildItem "$dir" -Depth 1 -Filter "Qt6Core.dll" | Select-Object -First 1 -ExpandProperty FullName)
+          $failed = @()
+          foreach ($t in $targets) {
+            if (-not (Test-Path $t)) { "SKIP(不存在): $t"; continue }
+            # 8 = LOAD_WITH_ALTERED_SEARCH_PATH，依赖从 DLL 自身目录解析，同 PyInstaller bootloader
+            $h = [K32]::LoadLibraryEx($t, [IntPtr]::Zero, 8)
+            if ($h -eq [IntPtr]::Zero) {
+              $code = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
+              $failed += "FAIL: $t -> Win32 错误 $code"
+            } else { "OK: $t" }
+          }
+          if ($failed.Count -gt 0) { $failed; exit 1 }
+
+      # 提交信息带 [smoke-only] 时跳过 zip+上传（排障探针运行不 churn release 资产）
       - name: 打 zip 并上传到 release v$ver（版本号取自 zentray/config.py）
+        if: ${{ !contains(github.event.head_commit.message, '[smoke-only]') }}
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
