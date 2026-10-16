@@ -60,6 +60,27 @@ jobs:
           }
           if ($failed.Count -gt 0) { $failed; exit 1 }
 
+      # 探针2：真正启动 exe。windowed 引导器在 DLL 加载失败时只弹 MessageBox（挂住，
+      # 无法自动判读），故用 console=True 变体重打——失败信息直写 stderr 且立即退出。
+      # 此前从未有任何环境验证过"bootloader 进程内加载 python312.dll"这一步。
+      - name: 冒烟探针2——实际启动 exe（console 引导器变体）
+        shell: pwsh
+        run: |
+          (Get-Content zentray.spec -Raw) -replace 'console\s*=\s*False', 'console=True' |
+            Set-Content zentray-smoke.spec
+          pyinstaller zentray-smoke.spec --noconfirm --workpath build-smoke --distpath dist-smoke
+          $p = Start-Process "dist-smoke/ZenTray/ZenTray.exe" -WorkingDirectory "dist-smoke/ZenTray" -PassThru `
+               -RedirectStandardOutput smoke-out.log -RedirectStandardError smoke-err.log
+          Start-Sleep -Seconds 25
+          if ($p.HasExited) {
+            "EXE 已退出，退出码 $($p.ExitCode)"
+            "--- stdout ---"; Get-Content smoke-out.log -ErrorAction SilentlyContinue | Select-Object -First 30
+            "--- stderr ---"; Get-Content smoke-err.log -ErrorAction SilentlyContinue | Select-Object -First 30
+            exit 1
+          }
+          "OK: exe 存活 25s——bootloader 已加载 python312.dll 并进入应用主循环"
+          Stop-Process -Id $p.Id -Force
+
       # 提交信息带 [smoke-only] 时跳过 zip+上传（排障探针运行不 churn release 资产）
       - name: 打 zip 并上传到 release v$ver（版本号取自 zentray/config.py）
         if: ${{ !contains(github.event.head_commit.message, '[smoke-only]') }}
