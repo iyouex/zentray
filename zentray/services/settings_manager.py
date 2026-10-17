@@ -167,16 +167,15 @@ class AppearanceSettings:
     """系统/外观。theme: light | dark | system；autostart 为开机自启偏好；
     motion: full|off 界面动效开关；shape: round|crisp 形状风格；
     skin: neo|aurora|synth|clay 界面皮肤。
-    Windows 任务栏中央按钮（设计 §3.0）：center 开关 / 标签长度 8-32 / 跑马灯。"""
+    Windows 状态条（任务栏正上方，设计 §3.0）：开关 / 超宽跑马灯。"""
 
     theme: str = "system"
     autostart: bool = False
     motion: str = "full"
     shape: str = "round"
     skin: str = "neo"
-    taskbar_center_enabled: bool = True
-    taskbar_label_length: int = 20
-    taskbar_label_marquee: bool = False
+    statusbar_enabled: bool = True
+    statusbar_marquee: bool = False
 
 
 @dataclass
@@ -582,6 +581,13 @@ class SettingsManager:
         try:
             with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
+            # 旧键迁移须在 _apply_dict 合并前改名：合并基线已带新键，会遮蔽旧值
+            ap = data.get("appearance")
+            if isinstance(ap, dict):
+                if "statusbar_enabled" not in ap and "taskbar_center_enabled" in ap:
+                    ap["statusbar_enabled"] = ap["taskbar_center_enabled"]
+                if "statusbar_marquee" not in ap and "taskbar_label_marquee" in ap:
+                    ap["statusbar_marquee"] = ap["taskbar_label_marquee"]
             self._apply_dict(data)
         except (json.JSONDecodeError, Exception):
             pass
@@ -683,20 +689,15 @@ class SettingsManager:
             skin = str(a.get("skin") or "neo").lower()
             if skin not in ("neo", "aurora", "synth", "clay"):
                 skin = "neo"
-            try:
-                label_len = int(a.get("taskbar_label_length", 20) or 20)
-            except (TypeError, ValueError):
-                label_len = 20
-            label_len = max(8, min(32, label_len))
             self._settings.appearance = AppearanceSettings(
                 theme=theme,
                 autostart=autostart,
                 motion=motion,
                 shape=shape,
                 skin=skin,
-                taskbar_center_enabled=bool(a.get("taskbar_center_enabled", True)),
-                taskbar_label_length=label_len,
-                taskbar_label_marquee=bool(a.get("taskbar_label_marquee", False)),
+                # 旧键 taskbar_center_enabled/taskbar_label_marquee（中央按钮方案）作迁移回退
+                statusbar_enabled=bool(a.get("statusbar_enabled", True)),
+                statusbar_marquee=bool(a.get("statusbar_marquee", False)),
             )
         if "backup" in data:
             b = data["backup"] or {}

@@ -8,10 +8,9 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtGui import QGuiApplication
 
 from zentray.ui.win_tray import (
+    _StatusStripWindow,
     icon_paint_spec,
     paint_tray_pixmap,
-    taskbar_label,
-    taskbar_label_visible,
 )
 
 
@@ -69,81 +68,72 @@ def test_paint_tray_pixmap_returns_pixmap():
         assert pm is not None and not pm.isNull()
 
 
-# —— 任务栏中央按钮（§3.0）——
+# —— 状态条（§3.0，2026-10-17 重设计）——
 
-def test_taskbar_label_short_passthrough():
-    assert taskbar_label("写文档", 20) == "写文档"
-    assert taskbar_label("", 20) == "ZenTray"
-
-
-def test_taskbar_label_truncate_with_ellipsis():
-    t = "[工作-需求B] 编写交互设计文档与原型图评审"
-    out = taskbar_label(t, 20)
-    assert len(out) == 20 and out.endswith("…") and out.startswith(t[:19])
-
-
-def test_taskbar_label_length_clamped():
-    # 钳制到 8-32：超范围参数不炸、结果长度合法
-    out = taskbar_label("x" * 100, 999)
-    assert len(out) == 32
-    assert len(taskbar_label("x" * 100, 2)) == 8
-
-
-def test_taskbar_label_marquee_scroll():
-    t = "这是一个非常长的任务标题需要跑马灯滚动展示"
-    first = taskbar_label(t, 12)
-    assert first.endswith("…")  # offset=0 截断
-    second = taskbar_label(t, 12, 1)
-    assert len(second) == 12 and second != first
-
-
-def test_taskbar_label_visible_none_offscreen_linux():
-    # 非 Windows 探测不到 → None（前端隐藏提示行）
-    import sys
-
-    if not sys.platform.startswith("win32"):
-        assert taskbar_label_visible() is None
-
-
-def test_taskbar_center_window_never_self_activates():
-    # v0.7.13 Windows 狂闪回归：中央按钮的 show()（含 _reset 的 hide/show 复位）
-    # 自我激活 → ActivationChange 死循环（任务栏图标狂闪、速览模态循环重开）。
-    # 必须带 WA_ShowWithoutActivating（Windows 映射 SW_SHOWNOACTIVATE，但不是
-    # WS_EX_NOACTIVATE——任务栏按钮点击仍能激活）。
+def _qt_app_or_skip():
+    # QWidget 需 QApplication；本模块 setup_module 先建 QGuiApplication 时无法升级
     import pytest
-    from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QApplication
-
-    from zentray.ui.win_tray import _TaskbarCenterWindow
 
     app = QApplication.instance()
     if app is None:
-        app = QApplication(["zentray-test"])
-    elif not isinstance(app, QApplication):
+        return QApplication(["zentray-test"])
+    if not isinstance(app, QApplication):
         pytest.skip("进程已有 QGuiApplication（本模块 setup_module 先建），无法升级")
-    w = _TaskbarCenterWindow()
+    return app
+
+
+def test_status_strip_window_never_self_activates():
+    # v0.7.13 Windows 狂闪教训：顶层窗口 show() 自我激活 → ActivationChange
+    # 死循环。状态条必须带 WA_ShowWithoutActivating（仅映射 SW_SHOWNOACTIVATE，
+    # 不设 WS_EX_NOACTIVATE）。
+    from PySide6.QtCore import Qt
+
+    _qt_app_or_skip()
+    w = _StatusStripWindow()
     assert w.testAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
     w.close()
 
 
-def test_taskbar_center_settings_parse_and_clamp(tmp_path, monkeypatch):
+def test_status_strip_content_and_marquee_timer():
+    # 超宽 + 跑马灯 → 定时器启动；短文本/关闭跑马灯 → 定时器停止
+    _qt_app_or_skip()
+    w = _StatusStripWindow()
+    w.set_content(None, "短标题", True)
+    assert not w._timer.isActive()  # 不超宽不滚
+    w.resize(120, 30)
+    w.set_content(None, "[工作-需求B] 编写交互设计文档与原型图评审", True)
+    assert w._timer.isActive()
+    w.set_content(None, "[工作-需求B] 编写交互设计文档与原型图评审", False)
+    assert not w._timer.isActive()
+    assert w._text == "[工作-需求B] 编写交互设计文档与原型图评审"
+    w.close()
+
+
+def test_statusbar_settings_parse_and_migrate(tmp_path, monkeypatch):
     from zentray.services import settings_manager as sm
 
-    monkeypatch.setattr(sm, "SETTINGS_FILE", tmp_path / "settings.json")
+    f = tmp_path / "settings.json"
+    monkeypatch.setattr(sm, "SETTINGS_FILE", f)
     sm.SettingsManager.reload()
     mgr = sm.SettingsManager()
-    assert mgr.appearance.taskbar_center_enabled is True
-    assert mgr.appearance.taskbar_label_length == 20
-    assert mgr.appearance.taskbar_label_marquee is False
-    mgr._apply_dict(
-        {
-            "appearance": {
-                "taskbar_center_enabled": False,
-                "taskbar_label_length": 99,
-                "taskbar_label_marquee": True,
-            }
-        }
+    assert mgr.appearance.statusbar_enabled is True
+    assert mgr.appearance.statusbar_marquee is False
+    # 旧键（中央按钮方案）盘上迁移：合并前改名，否则被基线新键遮蔽
+    f.write_text(
+        '{"appearance": {"taskbar_center_enabled": false, "taskbar_label_marquee": true}}',
+        encoding="utf-8",
     )
-    assert mgr.appearance.taskbar_center_enabled is False
-    assert mgr.appearance.taskbar_label_length == 32  # 钳到上限
-    assert mgr.appearance.taskbar_label_marquee is True
+    sm.SettingsManager.reload()
+    migrated = sm.SettingsManager()
+    assert migrated.appearance.statusbar_enabled is False
+    assert migrated.appearance.statusbar_marquee is True
+    # 新键直读
+    f.write_text(
+        '{"appearance": {"statusbar_enabled": true, "statusbar_marquee": false}}',
+        encoding="utf-8",
+    )
+    sm.SettingsManager.reload()
+    fresh = sm.SettingsManager()
+    assert fresh.appearance.statusbar_enabled is True
+    assert fresh.appearance.statusbar_marquee is False
