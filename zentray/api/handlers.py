@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
+import sys
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Callable, Optional
@@ -306,8 +307,6 @@ def handle_request(
             return _system_status()
         if method == "POST" and path == "/api/system/autostart":
             return _system_set_autostart(body or {})
-        if method == "POST" and path == "/api/system/open-taskbar-settings":
-            return _open_taskbar_settings()
         if method == "POST" and path == "/api/system/export":
             return _system_export(body or {})
         if method == "POST" and path == "/api/system/import":
@@ -1537,14 +1536,6 @@ def _system_status() -> tuple[int, dict]:
     sm = SettingsManager()
     pref = bool(sm.appearance.autostart)
     backup_dir = mig.backup_dir_from_settings()
-    # Windows 任务栏标签可见性（§3.0 合并模式检测）；非 Windows 为 None
-    label_visible = None
-    try:
-        from zentray.ui.win_tray import taskbar_label_visible
-
-        label_visible = taskbar_label_visible()
-    except Exception:
-        pass
     return 200, {
         "version": VERSION,
         "data_dir": str(DATA_DIR),
@@ -1553,7 +1544,8 @@ def _system_status() -> tuple[int, dict]:
             "preference": pref,
         },
         "windows": {
-            "taskbar_label_visible": label_visible,
+            # 状态条（任务栏正上方，§3.0）仅 Windows 提供，前端据此显隐设置块
+            "statusbar_supported": sys.platform == "win32",
         },
         "include_options": mig.list_include_options(),
         "exports_dir": str(mig.exports_dir()),
@@ -1587,21 +1579,6 @@ def _system_set_autostart(body: dict) -> tuple[int, dict]:
         "enabled": autostart_svc.is_enabled(),
         "preference": enabled,
     }
-
-
-def _open_taskbar_settings() -> tuple[int, dict]:
-    """打开 Windows 任务栏设置页（合并模式引导，设计 §3.0）。"""
-    import sys
-
-    if not sys.platform.startswith("win32"):
-        return 400, {"ok": False, "error": "仅 Windows 支持"}
-    try:
-        import os
-
-        os.startfile("ms-settings:taskbar")  # noqa: S606 固定白名单 URI
-        return 200, {"ok": True}
-    except Exception as e:
-        return 500, {"ok": False, "error": f"打开失败: {e}"}
 
 
 def _system_export(body: dict) -> tuple[int, dict]:
