@@ -66,7 +66,12 @@ def build_tasks_ics(tasks, templates=None, today: datetime.date = None) -> str:
         rem_time = None
         if rem is not None and getattr(rem, "enabled", False):
             rem_time = getattr(rem, "time_of_day", None) or "17:00"
-        if not deadline and not rem_time:
+        deliveries = [
+            d
+            for d in (getattr(t, "deliveries", None) or [])
+            if isinstance(d, dict) and d.get("at")
+        ]
+        if not deadline and not rem_time and not deliveries:
             continue
         title = f"{_PRIORITY_TAG.get(getattr(t, 'priority', ''), '')}{t.title}".strip()
         desc = ics_escape(f"分类: {t.category or '未分类'}\n{getattr(t, 'details', '') or ''}")
@@ -113,6 +118,22 @@ def build_tasks_ics(tasks, templates=None, today: datetime.date = None) -> str:
             f"DESCRIPTION:{desc}",
             "END:VEVENT",
         ]
+        # 关键交付时间：每个交付点一条 30 分钟定时事件（标题带 ⏱ 区分主事件）
+        for i, d in enumerate(deliveries):
+            try:
+                dt = datetime.datetime.fromisoformat(str(d["at"]))
+            except (ValueError, TypeError):
+                continue
+            lines += [
+                "BEGIN:VEVENT",
+                f"UID:zentray-{t.id}-dl{i}@zentray.local",
+                f"DTSTAMP:{now}",
+                f"DTSTART:{dt.strftime('%Y%m%dT%H%M%S')}",
+                f"DTEND:{(dt + datetime.timedelta(minutes=30)).strftime('%Y%m%dT%H%M%S')}",
+                f"SUMMARY:{ics_escape(f'⏱ 交付 · {title}')}",
+                f"DESCRIPTION:{desc}",
+                "END:VEVENT",
+            ]
     # 模板投影（在真实实例之后统一追加，避免打断任务循环）
     for tmpl in templates or []:
         if not getattr(tmpl, "calendar_enabled", False):
