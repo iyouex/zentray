@@ -50,8 +50,6 @@ APP_AUTHOR = "Zen-Geek"
 
 VERSION = "0.7.14"
 
-VERSION = "0.7.14"
-
 
 DATA_DIR = _user_data_dir(APP_NAME)
 _load_dotenv(DATA_DIR / ".env", override=True)

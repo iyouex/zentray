@@ -4,11 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "zentray"
-<<<<<<< HEAD
-version = "0.7.14-rc2"
-=======
 version = "0.7.14"
->>>>>>> staging
 description = "Ubuntu/Linux 个人任务管理与专注效率工具 —— 系统托盘番茄钟 + GTD 看板"
 readme = "README.md"
 license = {text = "MIT"}
