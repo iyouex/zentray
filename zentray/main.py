@@ -198,12 +198,13 @@ def _on_reminder_due(runtime: AppRuntime, batch: list) -> None:
         task_service = injector.get(TaskService)
         handled, payload = try_vue_reminders(batch)
         if not handled:
-            # Qt 回退：逐个顺序弹，本地应用动作
+            # Qt 回退：逐个顺序弹，本地应用动作；「跳转」结束本轮直达任务列表
+            jump_id = None
             for task, fire_key in batch:
                 dlg = ReminderDialog(task)
                 run_modal_loop(dlg)
                 action = dlg.result_action
-                snooze = getattr(dlg, "snooze_minutes", 10) or 10
+                snooze = getattr(dlg, "snooze_minutes", 30) or 30
                 rem = apply_reminder_action(
                     task, action, fire_key, snooze_minutes=snooze
                 )
@@ -223,6 +224,15 @@ def _on_reminder_due(runtime: AppRuntime, batch: list) -> None:
                         pass
                 if action == "done":
                     task_service.mark_done(task.id)
+                if action == "abandon":
+                    task_service.abandon(task.id)
+                if action == "jump":
+                    jump_id = task.id
+                    break  # 余下提醒按到期窗自然错过（同 Vue 甲板跳转语义）
+            if jump_id and runtime.controller:
+                from zentray.ui.vue_commands import try_vue_task_list
+
+                try_vue_task_list(runtime.controller, jump_id)
         else:
             # 未处理卡（本轮 fire_key 未写 last_fired_key）统一 dismiss；
             # 已完成/已忽略/已稍后的卡状态不被覆盖（幂等）

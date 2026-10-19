@@ -72,7 +72,7 @@ export async function setSubtaskStatus(id, sid, action) {
   return data
 }
 
-/** 提醒卡片动作：done / snooze / dismiss */
+/** 提醒卡片动作：done / snooze / dismiss / abandon */
 export async function reminderAction(id, body) {
   const { data } = await http.post(`/api/tasks/${id}/reminder-action`, body)
   return data.item

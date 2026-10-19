@@ -590,6 +590,9 @@ class TaskService:
         if action == "done":
             self.mark_done(task_id)
             return task  # 已归档删除，返回快照
+        if action == "abandon":
+            self.abandon(task_id)
+            return task  # 已归档删除，返回快照
         return self.find_task(task_id) or task
 
     def update_task_reminder(self, task_id: str, reminder) -> Optional[Task]:
