@@ -72,7 +72,7 @@ export async function setSubtaskStatus(id, sid, action) {
   return data
 }
 
-/** 提醒卡片动作：done / snooze / dismiss */
+/** 提醒卡片动作：done / snooze / dismiss / abandon */
 export async function reminderAction(id, body) {
   const { data } = await http.post(`/api/tasks/${id}/reminder-action`, body)
   return data.item
@@ -201,12 +201,6 @@ export async function feishuSyncResync() {
 
 export async function setAutostart(enabled) {
   const { data } = await http.post('/api/system/autostart', { enabled: !!enabled })
-  return data
-}
-
-/** Windows：打开系统任务栏设置页（合并模式引导） */
-export async function openTaskbarSettings() {
-  const { data } = await http.post('/api/system/open-taskbar-settings', {})
   return data
 }
 

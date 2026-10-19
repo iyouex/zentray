@@ -140,6 +140,9 @@ class NotificationSettings:
     enabled: bool = True
     wxpusher_app_token: str = ""
     wxpusher_uid: str = ""
+    # 插件报告通知格式（设置-通知）：占位符 {name}/{status}/{summary}/{result}
+    plugin_title_template: str = "脚本: {name}"
+    plugin_body_template: str = "{result}"
 
     def wxpusher_channels(self) -> List[NotifyChannel]:
         return [c for c in self.channels if c.type == "wxpusher" and c.enabled]
@@ -167,16 +170,15 @@ class AppearanceSettings:
     """系统/外观。theme: light | dark | system；autostart 为开机自启偏好；
     motion: full|off 界面动效开关；shape: round|crisp 形状风格；
     skin: neo|aurora|synth|clay 界面皮肤。
-    Windows 任务栏中央按钮（设计 §3.0）：center 开关 / 标签长度 8-32 / 跑马灯。"""
+    Windows 状态条（任务栏正上方，设计 §3.0）：开关 / 超宽跑马灯。"""
 
     theme: str = "system"
     autostart: bool = False
     motion: str = "full"
     shape: str = "round"
     skin: str = "neo"
-    taskbar_center_enabled: bool = True
-    taskbar_label_length: int = 20
-    taskbar_label_marquee: bool = False
+    statusbar_enabled: bool = True
+    statusbar_marquee: bool = False
 
 
 @dataclass
@@ -213,8 +215,10 @@ class OpsSettings:
     # 运行报告托盘轮播：完成通知未点击查看时，报告提示进入顶栏任务轮播，到期退出
     report_tray_enabled: bool = True
     report_tray_minutes: int = 60
-    # 插件报告通知渠道（app_popup/wxpusher，可多选）；空 = 跟随通知设置已启用渠道
+    # 旧全局报告通知渠道（已改插件级，读作未配置插件的回退值，UI 不再暴露）
     notify_channels: List[str] = field(default_factory=list)
+    # v2.2 报告通知渠道（插件级）：pid -> 渠道类型多选；缺该 pid = 跟随通知设置已启用渠道
+    plugin_notify_channels: Dict[str, List[str]] = field(default_factory=dict)
 
 
 @dataclass
@@ -582,6 +586,13 @@ class SettingsManager:
         try:
             with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
+            # 旧键迁移须在 _apply_dict 合并前改名：合并基线已带新键，会遮蔽旧值
+            ap = data.get("appearance")
+            if isinstance(ap, dict):
+                if "statusbar_enabled" not in ap and "taskbar_center_enabled" in ap:
+                    ap["statusbar_enabled"] = ap["taskbar_center_enabled"]
+                if "statusbar_marquee" not in ap and "taskbar_label_marquee" in ap:
+                    ap["statusbar_marquee"] = ap["taskbar_label_marquee"]
             self._apply_dict(data)
         except (json.JSONDecodeError, Exception):
             pass
@@ -651,6 +662,8 @@ class SettingsManager:
                 enabled=n.get("enabled", True),
                 wxpusher_app_token=n.get("wxpusher_app_token", ""),
                 wxpusher_uid=n.get("wxpusher_uid", ""),
+                plugin_title_template=str(n.get("plugin_title_template") or "脚本: {name}"),
+                plugin_body_template=str(n.get("plugin_body_template") or "{result}"),
             )
             self._sync_notif_legacy_to_channels()
 
@@ -683,20 +696,15 @@ class SettingsManager:
             skin = str(a.get("skin") or "neo").lower()
             if skin not in ("neo", "aurora", "synth", "clay"):
                 skin = "neo"
-            try:
-                label_len = int(a.get("taskbar_label_length", 20) or 20)
-            except (TypeError, ValueError):
-                label_len = 20
-            label_len = max(8, min(32, label_len))
             self._settings.appearance = AppearanceSettings(
                 theme=theme,
                 autostart=autostart,
                 motion=motion,
                 shape=shape,
                 skin=skin,
-                taskbar_center_enabled=bool(a.get("taskbar_center_enabled", True)),
-                taskbar_label_length=label_len,
-                taskbar_label_marquee=bool(a.get("taskbar_label_marquee", False)),
+                # 旧键 taskbar_center_enabled/taskbar_label_marquee（中央按钮方案）作迁移回退
+                statusbar_enabled=bool(a.get("statusbar_enabled", True)),
+                statusbar_marquee=bool(a.get("statusbar_marquee", False)),
             )
         if "backup" in data:
             b = data["backup"] or {}
@@ -744,7 +752,11 @@ class SettingsManager:
                 report_tray_enabled=bool(o.get("report_tray_enabled", True)),
                 report_tray_minutes=int(o.get("report_tray_minutes", 60) or 60),
                 notify_channels=sanitize_channel_types(o.get("notify_channels")),
-
+                plugin_notify_channels={
+                    str(k): sanitize_channel_types(v)
+                    for k, v in (o.get("plugin_notify_channels") or {}).items()
+                    if isinstance(v, list)
+                },
             )
 
         if "update" in data:
@@ -870,6 +882,8 @@ class SettingsManager:
                 "enabled": self._settings.notification.enabled,
                 "wxpusher_app_token": self._settings.notification.wxpusher_app_token,
                 "wxpusher_uid": self._settings.notification.wxpusher_uid,
+                "plugin_title_template": self._settings.notification.plugin_title_template,
+                "plugin_body_template": self._settings.notification.plugin_body_template,
             },
             "ai": self._settings.ai.to_dict(),
             "categories": self._settings.categories.to_dict(),

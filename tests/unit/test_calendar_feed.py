@@ -149,6 +149,24 @@ def test_build_ics_projection_dedup_with_real_instance():
     assert "UID:zentray-tpl-tp-1-2026-10-15@zentray.local" in ics
 
 
+def test_build_ics_delivery_events():
+    # 关键交付时间每个交付点一条 30 分钟定时事件（⏱ 交付 · 标题）
+    t = Task(
+        title="需求B",
+        category="工作",
+        deadline="2026-10-20",
+        deliveries=[
+            {"at": "2026-10-18T09:30", "notify": True},
+            {"at": "2026-10-20T18:00", "notify": False},
+        ],
+    )
+    ics = build_tasks_ics([t], [], today=TODAY)
+    assert ics.count("BEGIN:VEVENT") == 3  # 截止全天事件 + 两个交付事件
+    assert "UID:zentray-" + t.id + "-dl0@zentray.local" in ics
+    assert "DTSTART:20261018T093000" in ics
+    assert "SUMMARY:⏱ 交付 ·" in ics
+
+
 # ---------- 订阅源开关联动 ----------
 
 

@@ -144,23 +144,25 @@
               </p>
             </section>
 
-            <!-- ③ 每日计划与复盘（合并双栏） -->
+            <!-- ③ 计划 / 复盘风格（调度已迁移为插件朝闻/暮省） -->
             <section class="zt-block">
               <div class="zt-h3">每日计划与复盘</div>
+              <p class="hint">
+                调度已迁移为插件：执行周期（日/周/月）、触发时间、跳过公休日等在
+                设置 → 插件 → 已安装插件 →「朝闻 / 暮省」的参数预设中设置；此处维护各自的 AI 风格提示词。
+              </p>
               <div class="ai-jobs">
                 <div class="ai-job-col">
                   <div class="ai-job-head">
-                    <span class="zt-h4">📋 每日计划</span>
-                    <a-switch v-model="form.ai.plan.enabled" size="small" />
+                    <span class="zt-h4">📋 朝闻 · 计划风格</span>
                   </div>
-                  <JobEditor v-model="form.ai.plan" kind-label="每日计划" headless />
+                  <JobEditor v-model="form.ai.plan" />
                 </div>
                 <div class="ai-job-col">
                   <div class="ai-job-head">
-                    <span class="zt-h4">📝 每日复盘</span>
-                    <a-switch v-model="form.ai.review.enabled" size="small" />
+                    <span class="zt-h4">📝 暮省 · 复盘风格</span>
                   </div>
-                  <JobEditor v-model="form.ai.review" kind-label="每日复盘" headless />
+                  <JobEditor v-model="form.ai.review" />
                 </div>
               </div>
             </section>
@@ -247,6 +249,50 @@
                   </a-form>
                 </a-collapse-item>
               </a-collapse>
+            </section>
+
+            <!-- 插件报告通知格式 + 预览 -->
+            <section class="zt-block" style="max-width: 900px">
+              <div class="zt-h3">插件通知格式</div>
+              <p class="hint">
+                脚本运行完成通知的标题/正文模板。可用占位符：<code>{name}</code> 插件名 ·
+                <code>{status}</code> 执行状态 · <code>{summary}</code> 摘要 ·
+                <code>{result}</code> 结果正文（空时回退状态）。随「保存设置」生效。
+              </p>
+              <div class="field-table">
+                <div class="field-line">
+                  <span class="field-k">标题模板</span>
+                  <a-input
+                    v-model="form.notification.plugin_title_template"
+                    size="small"
+                    style="width: 360px"
+                    placeholder="脚本: {name}"
+                  />
+                </div>
+                <div class="field-line" style="align-items: flex-start">
+                  <span class="field-k">正文模板</span>
+                  <a-textarea
+                    v-model="form.notification.plugin_body_template"
+                    :auto-size="{ minRows: 2, maxRows: 5 }"
+                    style="width: 360px"
+                    placeholder="{result}"
+                  />
+                </div>
+              </div>
+              <div class="zt-h4" style="margin-top: 12px">预览</div>
+              <div
+                style="
+                  margin-top: 6px;
+                  padding: 10px 12px;
+                  border: 1px solid var(--color-border-2);
+                  border-radius: 8px;
+                  background: var(--color-fill-1);
+                  max-width: 420px;
+                "
+              >
+                <div class="zt-h4">{{ notifyPreviewTitle }}</div>
+                <pre class="hint" style="margin: 4px 0 0; white-space: pre-wrap; font-family: inherit">{{ notifyPreviewBody }}</pre>
+              </div>
             </section>
           </template>
 
@@ -504,6 +550,28 @@
                       </div>
                     </template>
 
+                    <div class="cat-presets">
+                      <div class="field-line">
+                        <span class="field-k">轮播提醒范围</span>
+                        <div class="preset-ctrl">
+                          <a-switch v-model="p.remind_window_enabled" size="small" />
+                          <template v-if="p.remind_window_enabled">
+                            <TimeSpinner v-model="p.remind_window_start" />
+                            <span class="muted">至</span>
+                            <TimeSpinner v-model="p.remind_window_end" />
+                          </template>
+                        </div>
+                      </div>
+                      <div class="field-line">
+                        <span class="field-k">跳过公休日</span>
+                        <a-switch v-model="p.skip_holidays" size="small" />
+                      </div>
+                      <p class="hint">
+                        范围外该分类任务不轮播、不弹窗（支持跨夜窗，如 22:00-06:00）；
+                        公休日=周末+法定节假日，新建任务默认继承跳过设置。
+                      </p>
+                    </div>
+
                     <div v-if="form.categories.enabled_secondary" class="sec-block">
                       <a-space style="margin-bottom: 8px">
                         <a-button size="mini" type="outline" @click="addSecondary(p)">
@@ -679,16 +747,9 @@
                   </a-space>
                 </div>
                 <a-divider style="margin: 10px 0" />
-                <a-form-item label="脚本完成通知渠道" style="margin-bottom: 0">
-                  <a-checkbox-group v-model="form.ops.notify_channels" @change="onOpsChannelsChange">
-                    <a-checkbox value="app_popup">应用弹窗</a-checkbox>
-                    <a-checkbox value="wxpusher">WxPusher</a-checkbox>
-                    <a-checkbox value="feishu_bot">飞书机器人</a-checkbox>
-                  </a-checkbox-group>
-                  <div class="plugin-desc" style="margin-top: 4px">
-                    可多选，至少保留一项（随「保存设置」生效）；WxPusher / 飞书机器人需在 设置 → 🔔 通知 中启用才实际推送
-                  </div>
-                </a-form-item>
+                <div class="plugin-desc">
+                  报告通知渠道已改为插件级：在各插件「编辑」面板中单独选择，选项来自 设置 → 🔔 通知 中已开启的渠道。
+                </div>
               </section>
 
               <!-- 已安装插件：行精简为四动作（说明/参数预设/编辑/删除），展开面板编辑+预设+授权 -->
@@ -776,6 +837,26 @@
                         </div>
                         <div class="trig-actions">
                           <a-button size="small" type="primary" :loading="opsPresetSaving === p.id" @click="saveParamPreset(p)">保存预设</a-button>
+                        </div>
+                      </div>
+
+                      <div class="plug-edit-sec">
+                        <div class="plug-edit-head">
+                          <b>报告通知渠道</b>
+                          <span class="pc-muted">（随「保存设置」生效）</span>
+                        </div>
+                        <a-select
+                          multiple
+                          allow-clear
+                          size="small"
+                          style="width: 320px"
+                          :model-value="form.ops.plugin_notify_channels?.[p.id] || []"
+                          :options="enabledChannelOptions"
+                          placeholder="跟随通知设置已启用渠道"
+                          @change="(v) => setPluginChannels(p.id, v)"
+                        />
+                        <div class="hint" style="margin-top: 4px">
+                          选项来自 设置 → 🔔 通知 中已开启的渠道（先在那里启用）；不选 = 跟随已启用渠道
                         </div>
                       </div>
 
@@ -940,34 +1021,26 @@
                 </div>
               </section>
 
-              <!-- Windows 任务栏中央按钮（设计 §3.0）；后端探测不到时整块隐藏 -->
-              <section v-if="taskbarLabelVisible !== null" class="zt-block">
-                <div class="zt-h3">任务栏显示（Windows）</div>
+              <!-- Windows 状态条（任务栏正上方，设计 §3.0）；非 Windows 整块隐藏 -->
+              <section v-if="statusbarSupported" class="zt-block">
+                <div class="zt-h3">状态条显示（Windows）</div>
                 <div class="sys-row">
                   <div>
-                    <div class="zt-h4">任务栏中央显示</div>
+                    <div class="zt-h4">任务栏正上方状态条</div>
                     <div class="sys-desc">
-                      任务栏正中常驻 ZenTray 按钮：动态图标 + 完整文字标签，与任务轮播同拍；
-                      关闭则退回仅通知区图标。
+                      任务栏上缘常驻全宽条带：动态图标 + 完整任务标题不截断，左键=速览面板、右键=菜单；
+                      系统级保留，最大化窗口自动避让，不依赖任务栏合并模式。关闭则退回仅通知区图标。
                     </div>
                   </div>
-                  <a-switch v-model="form.appearance.taskbar_center_enabled" />
+                  <a-switch v-model="form.appearance.statusbar_enabled" />
                 </div>
                 <div class="field-table" style="margin-top: 12px">
                   <div class="field-line">
-                    <span class="field-k">标签长度</span>
-                    <NumberSpinner v-model="form.appearance.taskbar_label_length" :min="8" :max="32" suffix="字" />
-                  </div>
-                  <div class="field-line">
-                    <span class="field-k">长标题跑马灯</span>
-                    <a-switch v-model="form.appearance.taskbar_label_marquee" size="small" />
+                    <span class="field-k">超宽标题跑马灯</span>
+                    <a-switch v-model="form.appearance.statusbar_marquee" size="small" />
                   </div>
                 </div>
-                <p class="sys-desc" style="margin-top: 10px">超长标签默认截断加…；跑马灯开启后 400ms 步进滚动。改动随底部「保存设置」生效。</p>
-                <a-alert v-if="taskbarLabelVisible === false" type="warning" style="margin-top: 10px">
-                  任务栏当前为「合并按钮」模式，文字标签不显示（图标/速览面板不受影响）。
-                  <a-button size="mini" style="margin-left: 8px" @click="onOpenTaskbarSettings">前往任务栏设置</a-button>
-                </a-alert>
+                <p class="sys-desc" style="margin-top: 10px">超宽标题默认尾部省略号；跑马灯开启后整条滚动。改动随底部「保存设置」生效。</p>
               </section>
               </div>
 
@@ -1254,7 +1327,6 @@ import {
   listPlugins,
   openAttachment,
   packArchive,
-  openTaskbarSettings,
   pickPath,
   previewPluginZip,
   saveSettings,
@@ -1270,6 +1342,7 @@ import { applyAppearance, applyTheme } from '@/theme'
 import JobEditor from '@/components/JobEditor.vue'
 import HistoryPanel from '@/components/HistoryPanel.vue'
 import NumberSpinner from '@/components/NumberSpinner.vue'
+import TimeSpinner from '@/components/TimeSpinner.vue'
 import PluginDocDrawer from '@/components/PluginDocDrawer.vue'
 import { useRouter } from 'vue-router'
 
@@ -1373,7 +1446,7 @@ const autostartEnabled = ref(false)
 const autostartLoading = ref(false)
 const autostartHint = ref('')
 // Windows 任务栏标签可见性（§3.0）：true/false；null=非 Windows/未知 → 隐藏整卡
-const taskbarLabelVisible = ref(null)
+const statusbarSupported = ref(false)
 const includeOptions = ref([])
 const exportInclude = ref([])
 const exportLoading = ref(false)
@@ -1503,11 +1576,6 @@ async function loadOpsPage() {
       } catch { /* 忽略：仅默认值 */ }
     }
   }
-}
-
-/** 插件报告通知渠道：至少保留一项 */
-function onOpsChannelsChange(v) {
-  if (!v || !v.length) form.ops.notify_channels = ['app_popup']
 }
 
 /** ops 局部保存惯例：getSettings → 合并 → saveSettings（后端 ops 分支整体替换） */
@@ -1712,6 +1780,30 @@ const AI_FEATURES = [
 /** 固定两条渠道，不允许增删 */
 const fixedChannels = computed(() => ensureFixedChannels(form.notification))
 
+/** 插件级报告通知渠道下拉选项：仅 设置-通知 中已开启的渠道 */
+const enabledChannelOptions = computed(() =>
+  fixedChannels.value.filter((c) => c.enabled).map((c) => ({ label: c.name, value: c.type })),
+)
+
+function setPluginChannels(pid, v) {
+  if (!form.ops.plugin_notify_channels) form.ops.plugin_notify_channels = {}
+  form.ops.plugin_notify_channels[pid] = Array.isArray(v) ? v : []
+}
+
+/** 通知模板渲染（与后端 render_template 同语义：未知占位符原样保留） */
+function renderTpl(tpl, ctx) {
+  return String(tpl || '').replace(/\{(\w+)\}/g, (m, k) => (k in ctx ? String(ctx[k]) : m))
+}
+
+const NOTIFY_PREVIEW_CTX = {
+  name: 'ai-news-digest',
+  status: '执行成功',
+  summary: '共 12 条要闻',
+  result: 'AI 日报已生成：共 12 条要闻，其中高优 3 条……',
+}
+const notifyPreviewTitle = computed(() => renderTpl(form.notification.plugin_title_template, NOTIFY_PREVIEW_CTX))
+const notifyPreviewBody = computed(() => renderTpl(form.notification.plugin_body_template, NOTIFY_PREVIEW_CTX))
+
 /** 番茄钟节奏预设：回填时长数字框（非独立模式） */
 const POMO_PRESETS = [
   { key: 'classic', label: '经典 25/5', focus: 25, short: 5, long: 15 },
@@ -1767,6 +1859,8 @@ function emptyForm() {
       enabled: true,
       wxpusher_app_token: '',
       wxpusher_uid: '',
+      plugin_title_template: '脚本: {name}',
+      plugin_body_template: '{result}',
     },
     ai: {
       api_profiles: [
@@ -1809,9 +1903,8 @@ function emptyForm() {
       motion: 'full',
       shape: 'round',
       skin: 'neo',
-      taskbar_center_enabled: true,
-      taskbar_label_length: 20,
-      taskbar_label_marquee: false,
+      statusbar_enabled: true,
+      statusbar_marquee: false,
     },
     backup: { dir: '', auto_enabled: false, interval_days: 1, keep: 7, trigger_hour: 9 },
     ops: {
@@ -1821,6 +1914,7 @@ function emptyForm() {
       param_presets: {},
       report_tray_enabled: true,
       report_tray_minutes: 60,
+      plugin_notify_channels: {},
     },
     update: { proxy: '' },
     calendar: { enabled: false },
@@ -1854,6 +1948,10 @@ function addPrimary() {
     id: uid(),
     name: '新分类',
     secondaries: [],
+    remind_window_enabled: false,
+    remind_window_start: '09:00',
+    remind_window_end: '18:00',
+    skip_holidays: false,
   })
 }
 
@@ -1979,16 +2077,6 @@ function onAppearancePreview() {
   applyAppearance(form.appearance)
 }
 
-/** Windows：打开系统任务栏设置页（合并模式引导） */
-async function onOpenTaskbarSettings() {
-  try {
-    const data = await openTaskbarSettings()
-    if (!data?.ok) Message.error(data?.error || '打开失败')
-  } catch (e) {
-    Message.error(e?.response?.data?.error || e?.message || '打开失败')
-  }
-}
-
 async function loadSystemStatus() {
   try {
     const data = await getSystemStatus()
@@ -1997,8 +2085,7 @@ async function loadSystemStatus() {
     form.appearance.autostart = !!data?.autostart?.preference
     const target = data?.autostart?.launch_target
     autostartHint.value = target ? `启动目标：${target}` : ''
-    const tb = data?.windows?.taskbar_label_visible
-    taskbarLabelVisible.value = tb === undefined ? null : tb
+    statusbarSupported.value = !!data?.windows?.statusbar_supported
     const opts = data?.include_options || []
     includeOptions.value = opts
     if (!exportInclude.value.length) {
@@ -2503,17 +2590,25 @@ function normalizeLoaded(s) {
   }
   if (!form.notification) form.notification = emptyForm().notification
   ensureFixedChannels(form.notification)
+  // 通知格式模板（旧数据无键补默认）
+  if (!form.notification.plugin_title_template) form.notification.plugin_title_template = '脚本: {name}'
+  if (!form.notification.plugin_body_template) form.notification.plugin_body_template = '{result}'
   if (!form.appearance) form.appearance = { theme: 'system', autostart: false }
   if (form.appearance.autostart == null) form.appearance.autostart = false
   if (form.appearance.motion == null) form.appearance.motion = 'full'
   if (form.appearance.shape == null) form.appearance.shape = 'round'
   if (!['neo', 'aurora', 'synth', 'clay'].includes(form.appearance.skin)) form.appearance.skin = 'neo'
-  if (form.appearance.taskbar_center_enabled == null) form.appearance.taskbar_center_enabled = true
-  if (!Number.isFinite(form.appearance.taskbar_label_length)) form.appearance.taskbar_label_length = 20
-  form.appearance.taskbar_label_length = Math.max(8, Math.min(32, Number(form.appearance.taskbar_label_length) || 20))
-  if (form.appearance.taskbar_label_marquee == null) form.appearance.taskbar_label_marquee = false
+  if (form.appearance.statusbar_enabled == null) form.appearance.statusbar_enabled = true
+  if (form.appearance.statusbar_marquee == null) form.appearance.statusbar_marquee = false
   if (!form.categories) form.categories = emptyForm().categories
   if (!Array.isArray(form.categories.primary_list)) form.categories.primary_list = []
+  // 提醒预设字段兜底（旧数据无这些键）
+  for (const p of form.categories.primary_list) {
+    if (p.remind_window_enabled == null) p.remind_window_enabled = false
+    if (!p.remind_window_start) p.remind_window_start = '09:00'
+    if (!p.remind_window_end) p.remind_window_end = '18:00'
+    if (p.skip_holidays == null) p.skip_holidays = false
+  }
   // 括号强制成对
   if (!WRAP_PRESETS.some(
     (w) => w.left === form.categories.wrap_left && w.right === form.categories.wrap_right,
@@ -2539,10 +2634,7 @@ function normalizeLoaded(s) {
   form.ops = { ...emptyForm().ops, ...(s.ops || {}) }
   if (!form.ops.trigger_overrides) form.ops.trigger_overrides = {}
   if (!form.ops.param_presets) form.ops.param_presets = {}
-  // 空 = 跟随全局（后端语义）；界面上物化为全选
-  if (!Array.isArray(form.ops.notify_channels) || !form.ops.notify_channels.length) {
-    form.ops.notify_channels = ['app_popup', 'wxpusher', 'feishu_bot']
-  }
+  if (!form.ops.plugin_notify_channels) form.ops.plugin_notify_channels = {}
   opsUserDir.value = form.ops.user_plugins_dir || ''
   if (!form.polling) form.polling = emptyForm().polling
   // 番茄钟：旧配置缺新键时补默认
@@ -2855,6 +2947,21 @@ body.zt-skin-clay .nav-main {
   font-size: var(--zt-t3);
   color: var(--color-text-2);
   flex-shrink: 0;
+}
+/* 分类提醒预设区（collapse 展开体内） */
+.cat-presets {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--zt-radius-card, 12px);
+}
+.preset-ctrl {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .doc-link {
   color: var(--color-primary);

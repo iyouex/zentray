@@ -1,198 +1,67 @@
 <template>
   <div class="job-editor">
-    <fieldset class="job-fields" :disabled="!model.enabled">
-      <div v-if="!headless" class="field-line">
-        <span class="field-k">{{ `启用${kindLabel}` }}</span>
-        <span class="field-v">
-          <a-switch v-model="model.enabled" />
-          <span class="muted">开启后才可配置</span>
-        </span>
-      </div>
+    <!-- 风格（毒舌/温柔/干练 + 自定义）：默认收起；调度参数已迁移至插件（朝闻/暮省）参数预设 -->
+    <a-collapse class="style-collapse" :bordered="false">
+      <a-collapse-item key="styles" header="风格（毒舌 / 温柔 / 干练 + 自定义）">
+        <p class="muted">内置三套默认风格，提示词均可改；也可新增自定义风格。</p>
 
-      <div class="field-line">
-        <span class="field-k">调度时间</span>
-        <!-- 单一时间控件：可输入 HH:mm，也可用上下调节 -->
-        <span class="field-v">
-          <div class="time-fused" :class="{ disabled: !model.enabled }">
-            <button
-              type="button"
-              class="spin-btn"
-              :disabled="!model.enabled"
-              title="小时 +1"
-              @click="nudgeHour(1)"
-            >
-              ▲
-            </button>
-            <button
-              type="button"
-              class="spin-btn spin-min"
-              :disabled="!model.enabled"
-              title="分钟 +1"
-              @click="nudgeMinute(1)"
-            >
-              ▲
-            </button>
-            <a-input
-              class="time-input"
-              v-model="timeText"
-              :disabled="!model.enabled"
-              placeholder="HH:mm"
-              allow-clear
-              @blur="commitTime"
-              @press-enter="commitTime"
+        <div class="field-line">
+          <span class="field-k">当前使用风格</span>
+          <span class="field-v">
+            <a-select
+              v-model="model.active_style_id"
+              :options="styleOptions"
+              style="width: 240px"
             />
-            <button
-              type="button"
-              class="spin-btn"
-              :disabled="!model.enabled"
-              title="小时 -1"
-              @click="nudgeHour(-1)"
-            >
-              ▼
-            </button>
-            <button
-              type="button"
-              class="spin-btn spin-min"
-              :disabled="!model.enabled"
-              title="分钟 -1"
-              @click="nudgeMinute(-1)"
-            >
-              ▼
-            </button>
-          </div>
-        </span>
-      </div>
-      <p class="muted line-hint">格式 08:30；左侧调小时、右侧调分钟，也可直接输入</p>
+          </span>
+        </div>
 
-      <div class="field-line">
-        <span class="field-k">跳过公休日</span>
-        <span class="field-v">
-          <a-switch
-            :model-value="skipPublicRest"
-            :disabled="!model.enabled"
-            @change="onSkipPublicRest"
-          />
-        </span>
-      </div>
-      <p class="muted line-hint">含周末与法定节假日（自动调度跳过；手动触发不受影响）</p>
-
-      <div class="field-line">
-        <span class="field-k">保存到本地 reviews/</span>
-        <span class="field-v">
-          <a-switch v-model="model.save_local" :disabled="!model.enabled" />
-        </span>
-      </div>
-
-      <div class="field-line">
-        <span class="field-k">完成通知渠道</span>
-        <span class="field-v">
-          <a-checkbox-group v-model="model.notify_channels" :disabled="!model.enabled" @change="onChannelsChange">
-            <a-checkbox value="app_popup">应用弹窗</a-checkbox>
-            <a-checkbox value="wxpusher">WxPusher</a-checkbox>
-            <a-checkbox value="feishu_bot">飞书机器人</a-checkbox>
-          </a-checkbox-group>
-        </span>
-      </div>
-      <p class="muted line-hint">可多选，至少保留一项；WxPusher / 飞书机器人需在 设置 → 🔔 通知 中启用才实际推送</p>
-
-      <div class="field-line">
-        <span class="field-k">报告托盘轮播</span>
-        <span class="field-v">
-          <a-switch v-model="model.report_tray_enabled" :disabled="!model.enabled" />
-          <a-input-number
-            v-model="model.report_tray_minutes"
-            :disabled="!model.enabled || !model.report_tray_enabled"
-            :min="1"
-            :max="1440"
-            :step="5"
-            size="small"
-            style="width: 104px"
-          />
-          <span class="muted">分钟</span>
-        </span>
-      </div>
-      <p class="muted line-hint">完成通知未点击查看时，报告提示进入顶栏任务轮播，到期自动退出</p>
-
-      <!-- 风格（毒舌/温柔/干练 + 自定义）：默认收起，作为栏尾 -->
-      <a-collapse class="style-collapse" :bordered="false">
-        <a-collapse-item
-          key="styles"
-          header="风格（毒舌 / 温柔 / 干练 + 自定义）"
-          :disabled="!model.enabled"
+        <a-button
+          size="small"
+          type="outline"
+          style="margin: 8px 0"
+          @click="addCustomStyle"
         >
-          <p class="muted">内置三套默认风格，提示词均可改；也可新增自定义风格。</p>
+          ➕ 自定义风格
+        </a-button>
 
-          <div class="field-line">
-            <span class="field-k">当前使用风格</span>
-            <span class="field-v">
-              <a-select
-                v-model="model.active_style_id"
-                :options="styleOptions"
-                :disabled="!model.enabled"
-                style="width: 240px"
-              />
-            </span>
-          </div>
-
-          <a-button
-            size="small"
-            type="outline"
-            style="margin: 8px 0"
-            :disabled="!model.enabled"
-            @click="addCustomStyle"
+        <a-collapse :default-active-key="[model.active_style_id]">
+          <a-collapse-item
+            v-for="s in model.styles"
+            :key="s.id"
+            :header="`${s.name}${s.is_builtin ? '（内置）' : '（自定义）'}${s.id === model.active_style_id ? ' · 使用中' : ''}`"
           >
-            ➕ 自定义风格
-          </a-button>
-
-          <a-collapse :default-active-key="[model.active_style_id]">
-            <a-collapse-item
-              v-for="s in model.styles"
-              :key="s.id"
-              :header="`${s.name}${s.is_builtin ? '（内置）' : '（自定义）'}${s.id === model.active_style_id ? ' · 使用中' : ''}`"
-              :disabled="!model.enabled"
-            >
-              <a-form layout="vertical" size="small">
-                <a-form-item label="名称">
-                  <a-input v-model="s.name" :disabled="!model.enabled" />
-                </a-form-item>
-                <a-form-item label="系统提示词（可自定义）">
-                  <a-textarea
-                    v-model="s.system_prompt"
-                    :disabled="!model.enabled"
-                    :auto-size="{ minRows: 4, maxRows: 10 }"
-                    placeholder="System prompt"
-                  />
-                </a-form-item>
-                <a-button
-                  v-if="!s.is_builtin"
-                  size="mini"
-                  status="danger"
-                  :disabled="!model.enabled"
-                  @click="removeStyle(s.id)"
-                >
-                  删除风格
-                </a-button>
-              </a-form>
-            </a-collapse-item>
-          </a-collapse>
-        </a-collapse-item>
-      </a-collapse>
-    </fieldset>
+            <a-form layout="vertical" size="small">
+              <a-form-item label="名称">
+                <a-input v-model="s.name" />
+              </a-form-item>
+              <a-form-item label="系统提示词（可自定义）">
+                <a-textarea
+                  v-model="s.system_prompt"
+                  :auto-size="{ minRows: 4, maxRows: 10 }"
+                  placeholder="System prompt"
+                />
+              </a-form-item>
+              <a-button
+                v-if="!s.is_builtin"
+                size="mini"
+                status="danger"
+                @click="removeStyle(s.id)"
+              >
+                删除风格
+              </a-button>
+            </a-form>
+          </a-collapse-item>
+        </a-collapse>
+      </a-collapse-item>
+    </a-collapse>
   </div>
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, watch } from 'vue'
 
 const model = defineModel({ type: Object, required: true })
-defineProps({
-  kindLabel: { type: String, default: '任务' },
-  defaultTime: { type: String, default: '08:00' },
-  // 启用开关已提升到外层栏头时置 true，不再渲染本组件内的启用行
-  headless: { type: Boolean, default: false },
-})
-
-const timeText = ref('08:00')
 
 const styleOptions = computed(() =>
   (model.value.styles || []).map((s) => ({
@@ -200,61 +69,6 @@ const styleOptions = computed(() =>
     value: s.id,
   })),
 )
-
-/** 公休日 = 周末 + 节假日 联动开关 */
-const skipPublicRest = computed(
-  () => !!(model.value.skip_weekends && model.value.skip_holidays),
-)
-
-function onSkipPublicRest(v) {
-  const on = !!v
-  model.value.skip_weekends = on
-  model.value.skip_holidays = on
-}
-
-function pad2(n) {
-  return String(Math.max(0, n)).padStart(2, '0')
-}
-
-function syncTextFromModel() {
-  const h = model.value?.trigger_hour ?? 0
-  const m = model.value?.trigger_minute ?? 0
-  timeText.value = `${pad2(h)}:${pad2(m)}`
-}
-
-function parseTime(v) {
-  const s = String(v || '').trim()
-  const m = s.match(/^(\d{1,2})\s*[:：]\s*(\d{1,2})$/)
-  if (!m) {
-    syncTextFromModel()
-    return
-  }
-  let hh = Math.max(0, Math.min(23, parseInt(m[1], 10)))
-  let mm = Math.max(0, Math.min(59, parseInt(m[2], 10)))
-  model.value.trigger_hour = hh
-  model.value.trigger_minute = mm
-  timeText.value = `${pad2(hh)}:${pad2(mm)}`
-}
-
-function commitTime() {
-  parseTime(timeText.value)
-}
-
-function nudgeHour(delta) {
-  let h = (model.value.trigger_hour ?? 0) + delta
-  if (h > 23) h = 0
-  if (h < 0) h = 23
-  model.value.trigger_hour = h
-  syncTextFromModel()
-}
-
-function nudgeMinute(delta) {
-  let m = (model.value.trigger_minute ?? 0) + delta
-  if (m > 59) m = 0
-  if (m < 0) m = 59
-  model.value.trigger_minute = m
-  syncTextFromModel()
-}
 
 function uid() {
   return 'custom_' + Math.random().toString(36).slice(2, 9)
@@ -283,46 +97,12 @@ watch(
   () => model.value,
   (v) => {
     if (v && !Array.isArray(v.styles)) v.styles = []
-    // 空 = 跟随全局（后端语义）；界面上物化为全选，避免看着像「不通知」
-    if (v && !Array.isArray(v.notify_channels)) v.notify_channels = ['app_popup', 'wxpusher', 'feishu_bot']
-    syncTextFromModel()
   },
   { immediate: true, deep: true },
 )
-
-/** 至少保留一个渠道 */
-function onChannelsChange(v) {
-  if (!v || !v.length) model.value.notify_channels = ['app_popup']
-}
-
-watch(
-  () => [model.value?.trigger_hour, model.value?.trigger_minute],
-  () => syncTextFromModel(),
-)
-
-// 输入完整 HH:mm 时即时写回 model，避免未失焦点保存导致仍是旧时刻
-watch(timeText, (v) => {
-  const s = String(v || '').trim()
-  if (/^\d{1,2}\s*[:：]\s*\d{1,2}$/.test(s)) {
-    parseTime(s)
-  }
-})
 </script>
 
 <style scoped>
-.job-fields {
-  border: none;
-  margin: 0;
-  padding: 0;
-  min-inline-size: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.job-fields:disabled {
-  opacity: 0.55;
-  pointer-events: none;
-}
 /* field-line 行式（与 Settings 页 zt 体系同构：标签左、控件右） */
 .field-line {
   display: flex;
@@ -342,73 +122,8 @@ watch(timeText, (v) => {
   gap: 8px;
   min-width: 0;
 }
-.line-hint {
-  margin: -2px 0 0;
-}
 .style-collapse :deep(.arco-collapse-item) {
   border: none;
-}
-.time-fused {
-  display: inline-grid;
-  grid-template-columns: 28px 28px 1fr 28px 28px;
-  grid-template-rows: 22px 36px 22px;
-  gap: 2px 4px;
-  width: 200px;
-  align-items: center;
-  padding: 4px;
-  border: 1px solid var(--color-border-2, #e5e6eb);
-  border-radius: var(--zt-radius-md);
-  background: var(--color-fill-1, #f7f8fa);
-}
-.time-fused.disabled {
-  opacity: 0.7;
-}
-.time-fused .time-input {
-  grid-column: 1 / -1;
-  grid-row: 2;
-}
-.time-fused .time-input :deep(.arco-input) {
-  text-align: center;
-  font-size: 18px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.04em;
-}
-.spin-btn {
-  grid-row: 1;
-  height: 22px;
-  border: none;
-  background: transparent;
-  color: var(--color-text-2);
-  cursor: pointer;
-  line-height: 1;
-  font-size: 10px;
-  padding: 0;
-  border-radius: 4px;
-}
-.spin-btn:hover:not(:disabled) {
-  background: var(--color-fill-2, #e5e6eb);
-  color: var(--color-text-1);
-}
-.spin-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.4;
-}
-.spin-btn:nth-of-type(1) {
-  grid-column: 1;
-  grid-row: 1;
-}
-.spin-btn:nth-of-type(2) {
-  grid-column: 5;
-  grid-row: 1;
-}
-.spin-btn:nth-of-type(3) {
-  grid-column: 1;
-  grid-row: 3;
-}
-.spin-btn:nth-of-type(4) {
-  grid-column: 5;
-  grid-row: 3;
 }
 .muted {
   color: var(--color-text-3);

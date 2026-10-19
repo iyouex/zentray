@@ -109,6 +109,7 @@ class TaskService:
         clean.pop("periodicity", None)
         clean = self._normalize_category_fields(clean)
         clean = self._normalize_reminder_field(clean)
+        clean = self._normalize_reminder_fields(clean)
         clean["subtasks"] = self._normalize_subtasks(clean.get("subtasks"))
         task = Task.from_dict(clean)
         tasks = self.task_repo.find_all()
@@ -237,6 +238,9 @@ class TaskService:
             task_data = {**task_data, "task_type": "one-time"}
         task_data = self._normalize_category_fields(task_data)
         task_data = self._normalize_reminder_field(task_data)
+        # 显式携带才归一交付时间（局部保存不带此键时靠 merge 保住存量）
+        if "deliveries" in task_data:
+            task_data = self._normalize_reminder_fields(task_data)
         # 仅当显式传入 subtasks 才归一——Qt TaskDialog 等不带此键的调用靠 merge 保住存量
         if "subtasks" in task_data:
             task_data["subtasks"] = self._normalize_subtasks(task_data.get("subtasks"))
@@ -445,6 +449,7 @@ class TaskService:
     def _refresh_scheduler(self) -> None:
         """重新从存储加载活跃任务并构建调度队列"""
         tasks = self.task_repo.find_active()
+        from zentray.core.scheduler import task_reminder_gated
         from zentray.services.settings_manager import SettingsManager
 
         settings = SettingsManager()
@@ -452,6 +457,10 @@ class TaskService:
             mode=settings.polling.rotation_mode,
             overdue_enabled=settings.polling.enable_overdue_rotation,
             overdue_prefix=settings.polling.overdue_prefix,
+        )
+        # 单例实时读：分类时间窗/公休日预设保存后无需重启即生效
+        self.scheduler.gate = lambda t, now: task_reminder_gated(
+            t, now, SettingsManager().categories
         )
         self.scheduler.build_queue(tasks)
 
@@ -505,6 +514,8 @@ class TaskService:
             calendar_enabled=bool(data.get("calendar_enabled", False)),
             calendar_horizon_mode=(data.get("calendar_horizon_mode") or "count"),
             calendar_horizon_value=(data.get("calendar_horizon_value", 4)),
+            remind_start_slots=data.get("remind_start_slots") or [],
+            skip_holidays=bool(data.get("skip_holidays", False)),
         )
 
     def _normalize_category_fields(self, data: dict) -> dict:
@@ -557,6 +568,30 @@ class TaskService:
             data["reminder"] = TaskReminder.from_dict(rem)
         return data
 
+    @staticmethod
+    def _normalize_reminder_fields(data: dict) -> dict:
+        """交付时间归一 + 最晚者覆盖截止日期；创建时未给 skip_holidays 取分类预设。"""
+        from zentray.core.categories import resolve_primary_secondary
+        from zentray.core.reminder import deliveries_deadline, normalize_deliveries
+        from zentray.services.settings_manager import SettingsManager
+
+        data = {**data}
+        data["deliveries"] = normalize_deliveries(data.get("deliveries"))
+        deadline = deliveries_deadline(data["deliveries"])
+        if deadline:
+            data["deadline"] = deadline
+        if "skip_holidays" not in data:
+            cats = SettingsManager().categories
+            primary, _ = resolve_primary_secondary(
+                cats,
+                primary_id=data.get("category_primary_id"),
+                category_name=data.get("category"),
+            )
+            data["skip_holidays"] = bool(
+                primary.skip_holidays if primary else False
+            )
+        return data
+
     def handle_reminder_action(
         self, task_id: str, action: str, fire_key: str, snooze_minutes: int = 10
     ) -> Optional[Task]:
@@ -589,6 +624,9 @@ class TaskService:
                 pass
         if action == "done":
             self.mark_done(task_id)
+            return task  # 已归档删除，返回快照
+        if action == "abandon":
+            self.abandon(task_id)
             return task  # 已归档删除，返回快照
         return self.find_task(task_id) or task
 
