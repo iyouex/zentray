@@ -7,6 +7,7 @@ dispatch_event / poll_timers 为薄布线层，依赖经 configure() 注入。
   authorized: {pid: bool}   三态——缺失=从未询问；false=已拒绝（持久不再问）
   watermarks: {key: str}    daily=日期 / interval=ISO 时间 / cron=分钟键
   last_skip:  {pid: {reason,time}}  busy/番茄跳过记录（排查用，不通知）
+  legacy_migrated: bool     内置计划/复盘 → chaowen/musheng 一次性迁移标记
 """
 from __future__ import annotations
 
@@ -40,6 +41,8 @@ class TriggerState:
     authorized: Dict[str, bool] = field(default_factory=dict)
     watermarks: Dict[str, str] = field(default_factory=dict)
     last_skip: Dict[str, dict] = field(default_factory=dict)
+    # 内置计划/复盘 → chaowen/musheng 插件的一次性迁移已完成
+    legacy_migrated: bool = False
 
 
 def load_state() -> TriggerState:
@@ -49,6 +52,7 @@ def load_state() -> TriggerState:
             authorized=dict(raw.get("authorized") or {}),
             watermarks=dict(raw.get("watermarks") or {}),
             last_skip=dict(raw.get("last_skip") or {}),
+            legacy_migrated=bool(raw.get("legacy_migrated")),
         )
     except Exception:
         return TriggerState()
@@ -64,6 +68,7 @@ def save_state(state: TriggerState) -> None:
                         "authorized": state.authorized,
                         "watermarks": state.watermarks,
                         "last_skip": state.last_skip,
+                        "legacy_migrated": state.legacy_migrated,
                     },
                     ensure_ascii=False,
                     indent=2,
@@ -171,6 +176,131 @@ def event_triggers(plug: LoadedPlugin, event: str) -> list:
 
 
 # ==========================================
+# 周期参数插件（朝闻/暮省范式）：参数预设推导定时
+# ==========================================
+
+
+def _preset_params(pid: str, manifest) -> dict:
+    """manifest 参数默认值，被参数预设覆盖（预设 > manifest default）。"""
+    out = {p.name: (p.default or "") for p in manifest.params}
+    try:
+        from zentray.services.settings_manager import SettingsManager
+
+        presets = SettingsManager().ops.param_presets.get(pid)
+        if isinstance(presets, dict):
+            out.update(presets)
+    except Exception:
+        pass
+    return out
+
+
+def _is_period_plugin(manifest) -> bool:
+    """声明 period 入参 = 周期由参数预设推导（日/周/月）。"""
+    return any(p.name == "period" for p in manifest.params)
+
+
+def _period_raw(vals: dict) -> Optional[dict]:
+    """预设 → 触发器原始 dict；非法值返回 None（回落 manifest 触发）。
+
+    daily→daily HH:MM；weekly→cron 分 时 * * 周几（1=周一…7=周日）；
+    monthly→cron 分 时 几号 * *。
+    """
+    try:
+        h, mi = (int(x) for x in str(vals.get("time") or "").split(":")[:2])
+        if not (0 <= h <= 23 and 0 <= mi <= 59):
+            return None
+        period = str(vals.get("period") or "daily").strip().lower()
+        if period == "weekly":
+            dow = max(1, min(7, int(str(vals.get("weekday") or "1"))))
+            return {"type": "cron", "expr": f"{mi} {h} * * {dow}"}
+        if period == "monthly":
+            dom = max(1, min(31, int(str(vals.get("day_of_month") or "1"))))
+            return {"type": "cron", "expr": f"{mi} {h} {dom} * *"}
+        return {"type": "daily", "time": f"{h:02d}:{mi:02d}"}
+    except (TypeError, ValueError):
+        return None
+
+
+def scheduled_triggers(plug: LoadedPlugin) -> list:
+    """定时触发集。period 插件由参数预设实时推导（每轮轮询重算，改时间
+    自然换 key 重触发）；其余走 trigger_overrides 覆盖层。"""
+    m = plug.manifest
+    if not _is_period_plugin(m):
+        return effective_triggers(m.id, m.triggers)
+    raw = _period_raw(_preset_params(m.id, m))
+    if raw is None:
+        return list(m.triggers)
+    from zentray.plugins.manifest import _validate_triggers
+    from zentray.plugins.models import PluginType
+
+    errors: list = []
+    out = _validate_triggers([raw], PluginType.SCRIPT, 2, errors)
+    if errors or not out:
+        logger.warning("插件 %s 周期参数非法，回落 manifest 触发: %s", m.id, errors)
+        return list(m.triggers)
+    return out
+
+
+def _skip_today(plug: LoadedPlugin, now: _dt.datetime) -> bool:
+    """period 插件公休日跳过（周末/法定节假日；与旧内置计划/复盘同语义：
+    跳过即当日不跑）。"""
+    m = plug.manifest
+    if not _is_period_plugin(m):
+        return False
+    vals = _preset_params(m.id, m)
+    skip_weekends = str(vals.get("skip_weekends") or "").strip().lower() in (
+        "1", "true", "yes", "on",
+    )
+    skip_holidays = str(vals.get("skip_holidays") or "").strip().lower() in (
+        "1", "true", "yes", "on",
+    )
+    if not (skip_weekends or skip_holidays):
+        return False
+    from zentray.core.holidays import should_skip_auto_review
+
+    return should_skip_auto_review(
+        now.date(), skip_weekends=skip_weekends, skip_holidays=skip_holidays
+    )
+
+
+def migrate_legacy_jobs() -> None:
+    """一次性迁移（幂等）：内置每日计划/复盘 → chaowen/musheng 插件。
+
+    旧 ai.plan / ai.review 的触发时间、跳过与保存参数 → ops.param_presets；
+    enabled → 插件自动运行授权；per-job 通知渠道 → 插件级通知渠道（若可用）。
+    """
+    state = load_state()
+    if state.legacy_migrated:
+        return
+    try:
+        from zentray.services.settings_manager import SettingsManager
+
+        sm = SettingsManager()
+        for pid, job in (("chaowen", sm.ai.plan), ("musheng", sm.ai.review)):
+            if pid not in sm.ops.param_presets:
+                sm.ops.param_presets[pid] = {
+                    "period": "daily",
+                    "time": f"{int(job.trigger_hour):02d}:{int(job.trigger_minute):02d}",
+                    "weekday": "1",
+                    "day_of_month": "1",
+                    "skip_weekends": "true" if job.skip_weekends else "false",
+                    "skip_holidays": "true" if job.skip_holidays else "false",
+                    "save_local": "true" if job.save_local else "false",
+                }
+            if pid not in state.authorized:
+                state.authorized[pid] = bool(job.enabled)
+            channels = [c for c in (job.notify_channels or []) if c]
+            if channels and hasattr(sm.ops, "plugin_notify_channels"):
+                sm.ops.plugin_notify_channels.setdefault(pid, channels)
+        sm.save()
+        state.legacy_migrated = True
+        save_state(state)
+        logger.info("内置计划/复盘已迁移为插件（chaowen/musheng）")
+    except Exception:
+        logger.exception("计划/复盘插件迁移失败（下次启动重试）")
+
+
+# ==========================================
 # 布线（依赖注入 + 分发）
 # ==========================================
 
@@ -272,7 +402,7 @@ def poll_timers() -> None:
     _rescan()
     now = _dt.datetime.now()
     for plug in loader.plugins:
-        for trig in effective_triggers(plug.manifest.id, plug.manifest.triggers):
+        for trig in scheduled_triggers(plug):
             if trig.type == TriggerType.EVENT:
                 continue
             key = trigger_key(plug.manifest.id, trig)
@@ -282,6 +412,12 @@ def poll_timers() -> None:
                 continue
             if state.authorized.get(plug.manifest.id) is not True:
                 _request_authorize(plug, trigger=trig.type.value, task=None)
+                continue
+            if _skip_today(plug, now):
+                # 公休日跳过 = 记水位当日不再触发（与旧内置计划/复盘一致）
+                state.watermarks[key] = new_wm
+                save_state(state)
+                logger.info("插件触发跳过（公休日）: %s", plug.manifest.id)
                 continue
             if _fire_now(plug.manifest.id, trigger=trig.type.value, task=None):
                 state = load_state()
