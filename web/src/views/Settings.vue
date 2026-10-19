@@ -144,23 +144,25 @@
               </p>
             </section>
 
-            <!-- ③ 每日计划与复盘（合并双栏） -->
+            <!-- ③ 计划 / 复盘风格（调度已迁移为插件朝闻/暮省） -->
             <section class="zt-block">
               <div class="zt-h3">每日计划与复盘</div>
+              <p class="hint">
+                调度已迁移为插件：执行周期（日/周/月）、触发时间、跳过公休日等在
+                设置 → 插件 → 已安装插件 →「朝闻 / 暮省」的参数预设中设置；此处维护各自的 AI 风格提示词。
+              </p>
               <div class="ai-jobs">
                 <div class="ai-job-col">
                   <div class="ai-job-head">
-                    <span class="zt-h4">📋 每日计划</span>
-                    <a-switch v-model="form.ai.plan.enabled" size="small" />
+                    <span class="zt-h4">📋 朝闻 · 计划风格</span>
                   </div>
-                  <JobEditor v-model="form.ai.plan" kind-label="每日计划" headless />
+                  <JobEditor v-model="form.ai.plan" />
                 </div>
                 <div class="ai-job-col">
                   <div class="ai-job-head">
-                    <span class="zt-h4">📝 每日复盘</span>
-                    <a-switch v-model="form.ai.review.enabled" size="small" />
+                    <span class="zt-h4">📝 暮省 · 复盘风格</span>
                   </div>
-                  <JobEditor v-model="form.ai.review" kind-label="每日复盘" headless />
+                  <JobEditor v-model="form.ai.review" />
                 </div>
               </div>
             </section>

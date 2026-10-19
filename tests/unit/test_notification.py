@@ -69,23 +69,3 @@ def test_job_notify_channels_roundtrip():
     assert AIJobSettings.from_dict({}, kind="plan").notify_channels == []
     assert AIJobSettings().to_dict()["notify_channels"] == []
     assert OpsSettings().notify_channels == []
-
-
-def test_popup_selected(monkeypatch):
-    from zentray.workers.nightly_job import NightlyJobWorker
-    import zentray.services.settings_manager as sm_mod
-
-    class FakeJob:
-        def __init__(self, ch):
-            self.notify_channels = ch
-
-    class FakeAI:
-        plan = FakeJob(["wxpusher"])
-        review = FakeJob([])
-
-    class FakeSM:
-        ai = FakeAI()
-
-    monkeypatch.setattr(sm_mod, "SettingsManager", lambda: FakeSM())
-    assert NightlyJobWorker._popup_selected("plan") is False  # 只选了 wxpusher
-    assert NightlyJobWorker._popup_selected("review") is True  # 空 = 跟随全局

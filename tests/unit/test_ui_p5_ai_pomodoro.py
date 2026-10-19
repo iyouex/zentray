@@ -37,10 +37,12 @@ def test_ai_page_no_tabs_linear_sections():
     assert "api-dot" in ai, "模型接入行首应有状态点 api-dot（替换文字 tag）"
 
 
-def test_job_editor_headless_prop():
-    assert "headless" in _JOB, "JobEditor 应支持 headless prop"
-    assert "v-if=\"!headless\"" in _JOB, "headless 时不应渲染启用行"
-    assert "field-line" in _JOB, "JobEditor 应为 field-line 行式"
+def test_job_editor_styles_only():
+    """调度/通知参数已迁移至插件（朝闻/暮省）参数预设，JobEditor 只留风格编辑。"""
+    assert "trigger_hour" not in _JOB, "调度时间应迁出 JobEditor（插件参数预设）"
+    assert "notify_channels" not in _JOB, "通知渠道应迁出 JobEditor（插件报告通知）"
+    assert "风格" in _JOB and "field-line" in _JOB, "保留风格编辑且为 field-line 行式"
+    assert "朝闻" in _SETTINGS and "暮省" in _SETTINGS, "AI 页应指向插件朝闻/暮省"
 
 
 def _pomo_section() -> str:

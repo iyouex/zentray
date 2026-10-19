@@ -567,45 +567,6 @@ class TrayController(QObject):
 
         return opener
 
-    def on_ai_job_completed(self, kind: str, title: str, msg: str, report_path: str) -> None:
-        """AI 计划/复盘完成（nightly worker 信号，AutoConnection 排队回主线程）。
-
-        通知可点击打开本地报告；未点击查看时按 plan/review 各自设置进入顶栏轮播。
-        """
-        key = f"ai:{report_path}" if report_path else ""
-        if key:
-            job = getattr(self._settings.ai, kind, None)
-            minutes = int(getattr(job, "report_tray_minutes", 60) or 0) if job else 0
-            if job and getattr(job, "report_tray_enabled", True) and minutes > 0:
-                label = "计划" if kind == "plan" else "复盘"
-                self.report_rotation.add(key, f"📄 {label}报告待查看", minutes)
-                self._carousel_started = True
-                self.update_display(update_menu=False)
-        self.renderer.show_notification(
-            title,
-            msg,
-            on_click=self._make_file_opener(report_path, mark_key=key),
-        )
-
-    def _make_file_opener(self, path: str, mark_key: str = ""):
-        """通知点击回调：系统默认应用打开本地报告文件（md 等）。"""
-        if not path:
-            return None
-
-        def opener():
-            if mark_key:
-                self.mark_report_viewed(mark_key)
-            try:
-                from pathlib import Path
-
-                from zentray.api.handlers import _open_with_system
-
-                _open_with_system(Path(path))
-            except Exception:
-                logger.exception("打开报告失败: %s", path)
-
-        return opener
-
     def mark_report_viewed(self, key: str) -> None:
         """报告已被查看（通知点击 / 面板打开）：移出顶栏轮播并刷新。"""
         if self.report_rotation.mark_viewed(key):
