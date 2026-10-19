@@ -154,6 +154,49 @@ def due_reminder_keys(
     return keys
 
 
+def normalize_deliveries(raw) -> List[dict]:
+    """关键交付时间点归一：[{at, notify}]；非法/缺 at 丢弃，保留已触发标记。"""
+    out: List[dict] = []
+    for d in raw or []:
+        if not isinstance(d, dict):
+            continue
+        at = str(d.get("at") or "").strip()
+        try:
+            datetime.datetime.fromisoformat(at)
+        except (ValueError, TypeError):
+            continue
+        item = {"at": at, "notify": bool(d.get("notify", False))}
+        if d.get("fired"):
+            item["fired"] = True
+        out.append(item)
+    out.sort(key=lambda d: d["at"])
+    return out
+
+
+def due_delivery_ats(deliveries: List[dict], now: datetime.datetime) -> List[str]:
+    """到点且需弹窗、尚未触发过的交付时间（60s 窗口，与提醒槽一致）。"""
+    out: List[str] = []
+    for d in deliveries or []:
+        if not d.get("notify") or d.get("fired"):
+            continue
+        try:
+            at = datetime.datetime.fromisoformat(str(d.get("at")))
+        except (ValueError, TypeError):
+            continue
+        delta = (now - at).total_seconds()
+        if 0 <= delta < 60:
+            out.append(str(d.get("at")))
+    return out
+
+
+def deliveries_deadline(deliveries: List[dict]) -> Optional[str]:
+    """最晚交付时间的日期（YYYY-MM-DD）；无交付返回 None。"""
+    valid = normalize_deliveries(deliveries)
+    if not valid:
+        return None
+    return valid[-1]["at"][:10]
+
+
 def apply_reminder_action(
     task,
     action: str,

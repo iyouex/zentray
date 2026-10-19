@@ -123,6 +123,9 @@ def _start_plugin_trigger_worker_if_needed(runtime: AppRuntime) -> None:
     """插件总开关开启时启动定时触发 worker（事件触发不走 worker）。"""
     from zentray.plugins import triggers
 
+    # 一次性迁移（幂等）：内置每日计划/复盘 → chaowen/musheng 插件
+    triggers.migrate_legacy_jobs()
+
     need = False
     try:
         from zentray.services.settings_manager import SettingsManager
@@ -147,37 +150,25 @@ def _start_plugin_trigger_worker_if_needed(runtime: AppRuntime) -> None:
             logger.info("插件触发 worker 已停止")
 
 
-def _start_nightly_if_needed(runtime: AppRuntime, task_repo: TaskRepository) -> None:
-    """计划/复盘任一开启且已配置 API，或通知渠道可用时启动调度 worker。"""
-    need = False
+def _start_nightly_if_needed(runtime: AppRuntime) -> None:
+    """自动周期备份 worker（计划/复盘已迁移为插件 chaowen/musheng）。"""
     try:
         from zentray.services.settings_manager import SettingsManager
 
-        sm = SettingsManager()
-        ai = sm.ai
-        need = bool(
-            (ai.plan.enabled or ai.review.enabled) and sm.is_ai_configured()
-        ) or sm.is_notification_configured() or bool(sm.backup.auto_enabled)
+        need = bool(SettingsManager().backup.auto_enabled)
     except Exception:
-        features = get_enabled_features()
-        need = features["notification"] or features["ai_coach"]
+        need = False
 
     if need:
         if runtime.nightly is None or not runtime.nightly.isRunning():
-            runtime.nightly = NightlyJobWorker(task_repo)
-            if runtime.controller:
-                # 连 controller 绑定方法（QObject，排队回主线程）：
-                # 通知可点击开报告 + 未查看报告进入顶栏轮播
-                runtime.nightly.job_completed.connect(
-                    runtime.controller.on_ai_job_completed
-                )
+            runtime.nightly = NightlyJobWorker()
             runtime.nightly.start()
-            logger.info("AI 计划/复盘 worker 已启动")
+            logger.info("自动备份 worker 已启动")
     else:
         if runtime.nightly and runtime.nightly.isRunning():
             runtime.nightly.stop()
             runtime.nightly = None
-            logger.info("AI 计划/复盘 worker 已停止")
+            logger.info("自动备份 worker 已停止")
 
 
 def _on_reminder_due(runtime: AppRuntime, batch: list) -> None:
@@ -198,12 +189,13 @@ def _on_reminder_due(runtime: AppRuntime, batch: list) -> None:
         task_service = injector.get(TaskService)
         handled, payload = try_vue_reminders(batch)
         if not handled:
-            # Qt 回退：逐个顺序弹，本地应用动作
+            # Qt 回退：逐个顺序弹，本地应用动作；「跳转」结束本轮直达任务列表
+            jump_id = None
             for task, fire_key in batch:
                 dlg = ReminderDialog(task)
                 run_modal_loop(dlg)
                 action = dlg.result_action
-                snooze = getattr(dlg, "snooze_minutes", 10) or 10
+                snooze = getattr(dlg, "snooze_minutes", 30) or 30
                 rem = apply_reminder_action(
                     task, action, fire_key, snooze_minutes=snooze
                 )
@@ -223,6 +215,15 @@ def _on_reminder_due(runtime: AppRuntime, batch: list) -> None:
                         pass
                 if action == "done":
                     task_service.mark_done(task.id)
+                if action == "abandon":
+                    task_service.abandon(task.id)
+                if action == "jump":
+                    jump_id = task.id
+                    break  # 余下提醒按到期窗自然错过（同 Vue 甲板跳转语义）
+            if jump_id and runtime.controller:
+                from zentray.ui.vue_commands import try_vue_task_list
+
+                try_vue_task_list(runtime.controller, jump_id)
         else:
             # 未处理卡（本轮 fire_key 未写 last_fired_key）统一 dismiss；
             # 已完成/已忽略/已稍后的卡状态不被覆盖（幂等）
@@ -479,8 +480,7 @@ def main():
 
     def apply_settings_with_workers():
         original_apply()
-        task_repo = injector.get(TaskRepository)
-        _start_nightly_if_needed(runtime, task_repo)
+        _start_nightly_if_needed(runtime)
         _start_plugin_trigger_worker_if_needed(runtime)
         from zentray.services.settings_manager import SettingsManager as _SM
 
@@ -535,7 +535,7 @@ def main():
     except Exception:
         logger.exception("日历订阅源启动刷新失败")
 
-    _start_nightly_if_needed(runtime, task_repo)
+    _start_nightly_if_needed(runtime)
     _start_plugin_trigger_worker_if_needed(runtime)
 
     # 启动事件（startup 触发器）：worker 与插件系统就绪后派发一次
