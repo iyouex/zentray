@@ -35,12 +35,21 @@ class PrimaryCategory:
     id: str
     name: str
     secondaries: List[SecondaryCategory] = field(default_factory=list)
+    # 提醒预设（2026-10-19）：轮播/弹窗提醒时间窗（HH:MM，关=不限）与跳过公休日
+    remind_window_enabled: bool = False
+    remind_window_start: str = "09:00"
+    remind_window_end: str = "18:00"
+    skip_holidays: bool = False
 
     def to_dict(self) -> dict:
         return {
             "id": self.id,
             "name": self.name,
             "secondaries": [s.to_dict() for s in self.secondaries],
+            "remind_window_enabled": self.remind_window_enabled,
+            "remind_window_start": self.remind_window_start,
+            "remind_window_end": self.remind_window_end,
+            "skip_holidays": self.skip_holidays,
         }
 
     @classmethod
@@ -54,6 +63,10 @@ class PrimaryCategory:
             id=data.get("id") or str(uuid.uuid4()),
             name=(data.get("name") or "").strip() or "未命名",
             secondaries=secs,
+            remind_window_enabled=bool(data.get("remind_window_enabled", False)),
+            remind_window_start=str(data.get("remind_window_start") or "09:00"),
+            remind_window_end=str(data.get("remind_window_end") or "18:00"),
+            skip_holidays=bool(data.get("skip_holidays", False)),
         )
 
     def find_secondary(self, secondary_id: Optional[str]) -> Optional[SecondaryCategory]:

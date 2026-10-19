@@ -504,6 +504,28 @@
                       </div>
                     </template>
 
+                    <div class="cat-presets">
+                      <div class="field-line">
+                        <span class="field-k">轮播提醒范围</span>
+                        <div class="preset-ctrl">
+                          <a-switch v-model="p.remind_window_enabled" size="small" />
+                          <template v-if="p.remind_window_enabled">
+                            <TimeSpinner v-model="p.remind_window_start" />
+                            <span class="muted">至</span>
+                            <TimeSpinner v-model="p.remind_window_end" />
+                          </template>
+                        </div>
+                      </div>
+                      <div class="field-line">
+                        <span class="field-k">跳过公休日</span>
+                        <a-switch v-model="p.skip_holidays" size="small" />
+                      </div>
+                      <p class="hint">
+                        范围外该分类任务不轮播、不弹窗（支持跨夜窗，如 22:00-06:00）；
+                        公休日=周末+法定节假日，新建任务默认继承跳过设置。
+                      </p>
+                    </div>
+
                     <div v-if="form.categories.enabled_secondary" class="sec-block">
                       <a-space style="margin-bottom: 8px">
                         <a-button size="mini" type="outline" @click="addSecondary(p)">
@@ -1261,6 +1283,7 @@ import { applyAppearance, applyTheme } from '@/theme'
 import JobEditor from '@/components/JobEditor.vue'
 import HistoryPanel from '@/components/HistoryPanel.vue'
 import NumberSpinner from '@/components/NumberSpinner.vue'
+import TimeSpinner from '@/components/TimeSpinner.vue'
 import PluginDocDrawer from '@/components/PluginDocDrawer.vue'
 import { useRouter } from 'vue-router'
 
@@ -1844,6 +1867,10 @@ function addPrimary() {
     id: uid(),
     name: '新分类',
     secondaries: [],
+    remind_window_enabled: false,
+    remind_window_start: '09:00',
+    remind_window_end: '18:00',
+    skip_holidays: false,
   })
 }
 
@@ -2491,6 +2518,13 @@ function normalizeLoaded(s) {
   if (form.appearance.statusbar_marquee == null) form.appearance.statusbar_marquee = false
   if (!form.categories) form.categories = emptyForm().categories
   if (!Array.isArray(form.categories.primary_list)) form.categories.primary_list = []
+  // 提醒预设字段兜底（旧数据无这些键）
+  for (const p of form.categories.primary_list) {
+    if (p.remind_window_enabled == null) p.remind_window_enabled = false
+    if (!p.remind_window_start) p.remind_window_start = '09:00'
+    if (!p.remind_window_end) p.remind_window_end = '18:00'
+    if (p.skip_holidays == null) p.skip_holidays = false
+  }
   // 括号强制成对
   if (!WRAP_PRESETS.some(
     (w) => w.left === form.categories.wrap_left && w.right === form.categories.wrap_right,
@@ -2832,6 +2866,21 @@ body.zt-skin-clay .nav-main {
   font-size: var(--zt-t3);
   color: var(--color-text-2);
   flex-shrink: 0;
+}
+/* 分类提醒预设区（collapse 展开体内） */
+.cat-presets {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--zt-radius-card, 12px);
+}
+.preset-ctrl {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .doc-link {
   color: var(--color-primary);
