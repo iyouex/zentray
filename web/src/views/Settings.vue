@@ -248,6 +248,50 @@
                 </a-collapse-item>
               </a-collapse>
             </section>
+
+            <!-- 插件报告通知格式 + 预览 -->
+            <section class="zt-block" style="max-width: 900px">
+              <div class="zt-h3">插件通知格式</div>
+              <p class="hint">
+                脚本运行完成通知的标题/正文模板。可用占位符：<code>{name}</code> 插件名 ·
+                <code>{status}</code> 执行状态 · <code>{summary}</code> 摘要 ·
+                <code>{result}</code> 结果正文（空时回退状态）。随「保存设置」生效。
+              </p>
+              <div class="field-table">
+                <div class="field-line">
+                  <span class="field-k">标题模板</span>
+                  <a-input
+                    v-model="form.notification.plugin_title_template"
+                    size="small"
+                    style="width: 360px"
+                    placeholder="脚本: {name}"
+                  />
+                </div>
+                <div class="field-line" style="align-items: flex-start">
+                  <span class="field-k">正文模板</span>
+                  <a-textarea
+                    v-model="form.notification.plugin_body_template"
+                    :auto-size="{ minRows: 2, maxRows: 5 }"
+                    style="width: 360px"
+                    placeholder="{result}"
+                  />
+                </div>
+              </div>
+              <div class="zt-h4" style="margin-top: 12px">预览</div>
+              <div
+                style="
+                  margin-top: 6px;
+                  padding: 10px 12px;
+                  border: 1px solid var(--color-border-2);
+                  border-radius: 8px;
+                  background: var(--color-fill-1);
+                  max-width: 420px;
+                "
+              >
+                <div class="zt-h4">{{ notifyPreviewTitle }}</div>
+                <pre class="hint" style="margin: 4px 0 0; white-space: pre-wrap; font-family: inherit">{{ notifyPreviewBody }}</pre>
+              </div>
+            </section>
           </template>
 
           <template v-else-if="mainKey === 'polling'">
@@ -679,16 +723,9 @@
                   </a-space>
                 </div>
                 <a-divider style="margin: 10px 0" />
-                <a-form-item label="脚本完成通知渠道" style="margin-bottom: 0">
-                  <a-checkbox-group v-model="form.ops.notify_channels" @change="onOpsChannelsChange">
-                    <a-checkbox value="app_popup">应用弹窗</a-checkbox>
-                    <a-checkbox value="wxpusher">WxPusher</a-checkbox>
-                    <a-checkbox value="feishu_bot">飞书机器人</a-checkbox>
-                  </a-checkbox-group>
-                  <div class="plugin-desc" style="margin-top: 4px">
-                    可多选，至少保留一项（随「保存设置」生效）；WxPusher / 飞书机器人需在 设置 → 🔔 通知 中启用才实际推送
-                  </div>
-                </a-form-item>
+                <div class="plugin-desc">
+                  报告通知渠道已改为插件级：在各插件「编辑」面板中单独选择，选项来自 设置 → 🔔 通知 中已开启的渠道。
+                </div>
               </section>
 
               <!-- 已安装插件：行精简为四动作（说明/参数预设/编辑/删除），展开面板编辑+预设+授权 -->
@@ -776,6 +813,26 @@
                         </div>
                         <div class="trig-actions">
                           <a-button size="small" type="primary" :loading="opsPresetSaving === p.id" @click="saveParamPreset(p)">保存预设</a-button>
+                        </div>
+                      </div>
+
+                      <div class="plug-edit-sec">
+                        <div class="plug-edit-head">
+                          <b>报告通知渠道</b>
+                          <span class="pc-muted">（随「保存设置」生效）</span>
+                        </div>
+                        <a-select
+                          multiple
+                          allow-clear
+                          size="small"
+                          style="width: 320px"
+                          :model-value="form.ops.plugin_notify_channels?.[p.id] || []"
+                          :options="enabledChannelOptions"
+                          placeholder="跟随通知设置已启用渠道"
+                          @change="(v) => setPluginChannels(p.id, v)"
+                        />
+                        <div class="hint" style="margin-top: 4px">
+                          选项来自 设置 → 🔔 通知 中已开启的渠道（先在那里启用）；不选 = 跟随已启用渠道
                         </div>
                       </div>
 
@@ -1496,11 +1553,6 @@ async function loadOpsPage() {
   }
 }
 
-/** 插件报告通知渠道：至少保留一项 */
-function onOpsChannelsChange(v) {
-  if (!v || !v.length) form.ops.notify_channels = ['app_popup']
-}
-
 /** ops 局部保存惯例：getSettings → 合并 → saveSettings（后端 ops 分支整体替换） */
 async function saveOpsPatch(patch) {
   const s = await getSettings()
@@ -1703,6 +1755,30 @@ const AI_FEATURES = [
 /** 固定两条渠道，不允许增删 */
 const fixedChannels = computed(() => ensureFixedChannels(form.notification))
 
+/** 插件级报告通知渠道下拉选项：仅 设置-通知 中已开启的渠道 */
+const enabledChannelOptions = computed(() =>
+  fixedChannels.value.filter((c) => c.enabled).map((c) => ({ label: c.name, value: c.type })),
+)
+
+function setPluginChannels(pid, v) {
+  if (!form.ops.plugin_notify_channels) form.ops.plugin_notify_channels = {}
+  form.ops.plugin_notify_channels[pid] = Array.isArray(v) ? v : []
+}
+
+/** 通知模板渲染（与后端 render_template 同语义：未知占位符原样保留） */
+function renderTpl(tpl, ctx) {
+  return String(tpl || '').replace(/\{(\w+)\}/g, (m, k) => (k in ctx ? String(ctx[k]) : m))
+}
+
+const NOTIFY_PREVIEW_CTX = {
+  name: 'ai-news-digest',
+  status: '执行成功',
+  summary: '共 12 条要闻',
+  result: 'AI 日报已生成：共 12 条要闻，其中高优 3 条……',
+}
+const notifyPreviewTitle = computed(() => renderTpl(form.notification.plugin_title_template, NOTIFY_PREVIEW_CTX))
+const notifyPreviewBody = computed(() => renderTpl(form.notification.plugin_body_template, NOTIFY_PREVIEW_CTX))
+
 /** 番茄钟节奏预设：回填时长数字框（非独立模式） */
 const POMO_PRESETS = [
   { key: 'classic', label: '经典 25/5', focus: 25, short: 5, long: 15 },
@@ -1758,6 +1834,8 @@ function emptyForm() {
       enabled: true,
       wxpusher_app_token: '',
       wxpusher_uid: '',
+      plugin_title_template: '脚本: {name}',
+      plugin_body_template: '{result}',
     },
     ai: {
       api_profiles: [
@@ -1811,6 +1889,7 @@ function emptyForm() {
       param_presets: {},
       report_tray_enabled: true,
       report_tray_minutes: 60,
+      plugin_notify_channels: {},
     },
     update: { proxy: '' },
     calendar: { enabled: false },
@@ -2482,6 +2561,9 @@ function normalizeLoaded(s) {
   }
   if (!form.notification) form.notification = emptyForm().notification
   ensureFixedChannels(form.notification)
+  // 通知格式模板（旧数据无键补默认）
+  if (!form.notification.plugin_title_template) form.notification.plugin_title_template = '脚本: {name}'
+  if (!form.notification.plugin_body_template) form.notification.plugin_body_template = '{result}'
   if (!form.appearance) form.appearance = { theme: 'system', autostart: false }
   if (form.appearance.autostart == null) form.appearance.autostart = false
   if (form.appearance.motion == null) form.appearance.motion = 'full'
@@ -2516,10 +2598,7 @@ function normalizeLoaded(s) {
   form.ops = { ...emptyForm().ops, ...(s.ops || {}) }
   if (!form.ops.trigger_overrides) form.ops.trigger_overrides = {}
   if (!form.ops.param_presets) form.ops.param_presets = {}
-  // 空 = 跟随全局（后端语义）；界面上物化为全选
-  if (!Array.isArray(form.ops.notify_channels) || !form.ops.notify_channels.length) {
-    form.ops.notify_channels = ['app_popup', 'wxpusher', 'feishu_bot']
-  }
+  if (!form.ops.plugin_notify_channels) form.ops.plugin_notify_channels = {}
   opsUserDir.value = form.ops.user_plugins_dir || ''
   if (!form.polling) form.polling = emptyForm().polling
   // 番茄钟：旧配置缺新键时补默认

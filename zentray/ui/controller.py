@@ -478,12 +478,29 @@ class TrayController(QObject):
         status = "执行成功" if ok else f"执行失败: {summary}"
         run_id = str(report.get("run_id", "") or "")
         key = f"run:{run_id}" if run_id else ""
-        # 通知渠道可多选（设置-插件）；空 = 跟随通知设置已启用渠道
-        sel = self._settings.ops.notify_channels
+        # 通知渠道插件级配置（设置-插件展开面板）；缺该插件回退旧全局，再空 = 已启用渠道
+        from zentray.services.notification import render_template
+
+        ops = self._settings.ops
+        sel = (
+            ops.plugin_notify_channels.get(plugin_id)
+            if plugin_id in ops.plugin_notify_channels
+            else ops.notify_channels
+        )
+        # 通知格式模板（设置-通知）：{name}/{status}/{summary}/{result}
+        n = self._settings.notification
+        tpl_ctx = {
+            "name": name,
+            "status": status,
+            "summary": summary,
+            "result": report.get("result_text") or status,
+        }
+        title = render_template(n.plugin_title_template, tpl_ctx)
+        body = render_template(n.plugin_body_template, tpl_ctx)
         if not sel or "app_popup" in sel:
             self.renderer.show_notification(
-                f"脚本: {name}",
-                status[:120],
+                title,
+                body[:120],
                 on_click=self._make_report_opener(run_id, mark_key=key),
             )
         push_channels = [c for c in ("wxpusher", "feishu_bot") if not sel or c in sel]
@@ -496,8 +513,8 @@ class TrayController(QObject):
                     from zentray.services.notification import NotificationClient
 
                     NotificationClient.from_settings().send(
-                        f"脚本: {name}",
-                        (report.get("result_text") or status)[:500],
+                        title,
+                        body[:500],
                         channels=push_channels,
                     )
                 except Exception:
