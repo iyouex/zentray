@@ -225,6 +225,43 @@ def spawn_key_after_create(tmpl: "PeriodicTemplate", today: datetime.date) -> st
     )
 
 
+def resolve_remind_start(tmpl: "PeriodicTemplate", today: datetime.date) -> Optional[str]:
+    """
+    模板开始提醒点 → 本周期内首个到来的 ISO datetime。
+    weekly 取 [today, today+6] 中首个匹配 weekday；monthly 取本月目标日（超月末
+    钳到月末）。已过时刻视为立即开始，返回 None。
+    """
+    from zentray.core.reminder import parse_hhmm
+
+    slots = getattr(tmpl, "remind_start_slots", None) or []
+    periodicity = tmpl.periodicity or "daily"
+    best: Optional[datetime.datetime] = None
+    for s in slots:
+        h, m = parse_hhmm(getattr(s, "time_of_day", None) or "09:00")
+        if periodicity == "weekly":
+            wd = getattr(s, "weekday", None)
+            if wd is None:
+                continue
+            d = today + datetime.timedelta(days=(int(wd) - today.weekday()) % 7)
+            cand = datetime.datetime.combine(d, datetime.time(h, m))
+        elif periodicity == "monthly":
+            dom = getattr(s, "day_of_month", None)
+            if dom is None:
+                continue
+            import calendar
+
+            last = calendar.monthrange(today.year, today.month)[1]
+            d = datetime.date(today.year, today.month, min(max(1, int(dom)), last))
+            cand = datetime.datetime.combine(d, datetime.time(h, m))
+        else:
+            continue
+        if best is None or cand < best:
+            best = cand
+    if best is None or best <= datetime.datetime.now():
+        return None
+    return best.isoformat(timespec="minutes")
+
+
 def build_due_instance(tmpl: "PeriodicTemplate", today: datetime.date) -> Optional[Task]:
     """
     到期则构造实例任务并推进模板水位；否则返回 None。纯构造，不落盘。
@@ -257,6 +294,8 @@ def build_due_instance(tmpl: "PeriodicTemplate", today: datetime.date) -> Option
             if isinstance(s, dict) and s.get("title")
         ],
         plugin_id=getattr(tmpl, "plugin_id", None) or None,
+        remind_start=resolve_remind_start(tmpl, today),
+        skip_holidays=bool(getattr(tmpl, "skip_holidays", False)),
     )
     tmpl.last_generated_period = spawn_key_after_create(tmpl, today)
     return new_task
