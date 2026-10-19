@@ -388,8 +388,8 @@ def create_tray_backend(app) -> TrayImplementation:
     """
     macOS：MacStatusItemTray（NSStatusItem icon+标题轮播 + NSMenu + 系统通知）。
     Linux：优先顶栏 AppIndicator（文字轮播）。
-    Windows：任务栏中央按钮（图标+文字标签，§3.0 主显示）+ 通知区辅助图标；
-    中央按钮创建失败回退 WindowsTray（仅通知区图标）。
+    Windows：任务栏正上方状态条（图标+完整标题，§3.0 主显示）+ 通知区辅助图标；
+    状态条创建失败回退 WindowsTray（仅通知区图标）。
     其它平台 / 无 Indicator：Qt 托盘。
     """
     if sys.platform == "darwin":
@@ -402,13 +402,13 @@ def create_tray_backend(app) -> TrayImplementation:
             logger.exception("MacStatusItemTray 启动失败，回退 Qt 托盘")
     if sys.platform == "win32":
         try:
-            from zentray.ui.win_tray import WindowsTaskbarCenterTray
+            from zentray.ui.win_tray import WindowsStatusStripTray
 
-            backend = WindowsTaskbarCenterTray(app)
-            logger.info("托盘后端: WindowsTaskbarCenterTray (任务栏中央按钮 + 通知区辅助)")
+            backend = WindowsStatusStripTray(app)
+            logger.info("托盘后端: WindowsStatusStripTray (任务栏状态条 + 通知区辅助)")
             return backend
         except Exception:
-            logger.exception("任务栏中央按钮启动失败，回退 WindowsTray")
+            logger.exception("状态条托盘启动失败，回退 WindowsTray")
         try:
             from zentray.ui.win_tray import WindowsTray
 

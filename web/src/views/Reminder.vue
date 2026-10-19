@@ -24,30 +24,24 @@
             <span class="rcard-time">{{ timeOf(c) }}</span>
           </div>
           <p v-if="c.task.details" class="rcard-details">{{ c.task.details }}</p>
+          <!-- 排布：主操作（完成/稍后/跳转）在前，轻与破坏性（忽略本次/废弃）在后 -->
           <div class="rcard-actions">
             <a-button size="small" type="primary" status="success" :loading="c.acting" @click="act(c, 'done')">
               ✅ 完成
             </a-button>
-            <a-dropdown-button size="small" type="outline" :disabled="c.acting" @click="act(c, 'snooze', 10)">
-              😴 稍后 10 分钟 ▾
-              <template #content>
-                <a-doption @click="act(c, 'snooze', 60)">1 小时后</a-doption>
-                <a-doption @click="act(c, 'snooze', minutesToEod())">当天 23:59</a-doption>
-                <a-doption @click="c.customOpen = true">自定义…</a-doption>
-              </template>
-            </a-dropdown-button>
-            <a-button size="small" type="outline" :loading="c.acting" @click="act(c, 'dismiss')">
-              忽略
-            </a-button>
+            <div class="rcard-snooze">
+              😴 稍后
+              <a-input-number v-model="c.snoozeMin" :min="1" :max="1440" :step="5" size="small" style="width: 88px" />
+              分钟
+              <a-button size="small" type="outline" :loading="c.acting" @click="act(c, 'snooze', c.snoozeMin || 30)">
+                提醒
+              </a-button>
+            </div>
             <a-button size="small" type="text" :loading="c.acting" @click="jump(c)">↗ 跳转</a-button>
-          </div>
-          <div v-if="c.customOpen" class="rcard-custom">
-            稍后
-            <a-input-number v-model="c.customMin" :min="1" :max="1440" size="small" style="width: 96px" />
-            分钟
-            <a-button size="small" type="primary" :loading="c.acting" @click="act(c, 'snooze', c.customMin || 30)">
-              确定
-            </a-button>
+            <a-button size="small" type="text" :loading="c.acting" @click="act(c, 'dismiss')">忽略本次</a-button>
+            <a-popconfirm content="废弃后任务归档为已废弃，不可恢复。确定？" type="warning" @ok="act(c, 'abandon')">
+              <a-button size="small" type="text" status="danger" :loading="c.acting">🗑 废弃</a-button>
+            </a-popconfirm>
           </div>
         </div>
       </TransitionGroup>
@@ -76,7 +70,7 @@ function timeOf(c) {
 }
 
 /** 逐卡即时动作：落库后卡片离场；甲板清空自动关窗（未处理卡由宿主扫尾 dismiss） */
-async function act(c, action, snoozeMin = 10) {
+async function act(c, action, snoozeMin = 30) {
   c.acting = true
   try {
     await reminderAction(c.id, {
@@ -92,13 +86,6 @@ async function act(c, action, snoozeMin = 10) {
   }
 }
 
-/** 当天档：距 23:59 的分钟数（前端折算，后端只收 snooze_minutes） */
-function minutesToEod() {
-  const eod = new Date()
-  eod.setHours(23, 59, 59, 0)
-  return Math.max(1, Math.ceil((eod.getTime() - Date.now()) / 60000))
-}
-
 /** 跳转：整个甲板关窗（本卡与其余未处理卡由宿主统一 dismiss），宿主开任务列表直达选中 */
 function jump(c) {
   closeHost({ action: 'jump', task_id: c.id })
@@ -112,7 +99,7 @@ onMounted(async () => {
     cards.value = ids
       .map((id, i) => {
         const task = all.find((t) => t.id === id)
-        return task ? { id, fireKey: keys[i] || '', acting: false, task, customOpen: false, customMin: 30 } : null
+        return task ? { id, fireKey: keys[i] || '', acting: false, task, snoozeMin: 30 } : null
       })
       .filter(Boolean)
     // 全部已不存在（提前完成等）：直接关窗
@@ -206,11 +193,10 @@ onBeforeUnmount(() => resizeObserver.disconnect())
   flex-wrap: wrap;
   align-items: center;
 }
-.rcard-custom {
+.rcard-snooze {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 8px;
+  gap: 6px;
   font-size: 12.5px;
   color: var(--color-text-2);
 }

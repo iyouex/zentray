@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Optional
 import datetime
 import uuid
 
-from zentray.core.reminder import TaskReminder
+from zentray.core.reminder import ReminderSlot, TaskReminder
 
 
 @dataclass
@@ -35,6 +35,12 @@ class Task:
     # 飞书同步回写的远端对象 id（ZenTray → 飞书单向；空=尚未推送）
     feishu_event_id: Optional[str] = None
     feishu_task_id: Optional[str] = None
+    # 提醒重设计（2026-10-19）：开始提醒时间（ISO datetime，空=创建后即时）；
+    # 关键交付时间点 [{at: ISO datetime, notify: bool, fired?: bool}]，最晚者即截止；
+    # 跳过公休日（周末+法定节假日，创建时未显式给值则取分类预设）
+    remind_start: Optional[str] = None
+    deliveries: List[dict] = field(default_factory=list)
+    skip_holidays: bool = False
 
     def __post_init__(self):
         if self.attachments is None:
@@ -49,6 +55,8 @@ class Task:
             self.category = "工作"
         if self.subtasks is None:
             self.subtasks = []
+        if self.deliveries is None:
+            self.deliveries = []
         if isinstance(self.plugin_id, str) and not self.plugin_id.strip():
             self.plugin_id = None
         if isinstance(self.reminder, dict):
@@ -107,6 +115,10 @@ class PeriodicTemplate:
     calendar_enabled: bool = False
     calendar_horizon_mode: str = "count"
     calendar_horizon_value: int = 4
+    # 提醒重设计（2026-10-19）：周/月模板的开始提醒点（周几/几号+时分，可多个）；
+    # 派发实例时解析为本周期内首个到来的 ISO datetime。跳过公休日随实例继承。
+    remind_start_slots: list = field(default_factory=list)
+    skip_holidays: bool = False
 
     def __post_init__(self):
         if self.details is None:
@@ -123,6 +135,13 @@ class PeriodicTemplate:
             self.plugin_id = None
         if isinstance(self.reminder, dict):
             self.reminder = TaskReminder.from_dict(self.reminder)
+        if self.remind_start_slots is None:
+            self.remind_start_slots = []
+        self.remind_start_slots = [
+            s if isinstance(s, ReminderSlot) else ReminderSlot.from_dict(s)
+            for s in self.remind_start_slots
+            if isinstance(s, (dict, ReminderSlot))
+        ]
         try:
             self.interval = max(1, int(self.interval or 1))
         except (TypeError, ValueError):
@@ -151,4 +170,10 @@ class PeriodicTemplate:
         known = {k: v for k, v in data.items() if k in cls.__annotations__}
         if "reminder" in known and isinstance(known["reminder"], dict):
             known["reminder"] = TaskReminder.from_dict(known["reminder"])
+        if "remind_start_slots" in known:
+            known["remind_start_slots"] = [
+                s if isinstance(s, ReminderSlot) else ReminderSlot.from_dict(s)
+                for s in (known["remind_start_slots"] or [])
+                if isinstance(s, (dict, ReminderSlot))
+            ]
         return cls(**known)

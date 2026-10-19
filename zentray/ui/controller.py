@@ -478,12 +478,29 @@ class TrayController(QObject):
         status = "执行成功" if ok else f"执行失败: {summary}"
         run_id = str(report.get("run_id", "") or "")
         key = f"run:{run_id}" if run_id else ""
-        # 通知渠道可多选（设置-插件）；空 = 跟随通知设置已启用渠道
-        sel = self._settings.ops.notify_channels
+        # 通知渠道插件级配置（设置-插件展开面板）；缺该插件回退旧全局，再空 = 已启用渠道
+        from zentray.services.notification import render_template
+
+        ops = self._settings.ops
+        sel = (
+            ops.plugin_notify_channels.get(plugin_id)
+            if plugin_id in ops.plugin_notify_channels
+            else ops.notify_channels
+        )
+        # 通知格式模板（设置-通知）：{name}/{status}/{summary}/{result}
+        n = self._settings.notification
+        tpl_ctx = {
+            "name": name,
+            "status": status,
+            "summary": summary,
+            "result": report.get("result_text") or status,
+        }
+        title = render_template(n.plugin_title_template, tpl_ctx)
+        body = render_template(n.plugin_body_template, tpl_ctx)
         if not sel or "app_popup" in sel:
             self.renderer.show_notification(
-                f"脚本: {name}",
-                status[:120],
+                title,
+                body[:120],
                 on_click=self._make_report_opener(run_id, mark_key=key),
             )
         push_channels = [c for c in ("wxpusher", "feishu_bot") if not sel or c in sel]
@@ -496,8 +513,8 @@ class TrayController(QObject):
                     from zentray.services.notification import NotificationClient
 
                     NotificationClient.from_settings().send(
-                        f"脚本: {name}",
-                        (report.get("result_text") or status)[:500],
+                        title,
+                        body[:500],
                         channels=push_channels,
                     )
                 except Exception:
@@ -547,45 +564,6 @@ class TrayController(QObject):
                 _plugin_run_open({"run_id": run_id})
             except Exception:
                 logger.exception("打开运行报告失败: %s", run_id)
-
-        return opener
-
-    def on_ai_job_completed(self, kind: str, title: str, msg: str, report_path: str) -> None:
-        """AI 计划/复盘完成（nightly worker 信号，AutoConnection 排队回主线程）。
-
-        通知可点击打开本地报告；未点击查看时按 plan/review 各自设置进入顶栏轮播。
-        """
-        key = f"ai:{report_path}" if report_path else ""
-        if key:
-            job = getattr(self._settings.ai, kind, None)
-            minutes = int(getattr(job, "report_tray_minutes", 60) or 0) if job else 0
-            if job and getattr(job, "report_tray_enabled", True) and minutes > 0:
-                label = "计划" if kind == "plan" else "复盘"
-                self.report_rotation.add(key, f"📄 {label}报告待查看", minutes)
-                self._carousel_started = True
-                self.update_display(update_menu=False)
-        self.renderer.show_notification(
-            title,
-            msg,
-            on_click=self._make_file_opener(report_path, mark_key=key),
-        )
-
-    def _make_file_opener(self, path: str, mark_key: str = ""):
-        """通知点击回调：系统默认应用打开本地报告文件（md 等）。"""
-        if not path:
-            return None
-
-        def opener():
-            if mark_key:
-                self.mark_report_viewed(mark_key)
-            try:
-                from pathlib import Path
-
-                from zentray.api.handlers import _open_with_system
-
-                _open_with_system(Path(path))
-            except Exception:
-                logger.exception("打开报告失败: %s", path)
 
         return opener
 

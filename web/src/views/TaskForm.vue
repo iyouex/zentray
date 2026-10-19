@@ -87,6 +87,9 @@
                   >
                     逾期自动废弃
                   </a-checkbox>
+                  <a-checkbox v-model="form.skip_holidays" style="margin-left: 12px">
+                    跳过公休日
+                  </a-checkbox>
                 </a-form-item>
                 <a-form-item v-if="form.has_deadline" label="截止日期">
                   <a-date-picker
@@ -109,6 +112,9 @@
                     style="margin-left: 12px"
                   >
                     逾期废弃
+                  </a-checkbox>
+                  <a-checkbox v-model="form.skip_holidays" style="margin-left: 12px">
+                    跳过公休日
                   </a-checkbox>
                 </a-form-item>
                 <a-form-item v-if="!form.long_term" label="停止派发日">
@@ -253,74 +259,95 @@
                   </div>
                 </div>
               </a-form-item>
-              <a-form-item>
-                <a-checkbox v-model="form.reminder_enabled">弹窗提醒</a-checkbox>
+              <!-- 开始提醒时间：默认创建/派发后即时；到点前不轮播不弹窗 -->
+              <a-form-item v-if="!isTemplate && form.mode !== 'periodic'">
+                <a-checkbox v-model="form.start_enabled">指定开始提醒时间</a-checkbox>
+                <div v-if="form.start_enabled" class="slot-row" style="margin-top: 8px">
+                  <a-date-picker
+                    v-model="form.start_date"
+                    style="width: 150px"
+                    value-format="YYYY-MM-DD"
+                  />
+                  <TimeSpinner v-model="form.start_time" />
+                </div>
               </a-form-item>
-
-              <!-- 日/一次性：默认时间 -->
-              <a-form-item
-                v-if="form.reminder_enabled && !isWeeklyOrMonthly"
-                label="提醒时间"
-              >
-                <TimeSpinner v-model="form.reminder_time" />
-              </a-form-item>
-
-              <!-- 周/月：多提醒点 -->
-              <template v-if="form.reminder_enabled && isWeeklyOrMonthly">
-                <a-form-item :label="form.periodicity === 'weekly' ? '提醒点（周几 + 时间）' : '提醒点（日期 + 时间）'">
-                  <div class="slots-box">
-                    <div v-for="(slot, idx) in form.reminder_slots" :key="idx" class="slot-row">
-                      <template v-if="form.periodicity === 'weekly'">
-                        <a-select
-                          v-model="slot.weekday"
-                          size="mini"
-                          class="slot-weekday"
-                        >
-                          <a-option
-                            v-for="(w, i) in WEEK_LABELS"
-                            :key="i"
-                            :value="i"
-                          >
-                            {{ w }}
-                          </a-option>
-                        </a-select>
-                      </template>
-                      <template v-else>
-                        <span class="slot-label">每月</span>
-                        <NumberSpinner
-                          v-model="slot.day_of_month"
-                          :min="1"
-                          :max="31"
-                        />
-                        <span class="slot-hint">日</span>
-                      </template>
-                      <TimeSpinner v-model="slot.time_of_day" />
-                      <a-button
+              <a-form-item v-if="isWeeklyOrMonthly" label="开始提醒点">
+                <div class="slots-box">
+                  <div v-for="(slot, idx) in form.start_slots" :key="idx" class="slot-row">
+                    <template v-if="form.periodicity === 'weekly'">
+                      <a-select
+                        v-model="slot.weekday"
                         size="mini"
-                        status="danger"
-                        @click="removeSlot(idx)"
+                        class="slot-weekday"
                       >
-                        删
-                      </a-button>
-                    </div>
-                    <a-button size="small" type="outline" @click="addSlot">
-                      ➕ 添加提醒点
+                        <a-option
+                          v-for="(w, i) in WEEK_LABELS"
+                          :key="i"
+                          :value="i"
+                        >
+                          {{ w }}
+                        </a-option>
+                      </a-select>
+                    </template>
+                    <template v-else>
+                      <span class="slot-label">每月</span>
+                      <NumberSpinner
+                        v-model="slot.day_of_month"
+                        :min="1"
+                        :max="31"
+                      />
+                      <span class="slot-hint">日</span>
+                    </template>
+                    <TimeSpinner v-model="slot.time_of_day" />
+                    <a-button
+                      size="mini"
+                      status="danger"
+                      @click="removeSlot(idx)"
+                    >
+                      删
                     </a-button>
                   </div>
-                </a-form-item>
-              </template>
+                  <a-button size="small" type="outline" @click="addSlot">
+                    ➕ 添加开始提醒点
+                  </a-button>
+                  <p class="muted" style="margin: 0">
+                    派发后从本周期内最早提醒点开始轮播，多个点取最早；默认即时。
+                  </p>
+                </div>
+              </a-form-item>
 
-              <!-- 同时刻已有弹窗提醒：自动列出仅作参考，不阻断保存 -->
-              <a-form-item v-if="form.reminder_enabled && reminderConflicts.length">
-                <div class="conflict-hint">
-                  <div class="conflict-hint-title">该时间已有弹窗提醒（仅参考）：</div>
-                  <div
-                    v-for="(c, i) in reminderConflicts"
-                    :key="`${c.kind}-${c.id}-${i}`"
-                    class="conflict-hint-row"
-                  >
-                    [{{ CONFLICT_KIND_LABELS[c.kind] || c.kind }}] {{ c.title }} — {{ c.detail || c.time }}
+              <!-- 关键交付时间（一次性任务）：多个时间点，可选弹窗；最晚一个=截止 -->
+              <a-form-item v-if="!isTemplate && form.mode !== 'periodic'">
+                <a-checkbox v-model="form.has_deliveries">关键交付时间</a-checkbox>
+                <p v-if="form.has_deliveries" class="muted" style="margin: 6px 0 0">
+                  最晚的交付时间即任务截止时间，超过即逾期；勾选「弹窗」的到点弹窗提醒。
+                </p>
+              </a-form-item>
+              <a-form-item
+                v-if="!isTemplate && form.mode !== 'periodic' && form.has_deliveries"
+                label="交付点"
+              >
+                <div class="slots-box">
+                  <div v-for="(d, idx) in form.deliveries" :key="idx" class="slot-row">
+                    <a-date-picker
+                      v-model="d.date"
+                      size="small"
+                      style="width: 140px"
+                      value-format="YYYY-MM-DD"
+                    />
+                    <TimeSpinner v-model="d.time" />
+                    <a-checkbox v-model="d.notify">弹窗</a-checkbox>
+                    <a-button
+                      size="mini"
+                      status="danger"
+                      @click="removeDelivery(idx)"
+                    >
+                      删
+                    </a-button>
                   </div>
+                  <a-button size="small" type="outline" @click="addDelivery">
+                    ➕ 添加交付时间
+                  </a-button>
                 </div>
               </a-form-item>
             </a-form>
@@ -396,7 +423,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Message, Modal } from '@arco-design/web-vue'
 import { PhCamera, PhSparkle } from '@phosphor-icons/vue'
@@ -405,7 +432,6 @@ import {
   aiOcr,
   aiParse,
   cancelHost,
-  checkReminderConflicts,
   closeHost,
   createTask,
   createTemplate,
@@ -473,13 +499,18 @@ const form = reactive({
   calendar_enabled: false,
   calendar_horizon_mode: 'count',
   calendar_horizon_value: 4,
-  reminder_enabled: false,
-  reminder_time: '17:00',
-  reminder_slots: [],
+  skip_holidays: false,
+  start_enabled: false,
+  start_date: '',
+  start_time: '09:00',
+  start_slots: [],
+  has_deliveries: false,
+  deliveries: [],
   subtasks: [],
   task_type: 'one-time',
   template_id: null,
   plugin_id: null,
+  attachments: [],
 })
 
 const periodOpts = [
@@ -598,6 +629,16 @@ function onRunPlugin() {
 
 function onPrimaryChange() {
   form.category_secondary_id = null
+  seedSkipHolidays()
+}
+
+/** 新建时按一级分类预设带出「跳过公休日」；编辑不动已有值 */
+function seedSkipHolidays() {
+  if (isEdit.value) return
+  const p = (meta.value?.categories?.primary_list || []).find(
+    (x) => x.id === form.category_primary_id,
+  )
+  form.skip_holidays = !!(p && p.skip_holidays)
 }
 
 // ---- AI 场景能力：文本解析 + 图片识别（开关来自 meta.ai_features，默认关）----
@@ -752,10 +793,6 @@ function applyDraft() {
     form.has_deadline = true
     form.deadline = d.deadline
   }
-  if (d.reminder_time) {
-    form.reminder_enabled = true
-    form.reminder_time = d.reminder_time
-  }
   if (d.details) form.details = d.details
   if (d.subtasks?.length) {
     const exist = new Set(form.subtasks.map((s) => (s.title || '').trim()))
@@ -780,14 +817,24 @@ function primaryName() {
 
 function addSlot() {
   if (form.periodicity === 'weekly') {
-    form.reminder_slots.push({ weekday: 0, time_of_day: '17:00' })
+    form.start_slots.push({ weekday: 0, time_of_day: '09:00' })
   } else {
-    form.reminder_slots.push({ day_of_month: 1, time_of_day: '17:00' })
+    form.start_slots.push({ day_of_month: 1, time_of_day: '09:00' })
   }
 }
 
 function removeSlot(idx) {
-  form.reminder_slots.splice(idx, 1)
+  form.start_slots.splice(idx, 1)
+}
+
+function addDelivery() {
+  const d = new Date()
+  d.setDate(d.getDate() + 1)
+  form.deliveries.push({ date: d.toISOString().slice(0, 10), time: '18:00', notify: true })
+}
+
+function removeDelivery(idx) {
+  form.deliveries.splice(idx, 1)
 }
 
 function addSub() {
@@ -823,58 +870,21 @@ function addAttachmentLink() {
   newLink.value = ''
 }
 
-function loadReminder(rem) {
-  if (!rem?.enabled) {
-    form.reminder_enabled = false
-    form.reminder_slots = []
-    form.reminder_time = '17:00'
-    return
-  }
-  form.reminder_enabled = true
-  form.reminder_time = rem.time_of_day || '17:00'
-  const slots = rem.slots || []
-  if (slots.length) {
-    form.reminder_slots = slots.map((s) => ({
-      weekday: s.weekday != null ? Number(s.weekday) : 0,
-      day_of_month: s.day_of_month != null ? Number(s.day_of_month) : 1,
-      time_of_day: s.time_of_day || rem.time_of_day || '17:00',
-    }))
-  } else {
-    form.reminder_slots = []
-  }
-}
-
-function buildReminder() {
-  if (!form.reminder_enabled) {
-    return { enabled: false, time_of_day: '17:00', slots: [] }
-  }
-  if (isWeeklyOrMonthly.value) {
-    const slots = (form.reminder_slots || []).map((s) => {
-      if (form.periodicity === 'weekly') {
-        return {
-          time_of_day: s.time_of_day || '17:00',
-          weekday: Math.max(0, Math.min(6, Number(s.weekday) || 0)),
-          day_of_month: null,
-        }
-      }
-      return {
-        time_of_day: s.time_of_day || '17:00',
-        weekday: null,
-        day_of_month: Math.max(1, Math.min(31, Number(s.day_of_month) || 1)),
-      }
-    })
-    const first = slots[0]?.time_of_day || form.reminder_time || '17:00'
-    return { enabled: true, time_of_day: first, slots }
-  }
-  return {
-    enabled: true,
-    time_of_day: form.reminder_time || '17:00',
-    slots: [],
-  }
+/** 编辑回填：旧任务/模板的旧弹窗提醒槽兼容展示（模板→开始提醒点） */
+function loadStartSlots(rawSlots, fallbackTime) {
+  form.start_slots = (rawSlots || []).map((s) => ({
+    weekday: s.weekday != null ? Number(s.weekday) : 0,
+    day_of_month: s.day_of_month != null ? Number(s.day_of_month) : 1,
+    time_of_day: s.time_of_day || fallbackTime || '09:00',
+  }))
 }
 
 function buildPayload() {
-  const reminder = buildReminder()
+  // 关键交付点：排序后随 payload 下发，截止时间由后端取最晚交付日期
+  const deliveries = (form.deliveries || [])
+    .filter((d) => d.date && d.time)
+    .map((d) => ({ at: `${d.date}T${d.time}`, notify: !!d.notify }))
+    .sort((a, b) => a.at.localeCompare(b.at))
   const base = {
     title: form.title.trim(),
     category: primaryName(),
@@ -882,7 +892,8 @@ function buildPayload() {
     category_secondary_id: form.category_secondary_id,
     priority: form.priority,
     details: form.details || '',
-    reminder,
+    reminder: null, // 旧弹窗提醒机制停用；编辑保存即清除旧任务的弹窗提醒
+    skip_holidays: !!form.skip_holidays,
     auto_abandon_on_overdue: form.auto_abandon_on_overdue,
     attachments: (form.attachments || []).slice(),
     subtasks: (form.subtasks || [])
@@ -892,6 +903,22 @@ function buildPayload() {
   }
 
   if (form.mode === 'periodic' || isTemplate.value) {
+    const slots = isWeeklyOrMonthly.value
+      ? (form.start_slots || []).map((s) => {
+          if (form.periodicity === 'weekly') {
+            return {
+              time_of_day: s.time_of_day || '09:00',
+              weekday: Math.max(0, Math.min(6, Number(s.weekday) || 0)),
+              day_of_month: null,
+            }
+          }
+          return {
+            time_of_day: s.time_of_day || '09:00',
+            weekday: null,
+            day_of_month: Math.max(1, Math.min(31, Number(s.day_of_month) || 1)),
+          }
+        })
+      : []
     return {
       ...base,
       task_type: 'periodic',
@@ -902,6 +929,7 @@ function buildPayload() {
       calendar_enabled: form.calendar_enabled,
       calendar_horizon_mode: form.calendar_horizon_mode || 'count',
       calendar_horizon_value: form.calendar_horizon_value || 4,
+      remind_start_slots: slots,
     }
   }
 
@@ -910,6 +938,8 @@ function buildPayload() {
     task_type: form.task_type || 'one-time',
     template_id: form.template_id,
     deadline: form.has_deadline ? form.deadline || '' : '',
+    remind_start: form.start_enabled && form.start_date ? `${form.start_date}T${form.start_time}` : null,
+    deliveries,
   }
 }
 
@@ -938,50 +968,7 @@ async function onAddSecondary() {
   }
 }
 
-// ---- 弹窗提醒同时刻参考：调到已设时间即自动列出（仅参考，不阻断保存）----
-
-const CONFLICT_KIND_LABELS = {
-  task: '任务',
-  template: '周期模板',
-  ai_plan: 'AI 计划',
-  ai_review: 'AI 复盘',
-}
-
-const reminderConflicts = ref([])
-let conflictTimer = null
-let conflictSeq = 0
-
-// shortcut: 400ms 防抖合并 TimeSpinner 连续拨动；检查失败静默清空（参考信息非关键路径）
-watch(
-  () =>
-    [form.reminder_enabled, form.reminder_time, JSON.stringify(form.reminder_slots || [])].join('|'),
-  () => {
-    clearTimeout(conflictTimer)
-    const rem = buildReminder()
-    if (!rem.enabled) {
-      reminderConflicts.value = []
-      return
-    }
-    conflictTimer = setTimeout(async () => {
-      const seq = ++conflictSeq
-      try {
-        const data = await checkReminderConflicts({
-          reminder: rem,
-          exclude_task_id:
-            isEdit.value && !isTemplate.value ? taskId.value : undefined,
-          exclude_template_id:
-            isEdit.value && isTemplate.value ? taskId.value : undefined,
-        })
-        if (seq === conflictSeq) reminderConflicts.value = data?.conflicts || []
-      } catch (_) {
-        if (seq === conflictSeq) reminderConflicts.value = []
-      }
-    }, 400)
-  },
-  { immediate: true },
-)
-
-onUnmounted(() => clearTimeout(conflictTimer))
+// ---- 弹窗提醒同时刻参考：随旧弹窗提醒 UI 移除（交付点弹窗无同时刻聚合需求）----
 
 async function onSave() {
   if (!form.title.trim()) {
@@ -990,14 +977,6 @@ async function onSave() {
   }
   if (!form.category_primary_id) {
     Message.warning('请选择一级分类')
-    return
-  }
-  if (
-    form.reminder_enabled &&
-    isWeeklyOrMonthly.value &&
-    !(form.reminder_slots || []).length
-  ) {
-    Message.warning('请至少添加一个提醒点')
     return
   }
   const payload = buildPayload()
@@ -1039,6 +1018,7 @@ onMounted(async () => {
     if (route.query.mode === 'periodic') {
       form.mode = 'periodic'
     }
+    if (!taskId.value) seedSkipHolidays()
     if (taskId.value) {
       if (route.query.template === '1') {
         const t = await getTemplate(taskId.value)
@@ -1059,7 +1039,12 @@ onMounted(async () => {
         form.auto_abandon_on_overdue = !!t.auto_abandon_on_overdue
         form.subtasks = (t.subtasks || []).map((s) => ({ ...s }))
         form.plugin_id = t.plugin_id || null
-        loadReminder(t.reminder)
+        form.skip_holidays = !!t.skip_holidays
+        // 兼容旧模板：无开始提醒点时把旧弹窗提醒槽展示为开始提醒点
+        loadStartSlots(
+          (t.remind_start_slots?.length ? t.remind_start_slots : t.reminder?.slots) || [],
+          t.reminder?.time_of_day,
+        )
       } else {
         const t = await getTask(taskId.value)
         form.title = t.title
@@ -1076,7 +1061,18 @@ onMounted(async () => {
         form.attachments = Array.isArray(t.attachments) ? t.attachments.slice() : []
         form.subtasks = (t.subtasks || []).map((s) => ({ ...s }))
         form.plugin_id = t.plugin_id || null
-        loadReminder(t.reminder)
+        form.skip_holidays = !!t.skip_holidays
+        form.start_enabled = !!t.remind_start
+        if (t.remind_start) {
+          form.start_date = String(t.remind_start).slice(0, 10)
+          form.start_time = String(t.remind_start).slice(11, 16) || '09:00'
+        }
+        form.deliveries = (t.deliveries || []).map((d) => ({
+          date: String(d.at || '').slice(0, 10),
+          time: String(d.at || '').slice(11, 16) || '09:00',
+          notify: !!d.notify,
+        }))
+        form.has_deliveries = form.deliveries.length > 0
       }
     }
     loadPlugins()
@@ -1135,18 +1131,6 @@ onMounted(async () => {
 .muted {
   color: var(--color-text-3);
   font-size: 12px;
-}
-.conflict-hint {
-  width: 100%;
-  font-size: 12.5px;
-  color: var(--color-text-3);
-  line-height: 1.6;
-}
-.conflict-hint-title {
-  color: var(--color-text-2);
-}
-.conflict-hint-row {
-  word-break: break-word;
 }
 /* AI 解析预览 */
 .ai-preview {

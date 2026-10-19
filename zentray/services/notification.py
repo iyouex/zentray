@@ -2,12 +2,22 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any, Dict, List, Optional
 
 from zentray.services.feishu_bot import FeishuBotService
 from zentray.services.wxpusher import WxPusherService
 
 logger = logging.getLogger(__name__)
+
+_PLACEHOLDER_RE = re.compile(r"\{(\w+)\}")
+
+
+def render_template(tpl: str, ctx: Dict[str, str]) -> str:
+    """通知模板渲染：{key} 替换为 ctx 值；未知占位符原样保留（用户手误不炸）。"""
+    return _PLACEHOLDER_RE.sub(
+        lambda m: str(ctx.get(m.group(1), m.group(0))), tpl or ""
+    )
 
 
 class NotificationClient:
