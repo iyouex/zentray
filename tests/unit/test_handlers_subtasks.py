@@ -82,6 +82,15 @@ def test_reminder_action_routes(api):
     )
     assert code == 200
     assert not any(x.id == t.id for x in api.get_all_tasks())
+    # abandon：归档 ABANDONED + 删除
+    t2 = _make_task(api)
+    code, _ = handle_request(
+        "POST", f"/api/tasks/{t2.id}/reminder-action",
+        {"action": "abandon", "fire_key": "2026-09-23|11:00"},
+    )
+    assert code == 200
+    assert not any(x.id == t2.id for x in api.get_all_tasks())
+    assert len(api.list_archived(status="abandoned")) == 1
     # 非法 action
     assert handle_request(
         "POST", f"/api/tasks/{_make_task(api).id}/reminder-action", {"action": "update"}

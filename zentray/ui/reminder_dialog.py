@@ -1,31 +1,31 @@
 """任务到点弹窗提醒。"""
 from __future__ import annotations
 
-import datetime
-
 from PySide6.QtWidgets import (
     QDialog,
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QSpinBox,
     QVBoxLayout,
 )
 
 from zentray.core.models import Task
-from zentray.core.reminder import TaskReminder
+
+
 class ReminderDialog(QDialog):
-    """提醒弹窗"""
+    """提醒弹窗：完成 / 稍后N分钟(默认30可改) / 跳转 / 忽略本次 / 废弃"""
 
     def __init__(self, task: Task, parent=None):
         super().__init__(parent)
         self.task = task
         self.result_action = "dismiss"
-        self.snooze_minutes = 10
+        self.snooze_minutes = 30
 
         from zentray.ui.dialog_utils import apply_dialog_chrome, style_action_button
 
         self.setWindowTitle("⏰ 任务提醒")
-        apply_dialog_chrome(self, width=560, height=220, stay_on_top=True)
+        apply_dialog_chrome(self, width=560, height=240, stay_on_top=True)
         self.setModal(True)
 
         layout = QVBoxLayout(self)
@@ -49,23 +49,37 @@ class ReminderDialog(QDialog):
             detail.setWordWrap(True)
             layout.addWidget(detail)
 
-        hint = QLabel("到点提醒 — 请选择操作：")
-        hint.setStyleSheet("margin-top: 4px;")
-        layout.addWidget(hint)
-
-        # 单行横排操作，保证文字完整
-        row = QHBoxLayout()
-        row.setSpacing(10)
-        btn_done = style_action_button(QPushButton("✅ 完成"), min_w=88)
+        # 两行排布：上行主操作（完成/稍后/跳转），下行轻与破坏性操作
+        row1 = QHBoxLayout()
+        row1.setSpacing(10)
+        btn_done = style_action_button(QPushButton("✅ 完成"), min_w=96)
         btn_done.clicked.connect(lambda: self._finish("done"))
-        btn_snooze = style_action_button(QPushButton("😴 忽略 10 分钟"), min_w=130)
-        btn_snooze.clicked.connect(lambda: self._finish("snooze"))
-        btn_dismiss = style_action_button(QPushButton("关闭本次"), min_w=96)
+        btn_snooze = style_action_button(QPushButton("😴 稍后"), min_w=96)
+        btn_snooze.clicked.connect(self._snooze)
+        self.snooze_spin = QSpinBox()
+        self.snooze_spin.setRange(1, 1440)
+        self.snooze_spin.setValue(30)
+        unit = QLabel("分钟")
+        btn_jump = style_action_button(QPushButton("↗ 跳转"), min_w=88)
+        btn_jump.clicked.connect(lambda: self._finish("jump"))
+        for w in (btn_done, btn_snooze, self.snooze_spin, unit, btn_jump):
+            row1.addWidget(w)
+        layout.addLayout(row1)
+
+        row2 = QHBoxLayout()
+        row2.setSpacing(10)
+        btn_dismiss = style_action_button(QPushButton("忽略本次"), min_w=96)
         btn_dismiss.clicked.connect(lambda: self._finish("dismiss"))
-        row.addWidget(btn_done)
-        row.addWidget(btn_snooze)
-        row.addWidget(btn_dismiss)
-        layout.addLayout(row)
+        btn_abandon = style_action_button(QPushButton("🗑 废弃"), min_w=88)
+        btn_abandon.clicked.connect(lambda: self._finish("abandon"))
+        row2.addWidget(btn_dismiss)
+        row2.addWidget(btn_abandon)
+        row2.addStretch(1)
+        layout.addLayout(row2)
+
+    def _snooze(self) -> None:
+        self.snooze_minutes = self.snooze_spin.value()
+        self._finish("snooze")
 
     def _finish(self, action: str) -> None:
         self.result_action = action

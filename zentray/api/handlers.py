@@ -338,12 +338,12 @@ def _task_sub(method: str, rest: str, body: dict) -> tuple[int, dict]:
     parts = rest.split("/")
     if method == "POST" and len(parts) == 2 and parts[1] == "reminder-action":
         action = str(body.get("action") or "")
-        if action not in ("done", "snooze", "dismiss"):
-            return 400, {"error": "action 必须是 done|snooze|dismiss"}
+        if action not in ("done", "snooze", "dismiss", "abandon"):
+            return 400, {"error": "action 必须是 done|snooze|dismiss|abandon"}
         try:
-            snooze = int(body.get("snooze_minutes") or 10)
+            snooze = int(body.get("snooze_minutes") or 30)
         except (TypeError, ValueError):
-            snooze = 10
+            snooze = 30
         task = ts.handle_reminder_action(parts[0], action, str(body.get("fire_key") or ""), snooze)
         if task is None:
             return 404, {"error": "task not found"}
