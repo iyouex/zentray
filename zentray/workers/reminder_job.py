@@ -9,7 +9,7 @@ from typing import Optional
 from PySide6.QtCore import QThread, Signal
 
 from zentray.core.models import Task
-from zentray.core.reminder import due_delivery_ats, due_reminder_keys
+from zentray.core.reminder import due_delivery_ats, due_popup_at, due_reminder_keys
 from zentray.core.repository import TaskRepository
 from zentray.core.scheduler import task_reminder_gated
 
@@ -62,7 +62,14 @@ class ReminderWorker(QThread):
                     self._pending_ids.add(task.id)
                     batch.append((task, keys[0]))
                     continue
-            # 关键交付时间点：到点即弹（一次性时刻，触发后落 fired 持久去重）
+            # 截止时刻弹窗（popup_at_due）：到点弹一次，due_fired 持久去重，改时刻重弹
+            moment = due_popup_at(task, now)
+            if moment:
+                self._pending_ids.add(task.id)
+                if self._mark_due_fired(task.id, moment):
+                    batch.append((task, "due"))
+                continue
+            # 额外弹窗时间（原关键交付时间点）：到点即弹，行内 fired 持久去重
             for at in due_delivery_ats(getattr(task, "deliveries", None) or [], now):
                 self._pending_ids.add(task.id)
                 if self._mark_delivery_fired(task.id, at):
@@ -95,6 +102,21 @@ class ReminderWorker(QThread):
             return bool(self.task_repo.mutate_all(mut))
         except Exception:
             logger.exception("标记交付时间已触发失败")
+            return False
+
+    def _mark_due_fired(self, task_id: str, moment: str) -> bool:
+        def mut(tasks) -> bool:
+            for t in tasks:
+                if t.id != task_id:
+                    continue
+                t.due_fired = moment
+                return True
+            return False
+
+        try:
+            return bool(self.task_repo.mutate_all(mut))
+        except Exception:
+            logger.exception("标记截止弹窗已触发失败")
             return False
 
     def clear_pending(self, task_id: str) -> None:

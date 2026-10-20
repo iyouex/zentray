@@ -55,6 +55,7 @@ class TaskService:
         if not task:
             return ""
         from zentray.core.categories import format_display_title_with_category
+        from zentray.core.reminder import is_task_overdue
         from zentray.services.settings_manager import SettingsManager
 
         settings = SettingsManager()
@@ -62,7 +63,7 @@ class TaskService:
         if (
             self.scheduler.overdue_enabled
             and task.deadline
-            and self.scheduler._is_overdue(task.deadline, datetime.date.today())
+            and is_task_overdue(task, datetime.datetime.now())
         ):
             overdue = self.scheduler.overdue_prefix
         return format_display_title_with_category(
@@ -238,9 +239,9 @@ class TaskService:
             task_data = {**task_data, "task_type": "one-time"}
         task_data = self._normalize_category_fields(task_data)
         task_data = self._normalize_reminder_field(task_data)
-        # 显式携带才归一交付时间（局部保存不带此键时靠 merge 保住存量）
-        if "deliveries" in task_data:
-            task_data = self._normalize_reminder_fields(task_data)
+        # 显式携带才归一（局部保存不带此键时靠 merge 保住存量）
+        if {"deliveries", "due_time", "popup_at_due"} & task_data.keys():
+            task_data = self._normalize_reminder_fields(task_data, seed_skip=False)
         # 仅当显式传入 subtasks 才归一——Qt TaskDialog 等不带此键的调用靠 merge 保住存量
         if "subtasks" in task_data:
             task_data["subtasks"] = self._normalize_subtasks(task_data.get("subtasks"))
@@ -476,7 +477,7 @@ class TaskService:
         self.task_repo.save_all(tasks)
 
     def _template_from_data(self, data: dict) -> PeriodicTemplate:
-        from zentray.core.reminder import TaskReminder
+        from zentray.core.reminder import TaskReminder, normalize_due_time
 
         title = (data.get("title") or data.get("base_title") or "Untitled").strip()
         rem = data.get("reminder")
@@ -516,6 +517,8 @@ class TaskService:
             calendar_horizon_value=(data.get("calendar_horizon_value", 4)),
             remind_start_slots=data.get("remind_start_slots") or [],
             skip_holidays=bool(data.get("skip_holidays", False)),
+            due_time=normalize_due_time(data.get("due_time")),
+            popup_at_due=bool(data.get("popup_at_due", False)),
         )
 
     def _normalize_category_fields(self, data: dict) -> dict:
@@ -569,18 +572,21 @@ class TaskService:
         return data
 
     @staticmethod
-    def _normalize_reminder_fields(data: dict) -> dict:
-        """交付时间归一 + 最晚者覆盖截止日期；创建时未给 skip_holidays 取分类预设。"""
+    def _normalize_reminder_fields(data: dict, seed_skip: bool = True) -> dict:
+        """时间字段归一：交付/弹窗时间、截止时分、截止弹窗开关；创建时未给
+        skip_holidays 取分类预设（截止只由截止行决定，不再由交付推导）。"""
         from zentray.core.categories import resolve_primary_secondary
-        from zentray.core.reminder import deliveries_deadline, normalize_deliveries
+        from zentray.core.reminder import normalize_deliveries, normalize_due_time
         from zentray.services.settings_manager import SettingsManager
 
         data = {**data}
-        data["deliveries"] = normalize_deliveries(data.get("deliveries"))
-        deadline = deliveries_deadline(data["deliveries"])
-        if deadline:
-            data["deadline"] = deadline
-        if "skip_holidays" not in data:
+        if "deliveries" in data:
+            data["deliveries"] = normalize_deliveries(data.get("deliveries"))
+        if "due_time" in data:
+            data["due_time"] = normalize_due_time(data.get("due_time"))
+        if "popup_at_due" in data:
+            data["popup_at_due"] = bool(data.get("popup_at_due"))
+        if seed_skip and "skip_holidays" not in data:
             cats = SettingsManager().categories
             primary, _ = resolve_primary_secondary(
                 cats,

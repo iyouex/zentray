@@ -118,7 +118,23 @@ def build_tasks_ics(tasks, templates=None, today: datetime.date = None) -> str:
             f"DESCRIPTION:{desc}",
             "END:VEVENT",
         ]
-        # 关键交付时间：每个交付点一条 30 分钟定时事件（标题带 ⏱ 区分主事件）
+        # 截止时刻弹窗：popup_at_due 时投影一条 30 分钟定时事件（与弹窗时间行同形）
+        from zentray.core.reminder import due_moment
+
+        if getattr(t, "popup_at_due", False):
+            dm = due_moment(t)
+            if dm is not None:
+                lines += [
+                    "BEGIN:VEVENT",
+                    f"UID:zentray-{t.id}-due@zentray.local",
+                    f"DTSTAMP:{now}",
+                    f"DTSTART:{dm.strftime('%Y%m%dT%H%M%S')}",
+                    f"DTEND:{(dm + datetime.timedelta(minutes=30)).strftime('%Y%m%dT%H%M%S')}",
+                    f"SUMMARY:{ics_escape(f'⏱ 提醒 · {title}')}",
+                    f"DESCRIPTION:{desc}",
+                    "END:VEVENT",
+                ]
+        # 额外弹窗时间（原关键交付时间）：每行一条 30 分钟定时事件（⏱ 区分主事件）
         for i, d in enumerate(deliveries):
             try:
                 dt = datetime.datetime.fromisoformat(str(d["at"]))
@@ -130,7 +146,7 @@ def build_tasks_ics(tasks, templates=None, today: datetime.date = None) -> str:
                 f"DTSTAMP:{now}",
                 f"DTSTART:{dt.strftime('%Y%m%dT%H%M%S')}",
                 f"DTEND:{(dt + datetime.timedelta(minutes=30)).strftime('%Y%m%dT%H%M%S')}",
-                f"SUMMARY:{ics_escape(f'⏱ 交付 · {title}')}",
+                f"SUMMARY:{ics_escape(f'⏱ 提醒 · {title}')}",
                 f"DESCRIPTION:{desc}",
                 "END:VEVENT",
             ]
@@ -140,7 +156,9 @@ def build_tasks_ics(tasks, templates=None, today: datetime.date = None) -> str:
             continue
         n = max(1, int(getattr(tmpl, "interval", 1) or 1))
         for spawn_day, deadline in project_future_instances(tmpl, today):
-            if not deadline or (tmpl.template_id, deadline) in spawned:
+            # 无截止（如日模板未设截止时分）→ 投影到派发日当天
+            day = str(deadline or spawn_day)
+            if (tmpl.template_id, day) in spawned:
                 continue
             prefix = period_display_prefix(
                 tmpl.periodicity or "daily", spawn_day, n
@@ -148,9 +166,9 @@ def build_tasks_ics(tasks, templates=None, today: datetime.date = None) -> str:
             title = f"【{prefix}】{tmpl.base_title}"
             lines += [
                 "BEGIN:VEVENT",
-                f"UID:zentray-tpl-{tmpl.template_id}-{deadline}@zentray.local",
+                f"UID:zentray-tpl-{tmpl.template_id}-{day}@zentray.local",
                 f"DTSTAMP:{now}",
-                f"DTSTART;VALUE=DATE:{str(deadline).replace('-', '')}",
+                f"DTSTART;VALUE=DATE:{str(day).replace('-', '')}",
                 f"SUMMARY:{ics_escape(title)}",
                 "END:VEVENT",
             ]
