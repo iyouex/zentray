@@ -20,7 +20,7 @@ def test_open_new_task_chains_to_task_form(monkeypatch):
     controller = SimpleNamespace(reload_data=lambda: None)
     assert vc.try_vue_quick_add(controller) is True
     # 第二跳：几何照抄 try_vue_edit_task
-    assert calls[1] == ("/tasks/new", "新建任务", 880, 540)
+    assert calls[1] == ("/tasks/new", "新建任务", 960, 620)
 
 
 def test_quick_add_frontend_has_jump_button():
