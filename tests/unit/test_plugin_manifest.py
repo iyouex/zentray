@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from zentray.plugins.manifest import validate_plugin_dir
-from zentray.plugins.models import PluginType, TriggerEvent, TriggerType
+from zentray.plugins.models import PluginType
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "plugins"
 
@@ -26,7 +26,6 @@ def test_sample_script_valid():
     assert r.manifest.id == "sample-script"
     assert r.manifest.type == PluginType.SCRIPT
     assert r.manifest.entry_path.is_file()
-    assert r.manifest.triggers == []
     assert r.manifest.write_back is False
 
 
@@ -56,76 +55,11 @@ entry: run.sh
 """
 
 
-def test_triggers_all_forms_valid(tmp_path):
-    d = _write_plugin(
-        tmp_path,
-        _BASE_V2
-        + """\
-triggers:
-  - type: daily
-    time: "09:30"
-  - type: interval
-    minutes: 30
-  - type: cron
-    expr: "*/15 9-17 * * 1-5"
-  - type: event
-    event: task_done
-""",
-    )
-    r = validate_plugin_dir(d)
-    assert r.ok, r.error_text()
-    ts = r.manifest.triggers
-    assert [t.type for t in ts] == [
-        TriggerType.DAILY,
-        TriggerType.INTERVAL,
-        TriggerType.CRON,
-        TriggerType.EVENT,
-    ]
-    assert ts[0].time == "09:30"
-    assert ts[1].minutes == 30
-    assert ts[2].expr == "*/15 9-17 * * 1-5"
-    assert ts[3].event == TriggerEvent.TASK_DONE
-
-
 def test_write_back_valid(tmp_path):
     d = _write_plugin(tmp_path, _BASE_V2 + "write_back: true\n")
     r = validate_plugin_dir(d)
     assert r.ok, r.error_text()
     assert r.manifest.write_back is True
-
-
-@pytest.mark.parametrize(
-    "yaml_extra,expect_error",
-    [
-        # 触发器各形态非法
-        ("triggers:\n  - type: daily\n    time: 9:3\n", "HH:MM"),
-        ("triggers:\n  - type: daily\n", "HH:MM"),
-        ("triggers:\n  - type: interval\n    minutes: 0\n", "1-1440"),
-        ("triggers:\n  - type: interval\n    minutes: 2000\n", "1-1440"),
-        ("triggers:\n  - type: interval\n", "1-1440"),
-        ("triggers:\n  - type: cron\n    expr: '* * * *'\n", "expr 非法"),
-        ("triggers:\n  - type: event\n    event: nonsense\n", "event 必须"),
-        ("triggers:\n  - type: event\n", "event 必须"),
-        ("triggers:\n  - type: mysterious\n", "type 必须"),
-        ("triggers: not-a-list\n", "列表"),
-    ],
-)
-def test_triggers_invalid(tmp_path, yaml_extra, expect_error):
-    d = _write_plugin(tmp_path, _BASE_V2 + yaml_extra)
-    r = validate_plugin_dir(d)
-    assert not r.ok
-    assert any(expect_error in e for e in r.errors), r.errors
-
-
-def test_triggers_need_v2(tmp_path):
-    d = _write_plugin(
-        tmp_path,
-        _BASE_V2.replace("api_version: 2", "api_version: 1")
-        + 'triggers:\n  - type: daily\n    time: "09:00"\n',
-    )
-    r = validate_plugin_dir(d)
-    assert not r.ok
-    assert any("api_version: 2" in e for e in r.errors)
 
 
 def test_write_back_needs_v2(tmp_path):
@@ -135,17 +69,6 @@ def test_write_back_needs_v2(tmp_path):
     r = validate_plugin_dir(d)
     assert not r.ok
     assert any("api_version: 2" in e for e in r.errors)
-
-
-def test_service_with_triggers_rejected(tmp_path):
-    d = _write_plugin(
-        tmp_path,
-        _BASE_V2.replace("type: script", "type: service")
-        + "triggers:\n  - type: event\n    event: startup\n",
-    )
-    r = validate_plugin_dir(d)
-    assert not r.ok
-    assert any("仅支持 script" in e for e in r.errors)
 
 
 # ==========================================
@@ -234,12 +157,15 @@ def test_service_with_params_rejected(tmp_path):
     assert any("仅支持 script" in e for e in r.errors)
 
 
-def test_trigger_describe():
-    from zentray.plugins.models import PluginTrigger
-
-    assert PluginTrigger(TriggerType.DAILY, time="09:30").describe() == "每日 09:30"
-    assert PluginTrigger(TriggerType.INTERVAL, minutes=30).describe() == "每 30 分钟"
-    assert (
-        PluginTrigger(TriggerType.EVENT, event=TriggerEvent.TASK_DONE).describe()
-        == "事件: 任务完成"
+def test_legacy_triggers_and_description_tolerated(tmp_path):
+    """旧 manifest 携带 triggers/description：容忍不报错，字段不进模型。"""
+    d = _write_plugin(
+        tmp_path,
+        _BASE_V2
+        + 'description: 旧简介\n'
+        + 'triggers:\n  - type: daily\n    time: "09:30"\n',
     )
+    r = validate_plugin_dir(d)
+    assert r.ok, r.error_text()
+    assert not hasattr(r.manifest, "triggers")
+    assert not hasattr(r.manifest, "description")

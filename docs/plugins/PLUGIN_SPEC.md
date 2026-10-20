@@ -2,7 +2,7 @@
 
 | 字段 | 值 |
 |------|-----|
-| API 版本 | **1** / **2**（v2 新增触发器、任务上下文注入与结果写回） |
+| API 版本 | **1** / **2**（v2 新增任务上下文注入与结果写回） |
 | 校验命令 | `python scripts/validate_plugin.py <插件目录>` |
 
 本文是**插件作者与合入门禁**的权威说明。不符合规范的插件**不会**出现在托盘菜单。
@@ -43,25 +43,15 @@ id: sample-script                 # 必填，唯一
 name: 示例脚本                    # 必填，菜单显示名
 version: 0.1.0                    # 必填
 type: script                      # 必填：script | service
-api_version: 2                    # 必填：1 | 2（triggers/write_back/params 需 2）
+api_version: 2                    # 必填：1 | 2（write_back/params 需 2）
 entry: run.sh                     # 必填，相对路径，可执行
 args: []                          # 可选，追加参数（字符串数组）
 workdir: .                        # 可选，相对工作目录，默认插件根
 timeout_sec: 300                  # 可选，仅 script；默认 300；0=不限制（不推荐）
 env:                              # 可选，额外环境变量
   FOO: bar
-description: 一句话说明           # 可选
 category: 网络                    # 可选，分类标签（设置页插件列表排序用）
 write_back: false                 # 可选，v2：RESULT 文本写回任务备注，默认 false
-triggers:                         # 可选，v2：自动触发（仅 script，见 3.3）
-  - type: daily                   #   每日 HH:MM（含错过补跑）
-    time: "09:00"
-  - type: interval                #   每 N 分钟（1-1440，仅运行期不补跑）
-    minutes: 30
-  - type: cron                    #   标准 5 字段 cron（错过不补跑）
-    expr: "*/15 9-17 * * 1-5"
-  - type: event                   #   事件：task_done | pomodoro_end | break_end | startup
-    event: task_done
 params:                           # 可选，v2.1：命名入参（仅 script，见 3.5）
   - name: target
     default: "all"
@@ -74,7 +64,7 @@ params:                           # 可选，v2.1：命名入参（仅 script，
 |------|------|
 | `id` | 正则 `^[a-z0-9]+(-[a-z0-9]+)*$` |
 | `type` | 仅 `script` 或 `service` |
-| `api_version` | 整数；接受 `1` 或 `2`；声明 `triggers`/`write_back`/`params` 必须为 `2` |
+| `api_version` | 整数；接受 `1` 或 `2`；声明 `write_back`/`params` 必须为 `2` |
 | `entry` | 相对路径；存在；Unix 上须可执行（`chmod +x`） |
 | `args` | 字符串数组；**不以 shell 拼接**，argv 直传 |
 | `workdir` | 相对插件根；不得 `..` |
@@ -87,25 +77,20 @@ params:                           # 可选，v2.1：命名入参（仅 script，
 - Windows：不检查 Unix 可执行位，仅要求文件存在。  
 - 应用**不会** `shell=True` 解释整行命令字符串。
 
-### 3.3 触发器（v2，`api_version: 2`）
+### 3.3 随任务调度（v0.7.15 起）
 
-`triggers` 为列表，可声明多个；**仅 `script` 类型允许**（service + triggers 校验拒绝）。
+插件**不再有自身调度**（v0.7.14 及以前的 daily/interval/cron/event 触发器已删除；
+旧 manifest 携带 `triggers` 键容忍忽略）。自动运行的唯一触发源：
 
-| 形态 | 字段 | 语义 |
-|------|------|------|
-| `daily` | `time: "HH:MM"` | 每日定时；错过（关机）在下次轮询补跑一次，当日去重 |
-| `interval` | `minutes: 1–1440` | 运行期每 N 分钟循环；不补跑 |
-| `cron` | `expr: "分 时 日 月 周"` | 标准 5 字段；支持 `*`、`*/n`、`a-b`、`a-b/n`、列表；`7=周日`；日/周均受限时取 OR（vixie 语义）；错过不补跑 |
-| `event` | `event: task_done \| pomodoro_end \| break_end \| startup` | 事件触发；`task_done` 注入完成任务上下文 |
+> **任务弹窗时刻** —— 在任务的「时间与提醒」里勾选截止弹窗或添加弹窗时间，
+> 并在「关联插件」里选中本插件；该任务每个弹窗时刻到点，弹窗照常弹出，
+> 插件以 `trigger=task_popup` 并行运行（入参取参数预设）。
 
-**授权（一次性）**：带触发器的插件首次自动触发前弹「允许此插件自动运行」；
-允许后静默运行，拒绝则持久不再询问（设置页该插件展开面板的「自动运行授权」开关可
-重新打开）。手动运行不受影响。
-
-**触发跳过**：番茄钟进行中或已有脚本运行时静默跳过并记录，不产生通知。
-
-触发规则由 manifest `triggers` 声明，属于插件自身（设置页不提供修改入口）；
-如需调整触发时间，改 manifest 后重新安装即可。
+- 定时需求建模为周期任务：如「每周五 09:30」= 周周期模板（截止周五、
+  截止弹窗 09:30）+ 关联插件；跳过公休日等门控随任务设置生效。
+- **授权即关联**：把插件关联到任务就是显式授权，无额外授权弹窗。
+- 番茄钟进行中或已有脚本运行时静默跳过，不产生通知。
+- 无关联任务的插件仍可手动运行（插件面板 ▶ / 任务编辑页 ▶）。
 
 ### 3.4 结果写回（v2，`write_back: true`）
 
@@ -157,7 +142,7 @@ v2 任务上下文注入（从任务页/任务完成触发运行时自动带入�
 |------|------|
 | `ZENTRAY_TASK_ID` / `ZENTRAY_TASK_TITLE` | 任务 ID 与标题（有任务上下文时恒在） |
 | `ZENTRAY_TASK_DETAILS` / `ZENTRAY_TASK_CATEGORY` / `ZENTRAY_TASK_PRIORITY` / `ZENTRAY_TASK_DEADLINE` | 非空才注入 |
-| `ZENTRAY_TRIGGER` | 触发方式：`manual` / `daily` / `interval` / `cron` / `task_done` / `pomodoro_end` / `break_end` / `startup` |
+| `ZENTRAY_TRIGGER` | 触发方式：`manual` / `task_popup`（随任务弹窗；旧运行历史可能还有 `daily`/`cron`/`task_done` 等已退役触发名） |
 | `ZENTRAY_PLUGIN_DATA_DIR` | 每插件私有数据目录（`数据目录/plugin_data/<id>/`，运行前自动创建）；持久化状态写这里，**勿写插件自身目录**（zip 覆盖重装会丢）。无需 api_version 门，v1 插件同样注入 |
 
 ### 4.2 stdout 进度协议（UTF-8，按行）
@@ -278,12 +263,11 @@ python scripts/validate_plugin.py path/to/plugin
 
 API：
 
-- `GET /api/plugins` → `{ enabled, items: [{id,name,type,category,triggers,manifest_triggers,trigger_override,params,updated_at,write_back,authorized,...}], busy }`  
+- `GET /api/plugins` → `{ enabled, items: [{id,name,type,category,params,updated_at,write_back,...}], busy }`  
 - `POST /api/plugins/{id}/run` → script 启动，body 可带 `{ "task_id": "..." }` 注入任务上下文、
   `{ "params": {name: value} }` 传命名入参（显式 > 预设 > default）；service 可 body `{ "action": "start"|"stop"|"status" }`  
 - `GET /api/plugins/runs?limit=50` → 运行历史（时间倒序；v2.1 记录含 `run_id` / `started_at` / `time` 起止）  
 - `GET /api/plugins/runs/log?file=<日志文件名>` → 单次运行日志内容  
-- `POST /api/plugins/{id}/authorize` body `{ "allow": true|false }` → 设置自动运行授权  
 - `POST /api/plugins/validate` body `{ "path": "<目录>" }` → 目录预览校验  
 - `POST /api/plugins/preview-zip` body `{ "path": "<本机zip>" }` → zip 预览校验（不安装）  
 - `POST /api/plugins/install` body `{ "path": "<目录>", "overwrite": false }` → 目录安装  
@@ -293,7 +277,7 @@ API：
 
 ## 9. 开发检查清单
 
-- [ ] `plugin.yaml` 字段完整且 `api_version: 1` 或 `2`（用 triggers/write_back 则必须 2）  
+- [ ] `plugin.yaml` 字段完整且 `api_version: 1` 或 `2`（用 write_back 则必须 2）  
 - [ ] `entry` 相对路径、`chmod +x`  
 - [ ] script 输出 `PROGRESS`/`LOG`，退出码正确；需要摘要时输出 `RESULT`  
 - [ ] service 实现 `start`/`stop`/`status`  
@@ -308,8 +292,8 @@ API：
 
 | 路径 | id | 说明 |
 |------|-----|------|
-| `bundled_plugins/ai-news-digest/` | `ai-news-digest` | **AI 资讯日报**：聚合 HN 与主流媒体 RSS 生成带图 HTML 日报，标题中英对照、可选 AI 摘要，daily 触发 + 命名入参 `top_n`，api_version 2 |
-| `bundled_plugins/email-digest/` | `email-digest` | **邮箱日报**：多邮箱 IMAP 只读汇总为一份日报（password/XOAUTH2 双轨），daily 触发 + `write_back`，api_version 2 |
+| `bundled_plugins/ai-news-digest/` | `ai-news-digest` | **AI 资讯日报**：聚合 HN 与主流媒体 RSS 生成带图 HTML 日报，标题中英对照、可选 AI 摘要，命名入参 `top_n`，api_version 2（随关联任务调度） |
+| `bundled_plugins/email-digest/` | `email-digest` | **邮箱日报**：多邮箱 IMAP 只读汇总为一份日报（password/XOAUTH2 双轨），`write_back`，api_version 2（随关联任务调度） |
 | `bundled_plugins/text-toolbox/` | `text-toolbox` | **文本工具箱**：本地文本工具页（JSON/SQL、文本比对、时间工具、加解密等），service 型 + `env` 注入端口，api_version 1 |
 
 启用「插件」后，托盘「🧩 插件」**面板入口**可见（GNOME 托盘无向右弹出的子菜单，
@@ -330,6 +314,7 @@ API：
 
 ## 修订记录
 
+- **2026-10-20 插件随任务调度**（feature/plugin-task-scheduling）：删除插件全部自调度（daily/interval/cron/event 触发器、授权三态、`ops.trigger_overrides` 覆盖层、每分钟轮询 worker、`/authorize` 端点；cron 解析模块一并移除）。自动触发唯一来源改为**所关联任务的弹窗时刻**（`trigger=task_popup`，busy/番茄静默跳过）；manifest 的 `triggers`/`description` 键删除（旧文件容忍忽略）；朝闻/暮省存量参数预设启动时一次性迁移为关联周期任务（`plugin_triggers.json` 打标记停读）。
 - **2026-10-14 设置页插件管理简化**（feature/ui-4page-plugins）：设置页回归纯管理——总开关 / 已安装插件（每插件行四动作：说明 / 参数预设 / 编辑 / 删除；展开面板 = 名称简介 + 参数预设 + 自动运行授权）/ 导入插件。调度规则覆盖层编辑 UI 与运行历史、运行按钮移除：触发规则回归 manifest 唯一来源（后端 `ops.trigger_overrides` 覆盖层代码保留但无界面入口），运行与历史统一在插件面板。
 - **2026-09-29 插件面板 v2 双标签运行台**（feature/plugin-panel-v2）：面板升级为 720×620 双标签——「插件」分类 chips+类型筛选；「记录」运行历史表（按插件过滤）+**执行报告抽屉**（状态/起止/耗时/触发/关联任务/摘要/`RESULT` 结果正文/完整日志）；每插件卡新增**报告/日志按钮**（看最近一次运行）。设置页插件管理块不变。
 - **2026-09-28 托盘插件面板**（feature/plugin-tray-panel）：托盘「🧩 插件」由子菜单改为**单一菜单项**，点击打开 Vue/Arco 插件面板（GNOME 托盘 AppIndicator 无右弹子菜单，属平台约束）；脚本点击卡片同窗展开 确认卡/参数表单（预填 预设→default），服务三按钮，运行走既有 API（门控不变）；Qt 原生确认/参数弹窗路径移除。

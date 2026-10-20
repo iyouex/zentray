@@ -258,8 +258,6 @@ def handle_request(
             return _install_plugin_zip(body or {})
         if method == "POST" and path == "/api/plugins/preview-zip":
             return _preview_plugin_zip(body or {})
-        if method == "POST" and path.startswith("/api/plugins/") and path.endswith("/authorize"):
-            return _authorize_plugin(path[len("/api/plugins/") : -len("/authorize")], body or {})
         if method == "GET" and path == "/api/plugins":
             return 200, _plugins_list()
         if method == "POST" and path == "/api/plugins/validate":
@@ -644,14 +642,12 @@ def _update_plugin(plugin_id: str, body: dict) -> tuple[int, dict]:
         if p is None or p.source != "user":
             return 500, {"ok": False, "error": "复制后重扫失败，副本未生效"}
     name = str(body.get("name") or "").strip()
-    description = str(body.get("description") or "").strip()
     if not name:
         return 400, {"ok": False, "error": "名称不能为空"}
     yaml_path = p.manifest.root / "plugin.yaml"
     try:
         raw = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
         raw["name"] = name
-        raw["description"] = description
         yaml_path.write_text(
             yaml.safe_dump(raw, allow_unicode=True, sort_keys=False),
             encoding="utf-8",
@@ -682,7 +678,6 @@ def _delete_plugin(plugin_id: str) -> tuple[int, dict]:
         # 包目录不可写且重装/升级会还原文件：删除=记录隐藏（loader 扫描期过滤）
         if plugin_id not in sm.ops.hidden_bundled:
             sm.ops.hidden_bundled.append(plugin_id)
-        sm.ops.trigger_overrides.pop(plugin_id, None)
         sm.ops.param_presets.pop(plugin_id, None)
         sm.ops.installed_at.pop(plugin_id, None)
         sm.save()
@@ -696,7 +691,6 @@ def _delete_plugin(plugin_id: str) -> tuple[int, dict]:
         shutil.rmtree(root)
     except OSError as e:
         return 500, {"ok": False, "error": f"删除失败: {e}"}
-    sm.ops.trigger_overrides.pop(plugin_id, None)
     sm.ops.param_presets.pop(plugin_id, None)
     sm.ops.installed_at.pop(plugin_id, None)
     sm.save()
@@ -732,46 +726,30 @@ def _plugins_list(*, scan_always: bool = False) -> dict:
 
     loader = _scanned_loader()
     runtime = _ctx.plugin_runtime
-    from zentray.plugins import triggers as _triggers
 
     import datetime as _dt
 
     items = []
     for p in loader.plugins:
         m = p.manifest
-        # v2.1：列表元数据——分类 / 命名入参 / 更新时间（installed_at 兜底目录
-        # mtime）/ 调度规则展示走覆盖层 effective
+        # v2.1：列表元数据——分类 / 命名入参 / 更新时间（installed_at 兜底目录 mtime）
         try:
             updated_at = sm.ops.installed_at.get(m.id) or _dt.datetime.fromtimestamp(
                 m.root.stat().st_mtime
             ).isoformat(timespec="seconds")
         except OSError:
             updated_at = ""
-        eff = _triggers.effective_triggers(m.id, m.triggers)
         items.append(
             {
                 "id": m.id,
                 "name": m.name,
                 "type": m.type.value,
                 "version": m.version,
-                "description": m.description or "",
                 "category": m.category or "",
                 "source": p.source,
                 "entry": m.entry,
                 "root": str(m.root),
                 "status": "ok",
-                "triggers": [t.describe() for t in eff],
-                "manifest_triggers": [
-                    {
-                        "type": t.type.value,
-                        "time": t.time,
-                        "minutes": t.minutes,
-                        "expr": t.expr,
-                        "event": t.event.value if t.event else None,
-                    }
-                    for t in m.triggers
-                ],
-                "trigger_override": m.id in sm.ops.trigger_overrides,
                 "params": [
                     {
                         "name": x.name,
@@ -783,7 +761,6 @@ def _plugins_list(*, scan_always: bool = False) -> dict:
                 ],
                 "updated_at": updated_at,
                 "write_back": bool(m.write_back),
-                "authorized": _triggers.is_authorized(m.id),
                 # 使用说明原文（README.md，无则空），供前端「说明」抽屉展示
                 "readme": _read_plugin_readme(m.root),
             }
@@ -858,7 +835,6 @@ def _manifest_preview(m) -> dict:
         "type": m.type.value,
         "version": m.version,
         "entry": m.entry,
-        "description": m.description or "",
         "timeout_sec": m.timeout_sec,
         "root": str(m.root),
     }
@@ -1235,15 +1211,6 @@ def _plugin_run_open(body: dict) -> tuple[int, dict]:
     _open_with_system(md_path)
     _ctx.mark_report_viewed(f"run:{run_id}")
     return 200, {"ok": True, "file": str(md_path)}
-
-
-def _authorize_plugin(plugin_id: str, body: dict) -> tuple[int, dict]:
-    """设置插件自动运行授权（插件级一次性授权的 UI 开关）。"""
-    from zentray.plugins import triggers
-
-    allow = bool(body.get("allow"))
-    triggers.authorize(plugin_id, allow)
-    return 200, {"ok": True, "id": plugin_id, "authorized": allow}
 
 
 def _run_plugin(plugin_id: str, body: dict) -> tuple[int, dict]:

@@ -6,29 +6,7 @@ api_version: 2
 entry: musheng.py
 timeout_sec: 300
 category: AI 复盘
-description: 复盘报告（原内置「每日复盘」迁移）：到点汇总当日归档记录与高优先任务，按设置-AI 中配置的复盘风格生成总结与明日规划，写入 reviews/ 供历史面板查看并通知。周期（日/周/月）、触发时间、跳过公休日等在 参数预设 中设置。
 params:
-  - name: period
-    default: "daily"
-    description: 执行周期 daily/weekly/monthly（日/周/月）
-  - name: time
-    default: "23:30"
-    description: 触发时刻 HH:MM（改后按新时刻重新调度）
-  - name: weekday
-    default: "1"
-    description: period=weekly 时的周几（1=周一 … 7=周日）
-  - name: day_of_month
-    default: "1"
-    description: period=monthly 时的几号（1-31）
-  - name: skip_weekends
-    default: "false"
-    description: 是否跳过周末（true/false）
-  - name: skip_holidays
-    default: "false"
-    description: 是否跳过法定节假日（true/false）
   - name: save_local
     default: "true"
     description: 报告保存到 reviews/（false 则只通知不落盘）
-triggers:
-  - type: daily
-    time: "23:30"

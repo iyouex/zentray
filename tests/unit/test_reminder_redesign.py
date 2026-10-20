@@ -1,14 +1,21 @@
 # tests/unit/test_reminder_redesign.py
-"""提醒重构（2026-10-19）：开始提醒时间门控 / 关键交付时间 / 公休日跳过。"""
+"""提醒重构（2026-10-19）：开始提醒时间门控 / 公休日跳过。
+时间重设计（2026-10-20）：截止时分+截止弹窗 / 逾期粒度 / 交付改额外弹窗时间。"""
 import datetime
 
 from zentray.core.categories import CategorySettings, PrimaryCategory
 from zentray.core.models import PeriodicTemplate, ReminderSlot, Task
-from zentray.core.periodic import build_due_instance, resolve_remind_start
+from zentray.core.periodic import (
+    build_due_instance,
+    compute_instance_deadline,
+    resolve_remind_start,
+)
 from zentray.core.reminder import (
-    deliveries_deadline,
     due_delivery_ats,
+    due_popup_at,
+    is_task_overdue,
     normalize_deliveries,
+    normalize_due_time,
 )
 from zentray.core.scheduler import task_reminder_gated
 
@@ -87,12 +94,50 @@ class TestDeliveries:
         ]
         assert due_delivery_ats(ds, _dt("2026-10-19T10:00:45")) == ["2026-10-19T10:00:30"]
 
-    def test_deadline_is_latest_date(self):
-        assert deliveries_deadline([
-            {"at": "2026-10-20T18:00"},
-            {"at": "2026-10-19T10:00", "notify": True},
-        ]) == "2026-10-20"
-        assert deliveries_deadline([]) is None
+
+class TestDuePopup:
+    """截止时刻弹窗：到点一次、due_fired 去重、改 due_time 换时刻。"""
+
+    def test_fires_in_window(self):
+        t = _task(deadline="2026-10-20", due_time="18:00", popup_at_due=True)
+        assert due_popup_at(t, _dt("2026-10-20T18:00:30")) == "2026-10-20T18:00"
+        # 窗外不弹
+        assert due_popup_at(t, _dt("2026-10-20T18:01:00")) is None
+        assert due_popup_at(t, _dt("2026-10-20T17:59:00")) is None
+
+    def test_dedupe_by_due_fired(self):
+        t = _task(deadline="2026-10-20", due_time="18:00", popup_at_due=True,
+                  due_fired="2026-10-20T18:00")
+        assert due_popup_at(t, _dt("2026-10-20T18:00:30")) is None
+
+    def test_retime_refires(self):
+        t = _task(deadline="2026-10-20", due_time="19:00", popup_at_due=True,
+                  due_fired="2026-10-20T18:00")
+        assert due_popup_at(t, _dt("2026-10-20T19:00:20")) == "2026-10-20T19:00"
+
+    def test_no_deadline_or_switch_off(self):
+        assert due_popup_at(_task(popup_at_due=True), _dt("2026-10-20T18:00")) is None
+        assert due_popup_at(_task(deadline="2026-10-20", due_time="18:00"),
+                            _dt("2026-10-20T18:00")) is None
+
+    def test_due_time_default_2359(self):
+        t = _task(deadline="2026-10-20", popup_at_due=True)
+        assert due_popup_at(t, _dt("2026-10-20T23:59:10")) == "2026-10-20T23:59"
+
+
+class TestOverdueGranularity:
+    """逾期判定：有 due_time 分钟级、无则日级。"""
+
+    def test_day_level_without_due_time(self):
+        t = _task(deadline="2026-10-19")
+        assert is_task_overdue(t, _dt("2026-10-20T00:00"))      # 次日逾期
+        assert not is_task_overdue(t, _dt("2026-10-19T23:59"))  # 当日不逾期
+        assert not is_task_overdue(_task(), _dt("2026-10-19T10:00"))  # 无截止
+
+    def test_minute_level_with_due_time(self):
+        t = _task(deadline="2026-10-20", due_time="18:00")
+        assert not is_task_overdue(t, _dt("2026-10-20T17:59"))
+        assert is_task_overdue(t, _dt("2026-10-20T18:00"))
 
 
 def _future_monday() -> datetime.date:
@@ -143,8 +188,54 @@ class TestResolveRemindStart:
         assert inst.remind_start is None
 
 
+class TestDailyStartAndDueInheritance:
+    """时间重设计（2026-10-20）：日模板仅时分开始点；due_time/popup 派发继承。"""
+
+    def test_daily_time_only_start(self):
+        # 2026-10-19（未来校验靠 400 天外日期防时间炸弹）
+        d = datetime.date.today() + datetime.timedelta(days=400)
+        tmpl = PeriodicTemplate(
+            base_title="晨读", category="工作", periodicity="daily",
+            remind_start_slots=[ReminderSlot(time_of_day="23:30")],
+        )
+        assert resolve_remind_start(tmpl, d) == d.isoformat() + "T23:30"
+
+    def test_daily_start_past_is_none(self):
+        tmpl = PeriodicTemplate(
+            base_title="晨读2", category="工作", periodicity="daily",
+            remind_start_slots=[ReminderSlot(time_of_day="00:00")],
+        )
+        assert resolve_remind_start(tmpl, datetime.date.today()) is None
+
+    def test_spawn_inherits_due_time_and_popup(self):
+        tmpl = PeriodicTemplate(
+            base_title="日报", category="工作", periodicity="daily",
+            due_time="18:30", popup_at_due=True,
+        )
+        inst = build_due_instance(tmpl, datetime.date(2026, 10, 19))
+        assert inst is not None
+        assert inst.deadline == "2026-10-19"
+        assert inst.due_time == "18:30"
+        assert inst.popup_at_due is True
+        assert inst.due_fired is None  # 新实例截止弹窗待触发
+
+    def test_daily_without_due_time_has_no_deadline(self):
+        tmpl = PeriodicTemplate(base_title="闲记", category="生活", periodicity="daily")
+        inst = build_due_instance(tmpl, datetime.date(2026, 10, 19))
+        assert inst is not None
+        assert inst.deadline == ""
+
+    def test_monthly_deadline_clamps_feb(self):
+        tmpl = PeriodicTemplate(
+            base_title="月报", category="工作", periodicity="monthly",
+            deadline_day_of_month=31, due_time="20:00",
+        )
+        assert compute_instance_deadline(tmpl, datetime.date(2026, 2, 1)) == "2026-02-28"
+
+
 class TestServiceNormalize:
-    def test_create_derives_deadline_and_seeds_skip(self, task_service):
+    def test_create_no_deadline_derivation_and_seeds_skip(self, task_service):
+        """退役「最晚交付=截止」：截止只由截止行决定；skip_holidays 取分类预设。"""
         task = task_service.create_task({
             "title": "交付", "category": "工作",
             "deliveries": [
@@ -153,8 +244,20 @@ class TestServiceNormalize:
             ],
             "deadline": "2026-10-19",
         })
-        assert task.deadline == "2026-10-22"  # 最晚交付日期覆盖手工截止
+        assert task.deadline == "2026-10-19"  # 手工截止不再被交付覆盖
         assert [d["notify"] for d in task.deliveries] == [True, False]  # 按 at 排序后
+
+    def test_create_normalizes_due_fields(self, task_service):
+        task = task_service.create_task({
+            "title": "带时分", "category": "工作",
+            "deadline": "2026-10-20", "due_time": "9:5", "popup_at_due": 1,
+        })
+        assert task.due_time == "09:05"
+        assert task.popup_at_due is True
+        bad = task_service.create_task({
+            "title": "坏时分", "category": "工作", "due_time": "junk",
+        })
+        assert bad.due_time is None and bad.popup_at_due is False
 
     def test_update_keeps_fired_flags(self, task_service):
         task = task_service.create_task({

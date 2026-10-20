@@ -9,7 +9,7 @@ from typing import Optional
 from PySide6.QtCore import QThread, Signal
 
 from zentray.core.models import Task
-from zentray.core.reminder import due_delivery_ats, due_reminder_keys
+from zentray.core.reminder import due_delivery_ats, due_popup_at, due_reminder_keys
 from zentray.core.repository import TaskRepository
 from zentray.core.scheduler import task_reminder_gated
 
@@ -30,6 +30,10 @@ class ReminderWorker(QThread):
         self.task_repo = task_repo
         self.is_running = True
         self._pending_ids: set[str] = set()  # 弹窗排队中，避免重复 emit
+        # 关联插件随任务弹窗运行（main 注入；None=插件系统未就绪，静默不触发）
+        self.plugin_loader = None
+        self.plugin_runtime = None
+        self.pomodoro_service = None
 
     def run(self):
         while self.is_running:
@@ -62,13 +66,57 @@ class ReminderWorker(QThread):
                     self._pending_ids.add(task.id)
                     batch.append((task, keys[0]))
                     continue
-            # 关键交付时间点：到点即弹（一次性时刻，触发后落 fired 持久去重）
+            # 截止时刻弹窗（popup_at_due）：到点弹一次，due_fired 持久去重，改时刻重弹
+            moment = due_popup_at(task, now)
+            if moment:
+                self._pending_ids.add(task.id)
+                if self._mark_due_fired(task.id, moment):
+                    batch.append((task, "due"))
+                continue
+            # 额外弹窗时间（原关键交付时间点）：到点即弹，行内 fired 持久去重
             for at in due_delivery_ats(getattr(task, "deliveries", None) or [], now):
                 self._pending_ids.add(task.id)
                 if self._mark_delivery_fired(task.id, at):
                     batch.append((task, f"dlv|{at}"))
         if batch:
+            self._run_task_plugins(batch)
             self.reminder_due.emit(batch)
+
+    def _run_task_plugins(self, batch) -> None:
+        """弹窗时刻 = 关联插件的唯一自动触发源（task_popup）。
+
+        每任务至多一次（同轮多个弹窗行不重跑）；busy/番茄中 run_script
+        返回 False 静默跳过；插件总开关关闭不触发。
+        """
+        loader = self.plugin_loader
+        runtime = self.plugin_runtime
+        if loader is None or runtime is None:
+            return
+        try:
+            from zentray.services.settings_manager import SettingsManager
+
+            if not SettingsManager().ops.enabled:
+                return
+        except Exception:
+            return
+        seen: set[str] = set()
+        for task, _key in batch:
+            pid = getattr(task, "plugin_id", None)
+            if not pid or task.id in seen:
+                continue
+            seen.add(task.id)
+            plug = loader.get(pid)
+            if plug is None:
+                continue
+            pomo = self.pomodoro_service
+            ok = runtime.run_script(
+                plug,
+                pomodoro_active=bool(getattr(pomo, "is_active", False)),
+                task=task,
+                trigger="task_popup",
+            )
+            if ok:
+                logger.info("插件随任务弹窗运行: %s (%s)", pid, task.title)
 
     @staticmethod
     def _gated(task: Task, now: datetime.datetime) -> bool:
@@ -95,6 +143,21 @@ class ReminderWorker(QThread):
             return bool(self.task_repo.mutate_all(mut))
         except Exception:
             logger.exception("标记交付时间已触发失败")
+            return False
+
+    def _mark_due_fired(self, task_id: str, moment: str) -> bool:
+        def mut(tasks) -> bool:
+            for t in tasks:
+                if t.id != task_id:
+                    continue
+                t.due_fired = moment
+                return True
+            return False
+
+        try:
+            return bool(self.task_repo.mutate_all(mut))
+        except Exception:
+            logger.exception("标记截止弹窗已触发失败")
             return False
 
     def clear_pending(self, task_id: str) -> None:

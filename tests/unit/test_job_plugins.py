@@ -1,16 +1,13 @@
-"""朝闻/暮省插件（原内置每日计划/复盘迁移）：清单校验 + 周期参数调度 + 迁移 + 脚本生成。"""
+"""朝闻/暮省插件：清单校验 + 参数预设 + 存量调度迁移 + 脚本生成。"""
 import datetime as dt
 import importlib.util
 import json
-import sys
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
-from zentray.plugins import triggers
+from zentray.plugins.legacy_scheduling import MARKER, migrate_legacy_scheduling
 from zentray.plugins.manifest import validate_plugin_dir
-from zentray.plugins.models import TriggerType
 
 _BUNDLED = Path(__file__).resolve().parents[2] / "bundled_plugins"
 
@@ -22,11 +19,6 @@ def _load_script(pid: str):
     return mod
 
 
-@pytest.fixture(autouse=True)
-def _state_file(tmp_data_dir, monkeypatch):
-    monkeypatch.setattr(triggers, "STATE_FILE", tmp_data_dir / "plugin_triggers.json")
-
-
 def _manifest(pid: str):
     r = validate_plugin_dir(_BUNDLED / pid)
     assert r.ok, r.errors
@@ -34,134 +26,118 @@ def _manifest(pid: str):
 
 
 # ==========================================
-# 清单与脚本可执行
+# 清单与脚本可执行（调度参数已删，仅运行时参数）
 # ==========================================
 
 
 @pytest.mark.parametrize("pid", ["chaowen", "musheng"])
-def test_manifests_valid_and_period_params(pid):
+def test_manifests_valid_and_runtime_params_only(pid):
     m = _manifest(pid)
-    assert [p.name for p in m.params] == [
-        "period", "time", "weekday", "day_of_month",
-        "skip_weekends", "skip_holidays", "save_local",
-    ]
-    assert m.triggers and m.triggers[0].type == TriggerType.DAILY
+    assert [p.name for p in m.params] == ["save_local"]
+    assert not hasattr(m, "triggers")
+    assert not hasattr(m, "description")
     # Linux 下 entry 必须可执行（loader 校验规则）
     assert (Path(m.work_path) / m.entry).stat().st_mode & 0o111
 
 
 # ==========================================
-# 周期参数 → 触发器推导（纯函数）
+# 存量调度迁移：参数预设 → 关联周期任务（一次性，幂等）
 # ==========================================
 
 
-def test_period_raw_translation():
-    base = {"period": "daily", "time": "08:05"}
-    assert triggers._period_raw(base) == {"type": "daily", "time": "08:05"}
-    assert triggers._period_raw({"time": "9:5"}) == {"type": "daily", "time": "09:05"}
-    assert triggers._period_raw({"period": "weekly", "time": "23:30", "weekday": "7"}) == {
-        "type": "cron", "expr": "30 23 * * 7",
+class _Repo(list):
+    def find_all(self):
+        return list(self)
+
+    def save_all(self, templates):
+        self[:] = templates
+
+
+@pytest.fixture
+def state_file(tmp_data_dir, monkeypatch):
+    from zentray.plugins import legacy_scheduling
+
+    f = tmp_data_dir / "plugin_triggers.json"
+    monkeypatch.setattr(legacy_scheduling, "STATE_FILE", f)
+    return f
+
+
+def _write_state(path, authorized=None):
+    path.write_text(
+        json.dumps({"authorized": authorized or {}, "watermarks": {}, "legacy_migrated": True}),
+        encoding="utf-8",
+    )
+
+
+def test_migrate_builds_templates_from_presets(tmp_data_dir, state_file):
+    from zentray.services.settings_manager import SettingsManager
+
+    sm = SettingsManager.reload()
+    sm.ops.param_presets["chaowen"] = {
+        "period": "weekly", "time": "09:30", "weekday": "5",
+        "skip_weekends": "false", "skip_holidays": "true",
     }
-    assert triggers._period_raw({"period": "monthly", "time": "00:15", "day_of_month": "15"}) == {
-        "type": "cron", "expr": "15 0 15 * *",
-    }
-    # 非法值 → None（回落 manifest）
-    assert triggers._period_raw({"time": "abc"}) is None
-    assert triggers._period_raw({"time": "25:00"}) is None
-    assert triggers._period_raw({"period": "weekly", "weekday": "x"}) is None
+    sm.ops.param_presets["musheng"] = {"period": "daily", "time": "23:45"}
+    sm.save()
+    _write_state(state_file, authorized={"chaowen": True, "musheng": True})
+
+    repo = _Repo()
+    migrate_legacy_scheduling(repo)
+
+    assert len(repo) == 2
+    cw = next(t for t in repo if t.plugin_id == "chaowen")
+    assert cw.base_title == "朝闻" and cw.periodicity == "weekly"
+    assert cw.deadline_weekday == 4  # 周五（0=周一）
+    assert cw.due_time == "09:30" and cw.popup_at_due is True
+    assert cw.skip_holidays is True  # skip_holidays=true
+    ms = next(t for t in repo if t.plugin_id == "musheng")
+    assert ms.periodicity == "daily" and ms.due_time == "23:45"
+    assert ms.skip_holidays is False and ms.deadline_weekday is None
+    # 文件打标记停读
+    assert json.loads(state_file.read_text())[MARKER] is True
 
 
-def test_scheduled_triggers_derived_from_presets(tmp_data_dir):
+def test_migrate_idempotent_and_marker_short_circuits(tmp_data_dir, state_file):
     from zentray.services.settings_manager import SettingsManager
 
     sm = SettingsManager.reload()
-    sm.ops.param_presets["chaowen"] = {"period": "weekly", "time": "09:30", "weekday": "5"}
-    plug = SimpleNamespace(manifest=_manifest("chaowen"))
-    out = triggers.scheduled_triggers(plug)
-    assert [t.type for t in out] == [TriggerType.CRON]
-    assert out[0].expr == "30 9 * * 5"
+    sm.ops.param_presets["chaowen"] = {"period": "daily", "time": "08:00"}
+    sm.save()
+    _write_state(state_file, authorized={"chaowen": True})
+
+    repo = _Repo()
+    migrate_legacy_scheduling(repo)
+    assert len(repo) == 1
+    migrate_legacy_scheduling(repo)  # 标记已打：短路
+    assert len(repo) == 1
+
+    # 标记丢失重跑：同名关联模板去重，不重复建
+    raw = json.loads(state_file.read_text())
+    raw[MARKER] = False
+    state_file.write_text(json.dumps(raw), encoding="utf-8")
+    migrate_legacy_scheduling(repo)
+    assert len(repo) == 1
 
 
-def test_scheduled_triggers_invalid_falls_back_to_manifest(tmp_data_dir):
+def test_migrate_skips_unauthorized_or_presetless(tmp_data_dir, state_file):
     from zentray.services.settings_manager import SettingsManager
 
     sm = SettingsManager.reload()
-    sm.ops.param_presets["chaowen"] = {"time": "99:99"}
-    plug = SimpleNamespace(manifest=_manifest("chaowen"))
-    out = triggers.scheduled_triggers(plug)
-    assert out == plug.manifest.triggers
+    sm.ops.param_presets["chaowen"] = {"period": "daily", "time": "08:00"}
+    sm.ops.param_presets["musheng"] = {"period": "daily", "time": "abc"}  # 坏时刻
+    sm.save()
+    _write_state(state_file, authorized={"chaowen": False})  # 曾拒绝自动运行
+
+    repo = _Repo()
+    migrate_legacy_scheduling(repo)
+    assert repo == []  # 拒绝/坏时刻/无预设（musheng 无效时刻）均不建
+    assert json.loads(state_file.read_text())[MARKER] is True
 
 
-def test_scheduled_triggers_non_period_plugin_untouched(tmp_data_dir):
-    m = _manifest("chaowen")
-    object.__setattr__(m, "params", [p for p in m.params if p.name != "period"])
-    out = triggers.scheduled_triggers(SimpleNamespace(manifest=m))
-    assert out == m.triggers  # 走 effective_triggers 原路径（无覆盖层）
-
-
-def test_skip_today_weekend_gate(tmp_data_dir):
-    from zentray.services.settings_manager import SettingsManager
-
-    plug = SimpleNamespace(manifest=_manifest("musheng"))
-    sat = dt.datetime(2026, 10, 17, 23, 30)  # 周六
-    sm = SettingsManager.reload()
-    sm.ops.param_presets["musheng"] = {"skip_weekends": "true"}
-    assert triggers._skip_today(plug, sat) is True
-    sm.ops.param_presets["musheng"] = {"skip_weekends": "false", "skip_holidays": "false"}
-    assert triggers._skip_today(plug, sat) is False
-    # 无预设 → manifest 默认 false → 不跳
-    sm.ops.param_presets.pop("musheng")
-    assert triggers._skip_today(plug, sat) is False
-    # 非 period 插件不受门控
-    m = plug.manifest
-    object.__setattr__(m, "params", [p for p in m.params if p.name != "period"])
-    sm.ops.param_presets["musheng"] = {"skip_weekends": "true"}
-    assert triggers._skip_today(plug, sat) is False
-
-
-# ==========================================
-# 一次性迁移
-# ==========================================
-
-
-def test_migrate_legacy_jobs(tmp_data_dir):
-    from zentray.services.settings_manager import SettingsManager
-
-    sm = SettingsManager.reload()
-    sm.ai.plan.enabled = False
-    sm.ai.plan.trigger_hour = 9
-    sm.ai.plan.trigger_minute = 30
-    sm.ai.plan.skip_weekends = True
-    sm.ai.review.enabled = True
-    sm.ai.review.trigger_hour = 23
-    sm.ai.review.trigger_minute = 45
-
-    triggers.migrate_legacy_jobs()
-
-    sm2 = SettingsManager.reload()
-    assert sm2.ops.param_presets["chaowen"] == {
-        "period": "daily", "time": "09:30", "weekday": "1", "day_of_month": "1",
-        "skip_weekends": "true", "skip_holidays": "false", "save_local": "true",
-    }
-    assert sm2.ops.param_presets["musheng"]["time"] == "23:45"
-    state = triggers.load_state()
-    assert state.authorized == {"chaowen": False, "musheng": True}
-    assert state.legacy_migrated is True
-
-    # 幂等：再次迁移为 no-op（legacy_migrated 短路，已落盘值不变）
-    sm2.ops.param_presets["chaowen"]["time"] = "10:15"
-    triggers.migrate_legacy_jobs()
-    assert SettingsManager.reload().ops.param_presets["chaowen"]["time"] == "09:30"
-
-    # 标记丢失时预设守卫生效：用户预设不被旧值覆盖
-    sm3 = SettingsManager.reload()
-    sm3.ops.param_presets["chaowen"]["time"] = "10:15"
-    sm3.save()
-    st = triggers.load_state()
-    st.legacy_migrated = False
-    triggers.save_state(st)
-    triggers.migrate_legacy_jobs()
-    assert SettingsManager.reload().ops.param_presets["chaowen"]["time"] == "10:15"
+def test_migrate_no_state_file_is_noop(tmp_data_dir, state_file):
+    repo = _Repo()
+    migrate_legacy_scheduling(repo)
+    assert repo == [] and not state_file.exists()
 
 
 # ==========================================

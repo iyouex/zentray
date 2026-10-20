@@ -14,7 +14,7 @@ def _items() -> dict:
 
 def test_update_bundled_copies_to_user_dir(tmp_data_dir):
     code, body = _update_plugin(
-        "ai-news-digest", {"name": "AI 资讯改名", "description": "改后描述"}
+        "ai-news-digest", {"name": "AI 资讯改名"}
     )
     assert code == 200, body
     items = _items()

@@ -220,11 +220,9 @@ def test_install_writes_installed_at(tmp_data_dir):
     assert "zip-plug" in SettingsManager.reload().ops.installed_at
 
 
-def test_plugins_list_v21_metadata(tmp_data_dir, monkeypatch):
+def test_plugins_list_v21_metadata(tmp_data_dir):
     from zentray.api.handlers import _plugins_list
-    from zentray.plugins import triggers as _triggers
 
-    monkeypatch.setattr(_triggers, "STATE_FILE", tmp_data_dir / "pt.json")
     body = _plugins_list(scan_always=True)
     items = {i["id"]: i for i in body["items"]}
     tt = items["text-toolbox"]
@@ -232,18 +230,9 @@ def test_plugins_list_v21_metadata(tmp_data_dir, monkeypatch):
     assert tt["category"] == "工具"
     assert tt["params"] == []
     assert tt["updated_at"]  # mtime 兜底
-    assert tt["trigger_override"] is False
-    assert isinstance(tt["triggers"], list)
-
-    # 覆盖层生效：triggers 展示 effective，trigger_override 置位
-    from zentray.services.settings_manager import SettingsManager
-
-    sm = SettingsManager.reload()
-    sm.ops.trigger_overrides = {"text-toolbox": [{"type": "interval", "minutes": 15}]}
-    body = _plugins_list(scan_always=True)
-    tt = {i["id"]: i for i in body["items"]}["text-toolbox"]
-    assert tt["triggers"] == ["每 15 分钟"]
-    assert tt["trigger_override"] is True
+    # 调度/授权/简介字段已随「插件随任务调度」删除
+    for gone in ("triggers", "manifest_triggers", "trigger_override", "authorized", "description"):
+        assert gone not in tt
 
 
 def test_preview_zip_validates_without_installing(tmp_data_dir):
