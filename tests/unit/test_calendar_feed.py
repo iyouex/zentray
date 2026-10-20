@@ -1,4 +1,8 @@
-"""系统日历订阅源：模板未来日程投影、ics 构建（去重/头字段）、开关联动与 UID 稳定。"""
+"""系统日历订阅源：模板未来日程投影、ics 构建（去重/头字段）、开关联动与 UID 稳定。
+
+2026-10-20 起：投影不再逐模板开关，horizon=(mode, value) 由调用方传入
+（全局 设置 → 任务 → 系统日历）；全局开关在 CalendarFeedService.refresh 判断。
+"""
 import datetime
 import json
 
@@ -20,7 +24,6 @@ def _tmpl(**kw):
         base_title="打卡",
         category="工作",
         periodicity="daily",
-        calendar_enabled=True,
     )
     base.update(kw)
     return PeriodicTemplate(**base)
@@ -43,27 +46,16 @@ def test_project_daily_count_default():
     assert [dl for _, dl in out2] == ["2026-10-14", "2026-10-15", "2026-10-16", "2026-10-17"]
 
 
-def test_project_disabled_returns_empty():
-    assert project_future_instances(_tmpl(calendar_enabled=False), TODAY) == []
-
-
 def test_project_days_mode_truncation():
-    out = project_future_instances(
-        _tmpl(calendar_horizon_mode="days", calendar_horizon_value=7), TODAY
-    )
+    out = project_future_instances(_tmpl(), TODAY, ("days", 7))
     assert len(out) == 7
     assert out[-1][0] == TODAY + datetime.timedelta(days=6)
 
 
 def test_project_weekly_one_per_week():
     # 无水位：should_spawn 每天为真，跨周桶去重后每周只投影一次
-    t = _tmpl(
-        periodicity="weekly",
-        deadline_weekday=2,
-        calendar_horizon_mode="count",
-        calendar_horizon_value=3,
-    )
-    out = project_future_instances(t, TODAY)
+    t = _tmpl(periodicity="weekly", deadline_weekday=2)
+    out = project_future_instances(t, TODAY, ("count", 3))
     assert len(out) == 3
     # 投影日跨周桶递增（周中起步可仅隔 5 天）；截止=所在周周三，恒隔 7 天
     spawns = [d for d, _ in out]
@@ -74,20 +66,15 @@ def test_project_weekly_one_per_week():
 
 
 def test_project_monthly_day_of_month():
-    t = _tmpl(
-        periodicity="monthly",
-        deadline_day_of_month=1,
-        calendar_horizon_mode="count",
-        calendar_horizon_value=2,
-    )
-    out = project_future_instances(t, TODAY)
+    t = _tmpl(periodicity="monthly", deadline_day_of_month=1)
+    out = project_future_instances(t, TODAY, ("count", 2))
     # 首个投影在今天所在月（dom 已过=本月 1 号），其后逐月 1 号
     assert [dl for _, dl in out] == ["2026-10-01", "2026-11-01"]
 
 
 def test_project_interval_bucketing():
-    t = _tmpl(interval=2, calendar_horizon_mode="count", calendar_horizon_value=2)
-    out = project_future_instances(t, TODAY)
+    t = _tmpl(interval=2)
+    out = project_future_instances(t, TODAY, ("count", 2))
     assert len(out) == 2
     a, b = out
     assert 1 <= (b[0] - a[0]).days <= 2  # 桶界对齐差异，间隔 1 或 2 天
@@ -109,9 +96,7 @@ def test_project_respects_pause_end_and_watermark():
 
 def test_project_clamps_invalid_values():
     # mode 无效回落 count；value 钳制不炸且输出有序
-    out = project_future_instances(
-        _tmpl(calendar_horizon_mode="bogus", calendar_horizon_value=4), TODAY
-    )
+    out = project_future_instances(_tmpl(), TODAY, ("bogus", 4))
     assert len(out) == 4
     days = [d for d, _ in out]
     assert days == sorted(days)
@@ -134,11 +119,7 @@ def test_build_ics_headers_and_uid_stability():
 
 
 def test_build_ics_projection_dedup_with_real_instance():
-    tmpl = _tmpl(
-        template_id="tp-1",
-        calendar_horizon_mode="count",
-        calendar_horizon_value=4,
-    )
+    tmpl = _tmpl(template_id="tp-1")
     # 今天已派发真实实例（template_id + deadline 与投影同日）→ 投影去重
     real = Task(
         title="【x】打卡",
@@ -151,6 +132,9 @@ def test_build_ics_projection_dedup_with_real_instance():
     assert ics.count("BEGIN:VEVENT") == 4  # 真实 1 + 投影 3（今天被去重）
     assert "UID:zentray-tpl-tp-1-2026-10-14@zentray.local" not in ics
     assert "UID:zentray-tpl-tp-1-2026-10-15@zentray.local" in ics
+    # horizon 参数生效：count=1 只投影今天（已被真实实例去重 → 无模板事件）
+    ics1 = build_tasks_ics([real], [tmpl], today=TODAY, horizon=("count", 1))
+    assert "UID:zentray-tpl-tp-1" not in ics1
 
 
 def test_build_ics_delivery_events():
@@ -225,11 +209,19 @@ def test_feed_disabled_no_file_then_enable_and_clear(tmp_data_dir):
 
 def test_settings_calendar_roundtrip(tmp_data_dir):
     sf = tmp_data_dir / "settings.json"
-    sf.write_text(json.dumps({"calendar": {"enabled": True}}), encoding="utf-8")
-    assert SettingsManager.reload().calendar.enabled is True
+    sf.write_text(
+        json.dumps({"calendar": {"enabled": True, "horizon_mode": "days", "horizon_value": 30}}),
+        encoding="utf-8",
+    )
+    cal = SettingsManager.reload().calendar
+    assert (cal.enabled, cal.horizon_mode, cal.horizon_value) == (True, "days", 30)
     SettingsManager().save()
     data = json.loads(sf.read_text(encoding="utf-8"))
-    assert data["calendar"] == {"enabled": True}
+    assert data["calendar"] == {"enabled": True, "horizon_mode": "days", "horizon_value": 30}
+    # 旧 settings.json 无 horizon 键 → 补默认 count/4
+    sf.write_text(json.dumps({"calendar": {"enabled": True}}), encoding="utf-8")
+    cal = SettingsManager.reload().calendar
+    assert (cal.horizon_mode, cal.horizon_value) == ("count", 4)
 
 
 def test_backup_sections_include_calendar():
