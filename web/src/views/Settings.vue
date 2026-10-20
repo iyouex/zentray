@@ -410,6 +410,27 @@
                 </span>
                 <template v-if="form.calendar.enabled">
                   <div class="field-line">
+                    <span class="field-k">投影范围</span>
+                    <a-space size="small">
+                      <a-select
+                        v-model="form.calendar.horizon_mode"
+                        size="small"
+                        style="width: 110px"
+                        @change="onCalendarHorizonModeChange"
+                      >
+                        <a-option value="count">未来几次</a-option>
+                        <a-option value="days">未来几天</a-option>
+                      </a-select>
+                      <NumberSpinner
+                        v-model="form.calendar.horizon_value"
+                        :min="form.calendar.horizon_mode === 'days' ? 7 : 1"
+                        :max="form.calendar.horizon_mode === 'days' ? 365 : 60"
+                      />
+                      <span class="hint">{{ form.calendar.horizon_mode === 'days' ? '天' : '次' }}</span>
+                    </a-space>
+                  </div>
+                  <span class="hint">周期模板的未来日程按此范围统一投影到日历（原模板内的投影开关已收归此处）。</span>
+                  <div class="field-line">
                     <span class="field-k">源文件</span>
                     <span class="hint" style="word-break: break-all">{{ calendarFeedPath || '…' }}</span>
                   </div>
@@ -1384,6 +1405,11 @@ const feishuStatusText = computed(() => {
 
 // —— 系统日历订阅源（任务页卡片）——
 const sysDataDir = ref('')
+/** 投影范围模式切换时回填该模式默认值（count=4 次 / days=30 天） */
+function onCalendarHorizonModeChange(mode) {
+  form.calendar.horizon_value = mode === 'days' ? 30 : 4
+}
+
 const calendarFeedPath = computed(() =>
   sysDataDir.value ? `${sysDataDir.value}/calendar/zentray.ics` : ''
 )
@@ -1857,7 +1883,7 @@ function emptyForm() {
       plugin_notify_channels: {},
     },
     update: { proxy: '' },
-    calendar: { enabled: false },
+    calendar: { enabled: false, horizon_mode: 'count', horizon_value: 4 },
   }
 }
 
@@ -2559,6 +2585,9 @@ function normalizeLoaded(s) {
   if (!form.quick_add) form.quick_add = emptyForm().quick_add
   if (!form.feishu_sync) form.feishu_sync = emptyForm().feishu_sync
   if (!form.calendar) form.calendar = emptyForm().calendar
+  form.calendar = { ...emptyForm().calendar, ...(form.calendar || {}) }
+  if (!['count', 'days'].includes(form.calendar.horizon_mode)) form.calendar.horizon_mode = 'count'
+  if (!Number.isFinite(form.calendar.horizon_value)) form.calendar.horizon_value = 4
   // 备份：normalize 时补默认 + 钳制（trigger_hour 0 点合法，不能用 || 兜底）
   const bk = { ...emptyForm().backup, ...(s.backup || {}) }
   if (![1, 3, 7].includes(bk.interval_days)) bk.interval_days = 1
