@@ -771,7 +771,6 @@
                       </a-tag>
                       <a-tag v-if="p.category" size="small" color="cyan">{{ p.category }}</a-tag>
                       <a-tag v-if="p.write_back" size="small" color="purple">结果写回任务</a-tag>
-                      <a-tag v-for="(t, i) in p.manifest_triggers" :key="i" size="small" color="arcoblue">{{ trigLabel(t) }}</a-tag>
                       <div class="plug-actions">
                         <a-button size="mini" type="text" @click.stop="opsDocPlugin = p">说明</a-button>
                         <a-button size="mini" type="text" :disabled="!p.params?.length" @click="toggleOpsEdit(p)">参数预设</a-button>
@@ -789,20 +788,16 @@
                       </div>
                     </div>
 
-                    <!-- 展开面板：编辑 / 参数预设 / 自动运行授权（编辑与参数预设共用同一面板） -->
+                    <!-- 展开面板：编辑 / 参数预设（共用同一面板） -->
                     <div v-if="opsEditOpen[p.id]" class="plug-expand">
                       <div class="plug-edit-sec">
                         <div class="plug-edit-head">
-                          <b>名称 / 简介</b>
+                          <b>名称</b>
                           <span class="pc-muted">（保存后改写 plugin.yaml，立即生效<template v-if="p.source === 'bundled'">；示例插件保存时复制到用户插件目录</template>）</span>
                         </div>
                         <div class="preset-row">
                           <span class="preset-k">名称</span>
                           <a-input v-model="metaDrafts[p.id].name" size="small" style="width: 320px" @press-enter="savePluginMeta(p)" />
-                        </div>
-                        <div class="preset-row">
-                          <span class="preset-k">简介</span>
-                          <a-input v-model="metaDrafts[p.id].description" size="small" style="width: 320px" maxlength="200" @press-enter="savePluginMeta(p)" />
                         </div>
                         <div class="trig-actions">
                           <a-button size="small" type="primary" :loading="opsMetaSaving === p.id" @click="savePluginMeta(p)">保存</a-button>
@@ -858,22 +853,6 @@
                         <div class="hint" style="margin-top: 4px">
                           选项来自 设置 → 🔔 通知 中已开启的渠道（先在那里启用）；不选 = 跟随已启用渠道
                         </div>
-                      </div>
-
-                      <div v-if="p.manifest_triggers?.length" class="plug-edit-sec">
-                        <div class="plug-edit-head">
-                          <b>自动运行授权</b>
-                        </div>
-                        <div class="field-line">
-                          <span class="field-k">允许自动运行（{{ p.manifest_triggers.map(trigLabel).join('；') }}）</span>
-                          <a-switch
-                            size="small"
-                            :model-value="p.authorized === true"
-                            :disabled="!opsListEnabled || opsAuthBusy === p.id"
-                            @change="(v) => onOpsAuthorize(p, v)"
-                          />
-                        </div>
-                        <div class="hint">关闭后该插件不再自动执行，可随时重新开启</div>
                       </div>
                     </div>
                   </div>
@@ -933,9 +912,6 @@
                     <a-descriptions-item label="ID">{{ plugImportPreview.preview.id }}</a-descriptions-item>
                     <a-descriptions-item label="类型">{{ plugImportPreview.preview.type }}</a-descriptions-item>
                     <a-descriptions-item label="版本">{{ plugImportPreview.preview.version }}</a-descriptions-item>
-                    <a-descriptions-item label="说明" :span="2">
-                      {{ plugImportPreview.preview.description || '—' }}
-                    </a-descriptions-item>
                   </a-descriptions>
                   <ul v-if="plugImportPreview.errors?.length" class="pc-err-list">
                     <li v-for="(e, i) in plugImportPreview.errors" :key="i">{{ e }}</li>
@@ -1307,7 +1283,6 @@
 import { computed, inject, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { Message, Modal } from '@arco-design/web-vue'
 import {
-  authorizePlugin,
   cancelHost,
   closeHost,
   deleteBackup,
@@ -1478,9 +1453,8 @@ const opsListLoading = ref(false)
 const opsListEnabled = ref(false)
 const opsItems = ref([])
 const opsFailures = ref([])
-const opsAuthBusy = ref('')
 const opsPresetSaving = ref('')
-// 每插件展开面板（编辑 / 参数预设 / 自动运行授权），受控：保存刷新列表不丢
+// 每插件展开面板（编辑 / 参数预设），受控：保存刷新列表不丢
 const opsEditOpen = reactive({})
 // 使用说明抽屉
 const opsDocVisible = ref(false)
@@ -1502,26 +1476,6 @@ const opsDirSaving = ref(false)
 
 // 参数预设草稿
 const presetDrafts = reactive({})
-
-const TRIGGER_LABEL = {
-  manual: '手动',
-  daily: '每日',
-  interval: '间隔',
-  cron: 'cron',
-  task_done: '任务完成',
-  pomodoro_end: '番茄结束',
-  break_end: '休息结束',
-  startup: '启动时',
-}
-
-/** manifest 触发器的一行式提示（如「每日 08:30」） */
-function trigLabel(t) {
-  if (!t) return ''
-  if (t.type === 'daily') return `每日 ${t.time}`
-  if (t.type === 'interval') return `每 ${t.minutes} 分钟`
-  if (t.type === 'cron') return `cron ${t.expr}`
-  return `事件: ${TRIGGER_LABEL[t.event] || t.event}`
-}
 
 // 个位数插件规模，固定名称排序即可
 const opsSortedByName = computed(() =>
@@ -1586,19 +1540,6 @@ async function saveOpsPatch(patch) {
   Object.assign(form.ops, patch)
 }
 
-async function onOpsAuthorize(p, allow) {
-  opsAuthBusy.value = p.id
-  try {
-    await authorizePlugin(p.id, !!allow)
-    p.authorized = !!allow
-    Message.success(allow ? '已授权自动运行' : '已拒绝自动运行（不再询问）')
-  } catch (e) {
-    Message.error(e?.response?.data?.error || e?.message || '设置授权失败')
-  } finally {
-    opsAuthBusy.value = ''
-  }
-}
-
 /** 行展开开关：「编辑」「参数预设」共用同一面板（编辑/预设/授权三节） */
 function toggleOpsEdit(p) {
   if (opsEditOpen[p.id]) {
@@ -1606,7 +1547,7 @@ function toggleOpsEdit(p) {
     return
   }
   opsEditOpen[p.id] = true
-  metaDrafts[p.id] = { name: p.name, description: p.description || '' }
+  metaDrafts[p.id] = { name: p.name }
 }
 
 async function savePluginMeta(p) {
@@ -1617,7 +1558,7 @@ async function savePluginMeta(p) {
   }
   opsMetaSaving.value = p.id
   try {
-    const data = await updatePlugin(p.id, { name: d.name.trim(), description: (d.description || '').trim() })
+    const data = await updatePlugin(p.id, { name: d.name.trim() })
     applyOpsList(data.plugins)
     Message.success('已保存')
   } catch (e) {
@@ -1633,7 +1574,7 @@ async function onOpsDelete(p) {
     const data = await deletePlugin(p.id)
     applyOpsList(data.plugins)
     // 本地 ops 覆盖同步清理，避免下次整体保存时复活
-    for (const k of ['trigger_overrides', 'param_presets', 'installed_at']) {
+    for (const k of ['param_presets', 'installed_at']) {
       if (form.ops[k]) delete form.ops[k][p.id]
     }
     delete presetDrafts[p.id]
@@ -1910,7 +1851,6 @@ function emptyForm() {
     ops: {
       enabled: false,
       user_plugins_dir: '',
-      trigger_overrides: {},
       param_presets: {},
       report_tray_enabled: true,
       report_tray_minutes: 60,
@@ -2632,7 +2572,6 @@ function normalizeLoaded(s) {
   savedBackupDir.value = bk.dir
   // 插件：兜底合并
   form.ops = { ...emptyForm().ops, ...(s.ops || {}) }
-  if (!form.ops.trigger_overrides) form.ops.trigger_overrides = {}
   if (!form.ops.param_presets) form.ops.param_presets = {}
   if (!form.ops.plugin_notify_channels) form.ops.plugin_notify_channels = {}
   opsUserDir.value = form.ops.user_plugins_dir || ''
@@ -3233,7 +3172,7 @@ body.zt-skin-clay .nav-main {
   align-items: center;
   gap: 2px;
 }
-/* —— 展开面板：编辑 / 参数预设 / 自动运行授权 —— */
+/* —— 展开面板：编辑 / 参数预设 —— */
 .plug-expand {
   margin-top: 8px;
   padding: 4px 12px 10px;

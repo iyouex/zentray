@@ -30,13 +30,17 @@ def _tmpl(**kw):
 
 
 def test_project_daily_count_default():
+    # 未设截止时分的日模板：投影无截止（日历侧回落派发日）
     out = project_future_instances(_tmpl(), TODAY)
     assert [(d.isoformat(), dl) for d, dl in out] == [
-        ("2026-10-14", "2026-10-14"),
-        ("2026-10-15", "2026-10-15"),
-        ("2026-10-16", "2026-10-16"),
-        ("2026-10-17", "2026-10-17"),
+        ("2026-10-14", ""),
+        ("2026-10-15", ""),
+        ("2026-10-16", ""),
+        ("2026-10-17", ""),
     ]
+    # 设了截止时分：截止=派发日当天
+    out2 = project_future_instances(_tmpl(due_time="18:00"), TODAY)
+    assert [dl for _, dl in out2] == ["2026-10-14", "2026-10-15", "2026-10-16", "2026-10-17"]
 
 
 def test_project_disabled_returns_empty():
@@ -150,7 +154,7 @@ def test_build_ics_projection_dedup_with_real_instance():
 
 
 def test_build_ics_delivery_events():
-    # 关键交付时间每个交付点一条 30 分钟定时事件（⏱ 交付 · 标题）
+    # 额外弹窗时间每行一条 30 分钟定时事件（⏱ 提醒 · 标题）
     t = Task(
         title="需求B",
         category="工作",
@@ -161,10 +165,27 @@ def test_build_ics_delivery_events():
         ],
     )
     ics = build_tasks_ics([t], [], today=TODAY)
-    assert ics.count("BEGIN:VEVENT") == 3  # 截止全天事件 + 两个交付事件
+    assert ics.count("BEGIN:VEVENT") == 3  # 截止全天事件 + 两个弹窗事件
     assert "UID:zentray-" + t.id + "-dl0@zentray.local" in ics
     assert "DTSTART:20261018T093000" in ics
-    assert "SUMMARY:⏱ 交付 ·" in ics
+    assert "SUMMARY:⏱ 提醒 ·" in ics
+
+
+def test_build_ics_due_popup_event():
+    # 截止时刻弹窗：popup_at_due 投影 due 时刻 30 分钟事件；开关关闭不投影
+    t = Task(
+        title="上线",
+        category="工作",
+        deadline="2026-10-20",
+        due_time="18:00",
+        popup_at_due=True,
+    )
+    ics = build_tasks_ics([t], [], today=TODAY)
+    assert "UID:zentray-" + t.id + "-due@zentray.local" in ics
+    assert "DTSTART:20261020T180000" in ics
+    t.popup_at_due = False
+    ics2 = build_tasks_ics([t], [], today=TODAY)
+    assert "UID:zentray-" + t.id + "-due@zentray.local" not in ics2
 
 
 # ---------- 订阅源开关联动 ----------

@@ -6,8 +6,4 @@ api_version: 2
 entry: email_digest.py
 timeout_sec: 240
 category: 工具
-description: 汇总多个邮箱自上次运行以来的新邮件为一份日报（IMAP 只读不置已读），适合关联任务定时调度。
 write_back: true
-triggers:
-  - type: daily
-    time: "08:30"

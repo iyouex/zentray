@@ -283,11 +283,14 @@ const reportLogOnly = ref(false) // 卡片「日志」按钮：只看完整日�
 
 const TRIGGER_LABEL = {
   manual: '手动',
+  task_popup: '任务弹窗',
+  // 旧调度时代的触发名（运行历史仍可能展示）
   daily: '每日',
   interval: '间隔',
   cron: 'cron',
   task_done: '任务完成',
   pomodoro_end: '番茄结束',
+  break_end: '休息结束',
   startup: '启动时',
 }
 
