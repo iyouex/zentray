@@ -145,20 +145,23 @@ def next_spawn_date(
 
 
 def project_future_instances(
-    tmpl: "PeriodicTemplate", today: datetime.date
+    tmpl: "PeriodicTemplate",
+    today: datetime.date,
+    horizon: Optional[tuple] = None,
 ) -> list:
     """
     模板未来日程投影：[(spawn_date, deadline_str)]，只读不改水位。
 
     逐日步进 should_spawn（上限 400 天，同 next_spawn_date 惯例），跨周期桶
     去重（同一桶内多日只投影一次）；count/days 两种截断；暂停/跳过水位/
-    结束日期经由 should_spawn 天然生效。calendar_enabled 关闭返回空。
+    结束日期经由 should_spawn 天然生效。horizon=(mode, value) 来自全局
+    日历设置（设置 → 任务 → 系统日历），缺省 count/4；全局开关由调用方判断。
     """
-    if not getattr(tmpl, "calendar_enabled", False):
-        return []
-    mode = getattr(tmpl, "calendar_horizon_mode", "count") or "count"
+    mode, value = horizon or ("count", 4)
+    if mode not in ("count", "days"):
+        mode = "count"
     try:
-        value = int(getattr(tmpl, "calendar_horizon_value", 4))
+        value = int(value)
     except (TypeError, ValueError):
         value = 4
     if mode == "days":

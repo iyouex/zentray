@@ -230,9 +230,12 @@ class UpdateSettings:
 @dataclass
 class CalendarSettings:
     """系统日历订阅源（任务页开关）。开启后任务/模板变更自动重写 .ics 源文件，
-    日历应用订阅该文件即保持同步（Windows Outlook 用「导出一次」兜底）。"""
+    日历应用订阅该文件即保持同步（Windows Outlook 用「导出一次」兜底）。
+    投影范围（2026-10-20 自模板迁移为全局）：count=未来几次 1-60 / days=未来几天 7-365。"""
 
     enabled: bool = False
+    horizon_mode: str = "count"
+    horizon_value: int = 4
 
 
 @dataclass
@@ -774,7 +777,9 @@ class SettingsManager:
         if "calendar" in data:
             c = data["calendar"] or {}
             self._settings.calendar = CalendarSettings(
-                enabled=bool(c.get("enabled", False))
+                enabled=bool(c.get("enabled", False)),
+                horizon_mode=(c.get("horizon_mode") or "count"),
+                horizon_value=c.get("horizon_value", 4),
             )
 
         # 用 review 回写 nightly 兼容

@@ -21,8 +21,8 @@ def try_vue_edit_task(controller: "TrayController", task) -> bool:
     ok, _ = open_vue_route(
         f"/tasks/{task.id}/edit",
         title="修改任务",
-        width=880,
-        height=540,
+        width=960,
+        height=620,
     )
     if ok:
         controller.update_display()
@@ -97,7 +97,7 @@ def try_vue_quick_add(controller: "TrayController") -> bool:
             controller.reload_data()
         elif payload.get("action") == "open_new_task":
             # 浮层已关，链式开完整表单（同 Glance→quick_add 范式）
-            open_vue_route("/tasks/new", title="新建任务", width=880, height=540)
+            open_vue_route("/tasks/new", title="新建任务", width=960, height=620)
     return True
 
 

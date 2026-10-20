@@ -404,6 +404,27 @@ body.zt-shape-crisp .quick-add-box {
   margin-bottom: 10px;
 }
 
+/* ---- 行式表单范式（Settings 先行，2026-10-20 全局化供表单类页面复用） ---- */
+.field-table {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.field-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 32px;
+}
+
+.field-k {
+  flex: none;
+  width: 88px;
+  font-size: var(--zt-t3);
+  color: var(--color-text-2);
+}
+
 /* 即时生效标记（UI 重构 P2）：灰描边 mini pill，标在改动立即生效的行尾 */
 .zt-instant {
   display: inline-block;
