@@ -189,12 +189,59 @@ def due_delivery_ats(deliveries: List[dict], now: datetime.datetime) -> List[str
     return out
 
 
-def deliveries_deadline(deliveries: List[dict]) -> Optional[str]:
-    """最晚交付时间的日期（YYYY-MM-DD）；无交付返回 None。"""
-    valid = normalize_deliveries(deliveries)
-    if not valid:
+def normalize_due_time(raw) -> Optional[str]:
+    """截止时分归一：HH:MM（时/分越界钳制）；空/格式非法 → None（按 23:59 语义）。"""
+    if raw is None:
         return None
-    return valid[-1]["at"][:10]
+    s = str(raw).strip()
+    parts = s.split(":")
+    if len(parts) != 2 or not all(p.isdigit() for p in parts):
+        return None
+    h, m = min(23, int(parts[0])), min(59, int(parts[1]))
+    return f"{h:02d}:{m:02d}"
+
+
+def due_moment(task) -> Optional[datetime.datetime]:
+    """截止时刻 = deadline 日期 + due_time（缺省 23:59）；无截止返回 None。"""
+    dl = getattr(task, "deadline", None)
+    if not dl:
+        return None
+    try:
+        d = datetime.date.fromisoformat(str(dl)[:10])
+    except (ValueError, TypeError):
+        return None
+    h, m = parse_hhmm(getattr(task, "due_time", None) or "23:59")
+    return datetime.datetime.combine(d, datetime.time(h, m))
+
+
+def due_popup_at(task, now: datetime.datetime) -> Optional[str]:
+    """截止时刻弹窗：popup_at_due 且时刻入 60s 窗、未弹过 → 返回时刻 ISO；否则 None。
+
+    返回值同时是去重键（写入 task.due_fired）；改截止/时分即换时刻重弹。
+    """
+    if not getattr(task, "popup_at_due", False):
+        return None
+    moment = due_moment(task)
+    if moment is None:
+        return None
+    iso = moment.isoformat(timespec="minutes")
+    if getattr(task, "due_fired", None) == iso:
+        return None
+    if 0 <= (now - moment).total_seconds() < 60:
+        return iso
+    return None
+
+
+def is_task_overdue(task, now: datetime.datetime) -> bool:
+    """逾期判定：截止日早于今天→逾期；同日有 due_time→到时刻即逾期（分钟级）。"""
+    moment = due_moment(task)
+    if moment is None:
+        return False
+    if moment.date() < now.date():
+        return True
+    if moment.date() > now.date():
+        return False
+    return bool(getattr(task, "due_time", None)) and now >= moment
 
 
 def apply_reminder_action(

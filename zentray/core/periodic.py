@@ -213,8 +213,8 @@ def compute_instance_deadline(
         last = calendar.monthrange(today.year, today.month)[1]
         day = min(dom, last)
         return datetime.date(today.year, today.month, day).isoformat()
-    # daily：默认当天
-    return today.isoformat()
+    # daily：设了截止时分才有截止（当天）；未设=无截止、永不逾期
+    return today.isoformat() if getattr(tmpl, "due_time", None) else ""
 
 
 def spawn_key_after_create(tmpl: "PeriodicTemplate", today: datetime.date) -> str:
@@ -229,7 +229,7 @@ def resolve_remind_start(tmpl: "PeriodicTemplate", today: datetime.date) -> Opti
     """
     模板开始提醒点 → 本周期内首个到来的 ISO datetime。
     weekly 取 [today, today+6] 中首个匹配 weekday；monthly 取本月目标日（超月末
-    钳到月末）。已过时刻视为立即开始，返回 None。
+    钳到月末）；daily 仅时分（今天该时刻）。已过时刻视为立即开始，返回 None。
     """
     from zentray.core.reminder import parse_hhmm
 
@@ -253,6 +253,9 @@ def resolve_remind_start(tmpl: "PeriodicTemplate", today: datetime.date) -> Opti
             last = calendar.monthrange(today.year, today.month)[1]
             d = datetime.date(today.year, today.month, min(max(1, int(dom)), last))
             cand = datetime.datetime.combine(d, datetime.time(h, m))
+        elif periodicity in ("daily", "one-time"):
+            # 日模板：slot 仅时分，取今天该时刻
+            cand = datetime.datetime.combine(today, datetime.time(h, m))
         else:
             continue
         if best is None or cand < best:
@@ -296,6 +299,8 @@ def build_due_instance(tmpl: "PeriodicTemplate", today: datetime.date) -> Option
         plugin_id=getattr(tmpl, "plugin_id", None) or None,
         remind_start=resolve_remind_start(tmpl, today),
         skip_holidays=bool(getattr(tmpl, "skip_holidays", False)),
+        due_time=getattr(tmpl, "due_time", None),
+        popup_at_due=bool(getattr(tmpl, "popup_at_due", False)),
     )
     tmpl.last_generated_period = spawn_key_after_create(tmpl, today)
     return new_task

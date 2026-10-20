@@ -169,6 +169,7 @@ def test_build_due_instance():
         periodicity="daily",
         reminder={"enabled": True, "time_of_day": "09:30"},
         auto_abandon_on_overdue=True,
+        due_time="09:30",
     )
     task = build_due_instance(tmpl, today)
     assert task is not None
