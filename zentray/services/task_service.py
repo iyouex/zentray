@@ -311,18 +311,7 @@ class TaskService:
                 )
             except Exception:
                 pass
-            self._dispatch_plugin_event("task_done", task)
             self._after_task_change(task, "done")
-
-    @staticmethod
-    def _dispatch_plugin_event(event: str, task) -> None:
-        """插件事件触发挂点（task_done 等）。未配置插件系统时静默。"""
-        try:
-            from zentray.plugins import triggers
-
-            triggers.dispatch_event(event, task)
-        except Exception:
-            pass
 
     def _after_task_change(self, task, action: str) -> None:
         """任务变更挂点：飞书同步入队 + 系统日历订阅源刷新。绝不抛错。"""
@@ -433,7 +422,6 @@ class TaskService:
                 )
             except Exception:
                 pass
-            self._dispatch_plugin_event("task_done", res["t"])
             self._after_task_change(res["t"], "done")
         else:
             self._refresh_scheduler()

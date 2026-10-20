@@ -402,12 +402,6 @@ export async function openPluginReport(runId) {
   return data
 }
 
-/** 设置插件自动运行授权（插件级一次性授权的开关） */
-export async function authorizePlugin(id, allow) {
-  const { data } = await http.post(`/api/plugins/${id}/authorize`, { allow })
-  return data
-}
-
 /** 本地 zip 包安装（解压校验后落用户插件目录） */
 export async function installPluginZip(path, { overwrite = false } = {}) {
   const { data } = await http.post('/api/plugins/install-zip', { path, overwrite })
@@ -420,13 +414,13 @@ export async function previewPluginZip(path) {
   return data
 }
 
-/** 编辑插件名称/描述（就地改写 plugin.yaml，仅用户目录插件） */
-export async function updatePlugin(id, { name, description }) {
-  const { data } = await http.put(`/api/plugins/${id}`, { name, description })
+/** 编辑插件名称（就地改写 plugin.yaml，仅用户目录插件） */
+export async function updatePlugin(id, { name }) {
+  const { data } = await http.put(`/api/plugins/${id}`, { name })
   return data
 }
 
-/** 删除用户目录插件（含目录与调度/预设覆盖） */
+/** 删除用户目录插件（含目录与参数预设覆盖） */
 export async function deletePlugin(id) {
   const { data } = await http.delete(`/api/plugins/${id}`)
   return data

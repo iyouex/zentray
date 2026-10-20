@@ -11,8 +11,8 @@ class NightlyJobWorker(QThread):
     """
     调度：自动周期备份（每 N 天，纯文件 IO）。
 
-    原每日计划/每日复盘调度已于 2026-10 迁移为插件 chaowen / musheng
-    （周期参数经 设置-插件-参数预设 驱动，见 plugins/triggers.py）。
+    原每日计划/每日复盘已于 2026-10 迁移为插件 chaowen / musheng
+    （随关联周期任务调度运行）。
     """
 
     def __init__(self):

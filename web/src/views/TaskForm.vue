@@ -649,12 +649,9 @@ const selectedPlugin = computed(() =>
   (pluginItems.value || []).find((p) => p.id === form.plugin_id),
 )
 
-const selectedPluginHint = computed(() => {
-  const p = selectedPlugin.value
-  if (!p) return ''
-  const desc = p.description ? ` — ${p.description}` : ''
-  return `${p.type === 'service' ? '服务' : '脚本'}${desc}`
-})
+const selectedPluginHint = computed(() =>
+  selectedPlugin.value ? '关联后，插件在本任务的每个弹窗时刻自动运行' : '',
+)
 
 const canRunPlugin = computed(() => {
   const p = selectedPlugin.value
