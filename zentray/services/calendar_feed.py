@@ -36,11 +36,13 @@ def ics_escape(text: str) -> str:
     )
 
 
-def build_tasks_ics(tasks, templates=None, today: datetime.date = None) -> str:
+def build_tasks_ics(tasks, templates=None, today: datetime.date = None, horizon=None) -> str:
     """活跃任务（+可选模板未来日程投影）→ VCALENDAR 文本。
 
     纯函数便于单测；CRLF 为 ics 规范行尾。截止日=全天事件；
     提醒开启时以提醒时间起 30 分钟。已派发的真实周期实例与投影同日去重。
+    horizon=(mode, value) 为全局投影范围（设置 → 任务 → 系统日历），
+    缺省 count/4；全局开关由调用方（refresh）判断。
     """
     today = today or datetime.date.today()
     lines = [
@@ -150,12 +152,11 @@ def build_tasks_ics(tasks, templates=None, today: datetime.date = None) -> str:
                 f"DESCRIPTION:{desc}",
                 "END:VEVENT",
             ]
-    # 模板投影（在真实实例之后统一追加，避免打断任务循环）
+    # 模板投影（在真实实例之后统一追加，避免打断任务循环）；
+    # 逐模板 calendar_enabled 门控已移除——开关与投影范围统一在 设置 → 任务 → 系统日历
     for tmpl in templates or []:
-        if not getattr(tmpl, "calendar_enabled", False):
-            continue
         n = max(1, int(getattr(tmpl, "interval", 1) or 1))
-        for spawn_day, deadline in project_future_instances(tmpl, today):
+        for spawn_day, deadline in project_future_instances(tmpl, today, horizon):
             # 无截止（如日模板未设截止时分）→ 投影到派发日当天
             day = str(deadline or spawn_day)
             if (tmpl.template_id, day) in spawned:
@@ -213,13 +214,15 @@ class CalendarFeedService:
         try:
             from zentray.services.settings_manager import SettingsManager
 
-            enabled = SettingsManager().calendar.enabled
+            cal = SettingsManager().calendar
             path = self.feed_path
-            if not enabled:
+            if not cal.enabled:
                 if path.exists():
                     self._atomic_write(path, EMPTY_ICS)
                 return
-            ics = build_tasks_ics(tasks, templates)
+            ics = build_tasks_ics(
+                tasks, templates, horizon=(cal.horizon_mode, cal.horizon_value)
+            )
             path.parent.mkdir(parents=True, exist_ok=True)
             self._atomic_write(path, ics)
         except Exception:

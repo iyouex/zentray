@@ -106,6 +106,12 @@ def handle_request(
         if method == "GET" and path == "/api/meta":
             return 200, _meta()
 
+        if method == "GET" and path == "/api/holidays":
+            from zentray.core.holidays import holiday_set
+
+            year = str(query.get("year") or "")
+            return 200, {"dates": sorted(d for d in holiday_set() if d.startswith(year))}
+
         if method == "POST" and path == "/api/attachments/open":
             return _attachment_open(body)
 

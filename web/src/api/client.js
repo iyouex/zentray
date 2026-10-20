@@ -40,6 +40,12 @@ export async function getMeta() {
   return data
 }
 
+/** 法定节假日日期表（YYYY-MM-DD 列表）；表单日历「跳过公休日」置灰用 */
+export async function getHolidays(year) {
+  const { data } = await http.get('/api/holidays', { params: { year } })
+  return data.dates || []
+}
+
 export async function listTasks() {
   const { data } = await http.get('/api/tasks')
   return data.items || []
