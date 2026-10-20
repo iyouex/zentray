@@ -17,7 +17,7 @@ def test_ops_roundtrip(tmp_data_dir):
 
 
 def test_ops_v21_overlay_fields_roundtrip(tmp_data_dir):
-    """trigger_overrides / param_presets / installed_at 往返 + 脏值清洗。"""
+    """param_presets / installed_at 往返 + 脏值清洗；旧 trigger_overrides 残键忽略。"""
     import json
 
     from zentray.services import settings_manager as sm_mod
@@ -28,10 +28,8 @@ def test_ops_v21_overlay_fields_roundtrip(tmp_data_dir):
             {
                 "ops": {
                     "enabled": True,
-                    "trigger_overrides": {
-                        "p1": [{"type": "daily", "time": "08:00"}, "junk"],
-                        "bad": "not-a-list",
-                    },
+                    # 旧调度覆盖层残键：读取时整体忽略（调度已随任务，2026-10-20）
+                    "trigger_overrides": {"p1": [{"type": "daily", "time": "08:00"}]},
                     "param_presets": {
                         "p1": {"target": "web", "n": 3},
                         "bad": "not-a-dict",
@@ -44,14 +42,11 @@ def test_ops_v21_overlay_fields_roundtrip(tmp_data_dir):
     )
     SettingsManager._instance = None
     sm = SettingsManager()
-    assert sm.ops.trigger_overrides == {
-        "p1": [{"type": "daily", "time": "08:00"}]
-    }  # 非法条目/非列表键整体剔除
+    assert not hasattr(sm.ops, "trigger_overrides")
     assert sm.ops.param_presets == {"p1": {"target": "web", "n": "3"}}
     assert sm.ops.installed_at == {"p1": "2026-09-28T10:00:00"}
     sm.save()
     SettingsManager._instance = None
     sm2 = SettingsManager()
-    assert sm2.ops.trigger_overrides == sm.ops.trigger_overrides
     assert sm2.ops.param_presets == sm.ops.param_presets
     assert sm2.ops.installed_at == sm.ops.installed_at

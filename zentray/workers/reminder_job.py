@@ -30,6 +30,10 @@ class ReminderWorker(QThread):
         self.task_repo = task_repo
         self.is_running = True
         self._pending_ids: set[str] = set()  # 弹窗排队中，避免重复 emit
+        # 关联插件随任务弹窗运行（main 注入；None=插件系统未就绪，静默不触发）
+        self.plugin_loader = None
+        self.plugin_runtime = None
+        self.pomodoro_service = None
 
     def run(self):
         while self.is_running:
@@ -75,7 +79,44 @@ class ReminderWorker(QThread):
                 if self._mark_delivery_fired(task.id, at):
                     batch.append((task, f"dlv|{at}"))
         if batch:
+            self._run_task_plugins(batch)
             self.reminder_due.emit(batch)
+
+    def _run_task_plugins(self, batch) -> None:
+        """弹窗时刻 = 关联插件的唯一自动触发源（task_popup）。
+
+        每任务至多一次（同轮多个弹窗行不重跑）；busy/番茄中 run_script
+        返回 False 静默跳过；插件总开关关闭不触发。
+        """
+        loader = self.plugin_loader
+        runtime = self.plugin_runtime
+        if loader is None or runtime is None:
+            return
+        try:
+            from zentray.services.settings_manager import SettingsManager
+
+            if not SettingsManager().ops.enabled:
+                return
+        except Exception:
+            return
+        seen: set[str] = set()
+        for task, _key in batch:
+            pid = getattr(task, "plugin_id", None)
+            if not pid or task.id in seen:
+                continue
+            seen.add(task.id)
+            plug = loader.get(pid)
+            if plug is None:
+                continue
+            pomo = self.pomodoro_service
+            ok = runtime.run_script(
+                plug,
+                pomodoro_active=bool(getattr(pomo, "is_active", False)),
+                task=task,
+                trigger="task_popup",
+            )
+            if ok:
+                logger.info("插件随任务弹窗运行: %s (%s)", pid, task.title)
 
     @staticmethod
     def _gated(task: Task, now: datetime.datetime) -> bool:

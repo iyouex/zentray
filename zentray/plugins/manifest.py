@@ -10,14 +10,10 @@ from typing import Any, Dict, List, Optional
 
 import yaml
 
-from zentray.plugins import cron as plugin_cron
 from zentray.plugins.models import (
     PluginManifest,
     PluginParam,
-    PluginTrigger,
     PluginType,
-    TriggerEvent,
-    TriggerType,
 )
 
 _ID_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
@@ -130,7 +126,7 @@ def _validate_mapping(raw: Dict[str, Any], root: Path) -> ValidationResult:
     else:
         env = {str(k): str(v) for k, v in env.items()}
 
-    description = str(raw.get("description") or "").strip()
+    # 旧 manifest 携带的 triggers/description 键忽略不报错（调度已随任务，2026-10-20）
     category = str(raw.get("category") or "").strip()
 
     if ptype == PluginType.SERVICE:
@@ -145,7 +141,6 @@ def _validate_mapping(raw: Dict[str, Any], root: Path) -> ValidationResult:
     if write_back and api_version != 2:
         errors.append("write_back 需要 api_version: 2")
 
-    triggers = _validate_triggers(raw.get("triggers"), ptype, api_version, errors)
     params = _validate_params(raw.get("params"), ptype, api_version, errors)
 
     if errors:
@@ -189,85 +184,11 @@ def _validate_mapping(raw: Dict[str, Any], root: Path) -> ValidationResult:
         workdir=workdir,
         timeout_sec=timeout_sec,
         env=env,
-        description=description,
         category=category,
-        triggers=triggers,
         params=params,
         write_back=write_back,
     )
     return ValidationResult(ok=True, errors=[], manifest=manifest)
-
-
-def _validate_triggers(
-    raw_triggers: Any, ptype: PluginType, api_version: int, errors: List[str]
-) -> List[PluginTrigger]:
-    """校验 triggers 块；带 triggers/write_back 属 v2 能力，需要 api_version: 2。"""
-    if raw_triggers is None:
-        return []
-    if not isinstance(raw_triggers, list):
-        errors.append("triggers 必须是列表")
-        return []
-    if api_version != 2:
-        errors.append("triggers 需要 api_version: 2")
-        return []
-
-    out: List[PluginTrigger] = []
-    for i, item in enumerate(raw_triggers, start=1):
-        if not isinstance(item, dict):
-            errors.append(f"triggers[{i}] 必须是 mapping")
-            continue
-        ttype_raw = str(item.get("type") or "").strip().lower()
-        try:
-            ttype = TriggerType(ttype_raw)
-        except ValueError:
-            errors.append(
-                f"triggers[{i}].type 必须是 "
-                f"{'/'.join(t.value for t in TriggerType)}"
-            )
-            continue
-
-        trig: Optional[PluginTrigger] = None
-        if ttype == TriggerType.DAILY:
-            time_raw = str(item.get("time") or "").strip()
-            if not _TIME_RE.match(time_raw):
-                errors.append(f"triggers[{i}].time 必须是 HH:MM（如 09:30）")
-            else:
-                trig = PluginTrigger(type=ttype, time=time_raw)
-        elif ttype == TriggerType.INTERVAL:
-            try:
-                minutes = int(item.get("minutes"))
-            except (TypeError, ValueError):
-                minutes = 0
-            if not 1 <= minutes <= 1440:
-                errors.append(f"triggers[{i}].minutes 必须在 1-1440")
-            else:
-                trig = PluginTrigger(type=ttype, minutes=minutes)
-        elif ttype == TriggerType.CRON:
-            expr = str(item.get("expr") or "").strip()
-            try:
-                plugin_cron.parse(expr)
-            except plugin_cron.CronError as e:
-                errors.append(f"triggers[{i}].expr 非法: {e}")
-            else:
-                trig = PluginTrigger(type=ttype, expr=expr)
-        else:  # EVENT
-            event_raw = str(item.get("event") or "").strip()
-            try:
-                event = TriggerEvent(event_raw)
-            except ValueError:
-                errors.append(
-                    f"triggers[{i}].event 必须是 "
-                    f"{'/'.join(e.value for e in TriggerEvent)}"
-                )
-            else:
-                trig = PluginTrigger(type=ttype, event=event)
-
-        if trig is not None:
-            if ptype != PluginType.SCRIPT:
-                errors.append(f"triggers[{i}] 仅支持 script 类型插件")
-            else:
-                out.append(trig)
-    return out
 
 
 def _validate_params(
