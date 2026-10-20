@@ -10,7 +10,6 @@
       📖 {{ p?.name }} · 使用说明
     </template>
     <div v-if="p" class="pdd">
-      <p v-if="p.description" class="pdd-desc">{{ p.description }}</p>
       <a-descriptions :column="2" size="small" bordered class="pdd-meta">
         <a-descriptions-item label="类型">
           <a-tag size="small" :color="p.type === 'service' ? 'orangered' : 'green'">
@@ -23,7 +22,6 @@
         <a-descriptions-item v-if="p.updated_at" label="更新时间" :span="2">
           {{ p.updated_at.replace('T', ' ') }}
         </a-descriptions-item>
-        <a-descriptions-item v-if="trigText" label="自动触发" :span="2">{{ trigText }}</a-descriptions-item>
       </a-descriptions>
 
       <div v-if="p.params?.length" class="pdd-sec">
@@ -58,18 +56,11 @@ const props = defineProps({
 defineEmits(['update:visible'])
 
 const p = computed(() => props.plugin)
-const trigText = computed(() => (p.value?.triggers || []).join('；') || '')
 
 const mdHtml = computed(() => (p.value?.readme ? renderMd(p.value.readme) : ''))
 </script>
 
 <style scoped>
-.pdd-desc {
-  margin: 0 0 12px;
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--color-text-2);
-}
 .pdd-sec {
   margin-top: 14px;
 }

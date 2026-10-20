@@ -204,8 +204,6 @@ class OpsSettings:
     enabled: bool = False
     # 空字符串表示使用默认 DATA_DIR/plugins
     user_plugins_dir: str = ""
-    # v2.1 调度规则覆盖层：pid -> trigger dict 列表（缺失=回落 manifest.triggers）
-    trigger_overrides: Dict[str, list] = field(default_factory=dict)
     # v2.1 参数预设（单组）：pid -> {param_name: value}
     param_presets: Dict[str, dict] = field(default_factory=dict)
     # 安装时间：pid -> ISO（安装 API 写入，列表「更新时间」排序用）
@@ -729,16 +727,11 @@ class SettingsManager:
             )
         if "ops" in data:
             o = data["ops"] or {}
-            ov = o.get("trigger_overrides")
+            # 旧 trigger_overrides 残键忽略（调度已随任务，2026-10-20）
             pp = o.get("param_presets")
             self._settings.ops = OpsSettings(
                 enabled=bool(o.get("enabled", False)),
                 user_plugins_dir=str(o.get("user_plugins_dir") or ""),
-                trigger_overrides={
-                    str(k): [t for t in v if isinstance(t, dict)]
-                    for k, v in (ov or {}).items()
-                    if isinstance(v, list)
-                },
                 param_presets={
                     str(k): {str(n): str(val) for n, val in d.items()}
                     for k, d in (pp or {}).items()

@@ -74,12 +74,14 @@ class Scheduler:
         self._overdue_phase_done: bool = False
 
     def build_queue(self, tasks: List[Task]) -> None:
-        today = datetime.date.today()
+        from zentray.core.reminder import is_task_overdue
+
+        now = datetime.datetime.now()
         overdue: List[Task] = []
         active: List[Task] = []
 
         for t in tasks:
-            if t.deadline and self._is_overdue(t.deadline, today):
+            if t.deadline and is_task_overdue(t, now):
                 overdue.append(t)
             else:
                 active.append(t)
@@ -200,11 +202,3 @@ class Scheduler:
     def focus(self, task: Task) -> None:
         """将焦点钉到指定任务，不缩减轮播队列。"""
         self._current = task
-
-    @staticmethod
-    def _is_overdue(deadline_str: str, today: datetime.date) -> bool:
-        try:
-            dl = datetime.date.fromisoformat(deadline_str)
-            return dl < today
-        except (ValueError, TypeError):
-            return False

@@ -80,23 +80,9 @@
 
               <template v-if="form.mode !== 'periodic'">
                 <a-form-item>
-                  <a-checkbox v-model="form.has_deadline">设置截止日期</a-checkbox>
-                  <a-checkbox
-                    v-model="form.auto_abandon_on_overdue"
-                    style="margin-left: 12px"
-                  >
+                  <a-checkbox v-model="form.auto_abandon_on_overdue">
                     逾期自动废弃
                   </a-checkbox>
-                  <a-checkbox v-model="form.skip_holidays" style="margin-left: 12px">
-                    跳过公休日
-                  </a-checkbox>
-                </a-form-item>
-                <a-form-item v-if="form.has_deadline" label="截止日期">
-                  <a-date-picker
-                    v-model="form.deadline"
-                    style="width: 100%"
-                    value-format="YYYY-MM-DD"
-                  />
                 </a-form-item>
               </template>
 
@@ -112,9 +98,6 @@
                     style="margin-left: 12px"
                   >
                     逾期废弃
-                  </a-checkbox>
-                  <a-checkbox v-model="form.skip_holidays" style="margin-left: 12px">
-                    跳过公休日
                   </a-checkbox>
                 </a-form-item>
                 <a-form-item v-if="!form.long_term" label="停止派发日">
@@ -177,7 +160,149 @@
           </section>
 
           <section class="zt-block">
-            <div class="zt-block-head"><h3 class="zt-h3">详情与提醒</h3></div>
+            <div class="zt-block-head"><h3 class="zt-h3">⏰ 时间与提醒</h3></div>
+            <a-form :model="form" layout="vertical">
+              <!-- ① 开始时间：未勾选=创建/派发后立即开始 -->
+              <a-form-item>
+                <a-checkbox v-model="form.start_enabled" @change="onStartCheck">
+                  开始时间
+                </a-checkbox>
+                <div
+                  v-if="form.start_enabled && !isPeriodic"
+                  class="slot-row"
+                  style="margin-top: 8px"
+                >
+                  <a-date-picker
+                    v-model="form.start_date"
+                    style="width: 150px"
+                    value-format="YYYY-MM-DD"
+                  />
+                  <TimeSpinner v-model="form.start_time" />
+                </div>
+                <!-- 日周期：仅时分 -->
+                <div
+                  v-else-if="form.start_enabled && form.periodicity === 'daily'"
+                  class="slot-row"
+                  style="margin-top: 8px"
+                >
+                  <span class="slot-label">每天</span>
+                  <TimeSpinner v-model="form.start_time" />
+                </div>
+                <!-- 周/月周期：提醒点（周几/几号+时分，可多个） -->
+                <div v-else-if="form.start_enabled" class="slots-box" style="margin-top: 8px">
+                  <div v-for="(slot, idx) in form.start_slots" :key="idx" class="slot-row">
+                    <template v-if="form.periodicity === 'weekly'">
+                      <a-select v-model="slot.weekday" size="mini" class="slot-weekday">
+                        <a-option v-for="(w, i) in WEEK_LABELS" :key="i" :value="i">
+                          {{ w }}
+                        </a-option>
+                      </a-select>
+                    </template>
+                    <template v-else>
+                      <span class="slot-label">每月</span>
+                      <NumberSpinner v-model="slot.day_of_month" :min="1" :max="31" />
+                      <span class="slot-hint">日</span>
+                    </template>
+                    <TimeSpinner v-model="slot.time_of_day" />
+                    <a-button size="mini" status="danger" @click="removeSlot(idx)">
+                      删
+                    </a-button>
+                  </div>
+                  <a-button size="small" type="outline" @click="addSlot">
+                    ➕ 添加提醒点
+                  </a-button>
+                </div>
+                <p v-if="form.start_enabled" class="muted" style="margin: 6px 0 0">
+                  到点前不轮播不弹窗；周期内多个提醒点取最早，已过视为立即。
+                </p>
+              </a-form-item>
+
+              <!-- ② 截止时间：未勾选=无截止、永不逾期 -->
+              <a-form-item>
+                <a-checkbox v-model="form.has_deadline" @change="onDeadlineCheck">
+                  截止时间
+                </a-checkbox>
+                <div v-if="form.has_deadline" class="slot-row" style="margin-top: 8px">
+                  <template v-if="!isPeriodic">
+                    <a-date-picker
+                      v-model="form.deadline"
+                      style="width: 150px"
+                      value-format="YYYY-MM-DD"
+                    />
+                  </template>
+                  <template v-else-if="form.periodicity === 'weekly'">
+                    <span class="slot-label">每周</span>
+                    <a-select v-model="form.deadline_weekday" class="slot-weekday">
+                      <a-option v-for="(w, i) in WEEK_LABELS" :key="i" :value="i">
+                        {{ w }}
+                      </a-option>
+                    </a-select>
+                  </template>
+                  <template v-else-if="form.periodicity === 'monthly'">
+                    <span class="slot-label">每月</span>
+                    <NumberSpinner v-model="form.deadline_day_of_month" :min="1" :max="31" />
+                    <span class="slot-hint">日</span>
+                  </template>
+                  <template v-else>
+                    <span class="slot-label">每天</span>
+                  </template>
+                  <TimeSpinner v-model="form.due_time" />
+                </div>
+                <p v-if="form.has_deadline" class="muted" style="margin: 6px 0 0">
+                  逾期按截止时分分钟级判定，未设时分按 23:59。
+                </p>
+              </a-form-item>
+
+              <!-- ③ 弹窗提醒：截止时刻弹一次 + 可另加多个弹窗时间 -->
+              <a-form-item>
+                <a-checkbox v-model="form.popup_enabled">弹窗提醒</a-checkbox>
+                <p v-if="form.popup_enabled" class="muted" style="margin: 6px 0 0">
+                  {{
+                    form.has_deadline
+                      ? '截止时刻自动弹窗一次，改截止即改弹窗时刻；可另加弹窗时间：'
+                      : '未设截止时间：仅下方自添的弹窗时间会提醒。'
+                  }}
+                </p>
+                <!-- 存量弹窗时间行即使未勾选也展示（仍会到点弹），可删可改 -->
+                <div
+                  v-if="!isPeriodic && form.deliveries.length"
+                  class="slots-box"
+                  style="margin-top: 8px"
+                >
+                  <div v-for="(d, idx) in form.deliveries" :key="idx" class="slot-row">
+                    <a-date-picker
+                      v-model="d.date"
+                      size="small"
+                      style="width: 140px"
+                      value-format="YYYY-MM-DD"
+                    />
+                    <TimeSpinner v-model="d.time" />
+                    <a-button size="mini" status="danger" @click="removeDelivery(idx)">
+                      删
+                    </a-button>
+                  </div>
+                </div>
+                <a-button
+                  v-if="form.popup_enabled && !isPeriodic"
+                  size="small"
+                  type="outline"
+                  style="margin-top: 8px"
+                  @click="addDelivery"
+                >
+                  ➕ 添加弹窗时间
+                </a-button>
+              </a-form-item>
+
+              <!-- ④ 跳过公休日 -->
+              <a-form-item>
+                <a-checkbox v-model="form.skip_holidays">跳过公休日</a-checkbox>
+                <span class="slot-hint">周末与法定节假日整体静默；新建按分类预设带出</span>
+              </a-form-item>
+            </a-form>
+          </section>
+
+          <section class="zt-block">
+            <div class="zt-block-head"><h3 class="zt-h3">详情</h3></div>
             <a-form :model="form" layout="vertical">
               <a-form-item v-if="aiOcrOn">
                 <div
@@ -257,97 +382,6 @@
                       @search="addAttachmentLink"
                     />
                   </div>
-                </div>
-              </a-form-item>
-              <!-- 开始提醒时间：默认创建/派发后即时；到点前不轮播不弹窗 -->
-              <a-form-item v-if="!isTemplate && form.mode !== 'periodic'">
-                <a-checkbox v-model="form.start_enabled">指定开始提醒时间</a-checkbox>
-                <div v-if="form.start_enabled" class="slot-row" style="margin-top: 8px">
-                  <a-date-picker
-                    v-model="form.start_date"
-                    style="width: 150px"
-                    value-format="YYYY-MM-DD"
-                  />
-                  <TimeSpinner v-model="form.start_time" />
-                </div>
-              </a-form-item>
-              <a-form-item v-if="isWeeklyOrMonthly" label="开始提醒点">
-                <div class="slots-box">
-                  <div v-for="(slot, idx) in form.start_slots" :key="idx" class="slot-row">
-                    <template v-if="form.periodicity === 'weekly'">
-                      <a-select
-                        v-model="slot.weekday"
-                        size="mini"
-                        class="slot-weekday"
-                      >
-                        <a-option
-                          v-for="(w, i) in WEEK_LABELS"
-                          :key="i"
-                          :value="i"
-                        >
-                          {{ w }}
-                        </a-option>
-                      </a-select>
-                    </template>
-                    <template v-else>
-                      <span class="slot-label">每月</span>
-                      <NumberSpinner
-                        v-model="slot.day_of_month"
-                        :min="1"
-                        :max="31"
-                      />
-                      <span class="slot-hint">日</span>
-                    </template>
-                    <TimeSpinner v-model="slot.time_of_day" />
-                    <a-button
-                      size="mini"
-                      status="danger"
-                      @click="removeSlot(idx)"
-                    >
-                      删
-                    </a-button>
-                  </div>
-                  <a-button size="small" type="outline" @click="addSlot">
-                    ➕ 添加开始提醒点
-                  </a-button>
-                  <p class="muted" style="margin: 0">
-                    派发后从本周期内最早提醒点开始轮播，多个点取最早；默认即时。
-                  </p>
-                </div>
-              </a-form-item>
-
-              <!-- 关键交付时间（一次性任务）：多个时间点，可选弹窗；最晚一个=截止 -->
-              <a-form-item v-if="!isTemplate && form.mode !== 'periodic'">
-                <a-checkbox v-model="form.has_deliveries">关键交付时间</a-checkbox>
-                <p v-if="form.has_deliveries" class="muted" style="margin: 6px 0 0">
-                  最晚的交付时间即任务截止时间，超过即逾期；勾选「弹窗」的到点弹窗提醒。
-                </p>
-              </a-form-item>
-              <a-form-item
-                v-if="!isTemplate && form.mode !== 'periodic' && form.has_deliveries"
-                label="交付点"
-              >
-                <div class="slots-box">
-                  <div v-for="(d, idx) in form.deliveries" :key="idx" class="slot-row">
-                    <a-date-picker
-                      v-model="d.date"
-                      size="small"
-                      style="width: 140px"
-                      value-format="YYYY-MM-DD"
-                    />
-                    <TimeSpinner v-model="d.time" />
-                    <a-checkbox v-model="d.notify">弹窗</a-checkbox>
-                    <a-button
-                      size="mini"
-                      status="danger"
-                      @click="removeDelivery(idx)"
-                    >
-                      删
-                    </a-button>
-                  </div>
-                  <a-button size="small" type="outline" @click="addDelivery">
-                    ➕ 添加交付时间
-                  </a-button>
                 </div>
               </a-form-item>
             </a-form>
@@ -488,8 +522,12 @@ const form = reactive({
   category_primary_id: null,
   category_secondary_id: null,
   priority: 'medium',
-  has_deadline: true,
+  has_deadline: false,
   deadline: '',
+  due_time: '23:59',
+  popup_enabled: false,
+  deadline_weekday: 6,
+  deadline_day_of_month: 31,
   details: '',
   auto_abandon_on_overdue: false,
   periodicity: 'daily',
@@ -504,7 +542,6 @@ const form = reactive({
   start_date: '',
   start_time: '09:00',
   start_slots: [],
-  has_deliveries: false,
   deliveries: [],
   subtasks: [],
   task_type: 'one-time',
@@ -556,6 +593,48 @@ const isWeeklyOrMonthly = computed(
     (form.periodicity === 'weekly' || form.periodicity === 'monthly'),
 )
 
+/** 周期模式（含编辑模板）：开始/截止的形态按周期性切换 */
+const isPeriodic = computed(() => form.mode === 'periodic' || isTemplate.value)
+
+/** 一级分类提醒时间窗；未启用则 00:00 / 23:59（时间四要素默认值来源） */
+function winTimes() {
+  const p = (meta.value?.categories?.primary_list || []).find(
+    (x) => x.id === form.category_primary_id,
+  )
+  if (p?.remind_window_enabled) {
+    return {
+      start: p.remind_window_start || '00:00',
+      end: p.remind_window_end || '23:59',
+    }
+  }
+  return { start: '00:00', end: '23:59' }
+}
+
+function todayStr() {
+  return new Date().toISOString().slice(0, 10)
+}
+
+/** 勾选「开始时间」瞬间预填默认值：一次性=当天；日=仅时分；周=周一；月=1 号 */
+function onStartCheck(checked) {
+  if (!checked) return
+  const w = winTimes()
+  form.start_time = w.start
+  if (!isPeriodic.value) {
+    if (!form.start_date) form.start_date = todayStr()
+  } else if (isWeeklyOrMonthly.value && !form.start_slots.length) {
+    addSlot(w.start)
+  }
+}
+
+/** 勾选「截止时间」瞬间预填：一次性=当天；周=周日；月=31 号；时分=窗口终点 */
+function onDeadlineCheck(checked) {
+  if (!checked) return
+  form.due_time = winTimes().end
+  if (!isPeriodic.value) {
+    if (!form.deadline) form.deadline = todayStr()
+  }
+}
+
 // ---- 关联插件 ----
 
 const pluginOpts = computed(() => {
@@ -570,12 +649,9 @@ const selectedPlugin = computed(() =>
   (pluginItems.value || []).find((p) => p.id === form.plugin_id),
 )
 
-const selectedPluginHint = computed(() => {
-  const p = selectedPlugin.value
-  if (!p) return ''
-  const desc = p.description ? ` — ${p.description}` : ''
-  return `${p.type === 'service' ? '服务' : '脚本'}${desc}`
-})
+const selectedPluginHint = computed(() =>
+  selectedPlugin.value ? '关联后，插件在本任务的每个弹窗时刻自动运行' : '',
+)
 
 const canRunPlugin = computed(() => {
   const p = selectedPlugin.value
@@ -815,11 +891,11 @@ function primaryName() {
   return o?.label || '工作'
 }
 
-function addSlot() {
+function addSlot(time = '09:00') {
   if (form.periodicity === 'weekly') {
-    form.start_slots.push({ weekday: 0, time_of_day: '09:00' })
+    form.start_slots.push({ weekday: 0, day_of_month: null, time_of_day: time })
   } else {
-    form.start_slots.push({ day_of_month: 1, time_of_day: '09:00' })
+    form.start_slots.push({ weekday: null, day_of_month: 1, time_of_day: time })
   }
 }
 
@@ -828,9 +904,11 @@ function removeSlot(idx) {
 }
 
 function addDelivery() {
-  const d = new Date()
-  d.setDate(d.getDate() + 1)
-  form.deliveries.push({ date: d.toISOString().slice(0, 10), time: '18:00', notify: true })
+  form.deliveries.push({
+    date: (form.has_deadline && form.deadline) || todayStr(),
+    time: form.due_time || '23:59',
+    notify: true,
+  })
 }
 
 function removeDelivery(idx) {
@@ -880,10 +958,10 @@ function loadStartSlots(rawSlots, fallbackTime) {
 }
 
 function buildPayload() {
-  // 关键交付点：排序后随 payload 下发，截止时间由后端取最晚交付日期
+  // 额外弹窗时间：加进列表即弹（notify 恒 true），排序后随 payload 下发
   const deliveries = (form.deliveries || [])
     .filter((d) => d.date && d.time)
-    .map((d) => ({ at: `${d.date}T${d.time}`, notify: !!d.notify }))
+    .map((d) => ({ at: `${d.date}T${d.time}`, notify: true }))
     .sort((a, b) => a.at.localeCompare(b.at))
   const base = {
     title: form.title.trim(),
@@ -903,22 +981,25 @@ function buildPayload() {
   }
 
   if (form.mode === 'periodic' || isTemplate.value) {
-    const slots = isWeeklyOrMonthly.value
-      ? (form.start_slots || []).map((s) => {
-          if (form.periodicity === 'weekly') {
+    // 日模板：仅时分单 slot；周/月：周几/几号 + 时分（可多个）
+    const slots = !form.start_enabled
+      ? []
+      : isWeeklyOrMonthly.value
+        ? (form.start_slots || []).map((s) => {
+            if (form.periodicity === 'weekly') {
+              return {
+                time_of_day: s.time_of_day || '09:00',
+                weekday: Math.max(0, Math.min(6, Number(s.weekday) || 0)),
+                day_of_month: null,
+              }
+            }
             return {
               time_of_day: s.time_of_day || '09:00',
-              weekday: Math.max(0, Math.min(6, Number(s.weekday) || 0)),
-              day_of_month: null,
+              weekday: null,
+              day_of_month: Math.max(1, Math.min(31, Number(s.day_of_month) || 1)),
             }
-          }
-          return {
-            time_of_day: s.time_of_day || '09:00',
-            weekday: null,
-            day_of_month: Math.max(1, Math.min(31, Number(s.day_of_month) || 1)),
-          }
-        })
-      : []
+          })
+        : [{ time_of_day: form.start_time || '09:00', weekday: null, day_of_month: null }]
     return {
       ...base,
       task_type: 'periodic',
@@ -930,6 +1011,16 @@ function buildPayload() {
       calendar_horizon_mode: form.calendar_horizon_mode || 'count',
       calendar_horizon_value: form.calendar_horizon_value || 4,
       remind_start_slots: slots,
+      due_time: form.has_deadline ? form.due_time : null,
+      popup_at_due: !!form.popup_enabled,
+      deadline_weekday:
+        form.has_deadline && form.periodicity === 'weekly'
+          ? Math.max(0, Math.min(6, Number(form.deadline_weekday) || 0))
+          : null,
+      deadline_day_of_month:
+        form.has_deadline && form.periodicity === 'monthly'
+          ? Math.max(1, Math.min(31, Number(form.deadline_day_of_month) || 1))
+          : null,
     }
   }
 
@@ -938,6 +1029,8 @@ function buildPayload() {
     task_type: form.task_type || 'one-time',
     template_id: form.template_id,
     deadline: form.has_deadline ? form.deadline || '' : '',
+    due_time: form.has_deadline ? form.due_time : null,
+    popup_at_due: !!form.popup_enabled,
     remind_start: form.start_enabled && form.start_date ? `${form.start_date}T${form.start_time}` : null,
     deliveries,
   }
@@ -1010,11 +1103,6 @@ onMounted(async () => {
     if (!form.category_primary_id && primaryOpts.value.length) {
       form.category_primary_id = primaryOpts.value[0].value
     }
-    if (!form.deadline) {
-      const d = new Date()
-      d.setDate(d.getDate() + 1)
-      form.deadline = d.toISOString().slice(0, 10)
-    }
     if (route.query.mode === 'periodic') {
       form.mode = 'periodic'
     }
@@ -1040,11 +1128,27 @@ onMounted(async () => {
         form.subtasks = (t.subtasks || []).map((s) => ({ ...s }))
         form.plugin_id = t.plugin_id || null
         form.skip_holidays = !!t.skip_holidays
-        // 兼容旧模板：无开始提醒点时把旧弹窗提醒槽展示为开始提醒点
-        loadStartSlots(
-          (t.remind_start_slots?.length ? t.remind_start_slots : t.reminder?.slots) || [],
-          t.reminder?.time_of_day,
+        // 截止：due_time 或周几/几号规则任一存在即视为已设置
+        form.has_deadline = !!(
+          t.due_time ||
+          t.deadline_weekday != null ||
+          t.deadline_day_of_month != null
         )
+        form.due_time = t.due_time || winTimes().end
+        form.deadline_weekday =
+          t.deadline_weekday != null ? Number(t.deadline_weekday) : 6
+        form.deadline_day_of_month =
+          t.deadline_day_of_month != null ? Number(t.deadline_day_of_month) : 31
+        form.popup_enabled = !!t.popup_at_due
+        // 兼容旧模板：无开始提醒点时把旧弹窗提醒槽展示为开始提醒点
+        const slots =
+          (t.remind_start_slots?.length ? t.remind_start_slots : t.reminder?.slots) || []
+        form.start_enabled = slots.length > 0
+        if (form.periodicity === 'daily') {
+          form.start_time = slots[0]?.time_of_day || winTimes().start
+        } else {
+          loadStartSlots(slots, t.reminder?.time_of_day)
+        }
       } else {
         const t = await getTask(taskId.value)
         form.title = t.title
@@ -1053,7 +1157,9 @@ onMounted(async () => {
         form.category_primary_id = t.category_primary_id
         form.category_secondary_id = t.category_secondary_id
         form.has_deadline = Boolean(t.deadline)
-        form.deadline = t.deadline || form.deadline
+        form.deadline = t.deadline || ''
+        form.due_time = t.due_time || '23:59'
+        form.popup_enabled = !!t.popup_at_due
         form.auto_abandon_on_overdue = !!t.auto_abandon_on_overdue
         form.task_type = t.task_type || 'one-time'
         form.template_id = t.template_id
@@ -1070,9 +1176,8 @@ onMounted(async () => {
         form.deliveries = (t.deliveries || []).map((d) => ({
           date: String(d.at || '').slice(0, 10),
           time: String(d.at || '').slice(11, 16) || '09:00',
-          notify: !!d.notify,
+          notify: true,
         }))
-        form.has_deliveries = form.deliveries.length > 0
       }
     }
     loadPlugins()

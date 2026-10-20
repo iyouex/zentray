@@ -36,11 +36,16 @@ class Task:
     feishu_event_id: Optional[str] = None
     feishu_task_id: Optional[str] = None
     # 提醒重设计（2026-10-19）：开始提醒时间（ISO datetime，空=创建后即时）；
-    # 关键交付时间点 [{at: ISO datetime, notify: bool, fired?: bool}]，最晚者即截止；
     # 跳过公休日（周末+法定节假日，创建时未显式给值则取分类预设）
+    # 时间重设计（2026-10-20）：截止时分 due_time（HH:MM，空=按 23:59 语义）；
+    # popup_at_due=截止时刻弹窗一次；deliveries 语义改「额外弹窗时间」（不再推导截止）；
+    # due_fired 记录已弹过的截止时刻，改截止/时分即重置再弹
     remind_start: Optional[str] = None
     deliveries: List[dict] = field(default_factory=list)
     skip_holidays: bool = False
+    due_time: Optional[str] = None
+    popup_at_due: bool = False
+    due_fired: Optional[str] = None
 
     def __post_init__(self):
         if self.attachments is None:
@@ -117,8 +122,11 @@ class PeriodicTemplate:
     calendar_horizon_value: int = 4
     # 提醒重设计（2026-10-19）：周/月模板的开始提醒点（周几/几号+时分，可多个）；
     # 派发实例时解析为本周期内首个到来的 ISO datetime。跳过公休日随实例继承。
+    # 时间重设计（2026-10-20）：日模板开始点=仅时分的单 slot；截止时分/截止弹窗随实例继承
     remind_start_slots: list = field(default_factory=list)
     skip_holidays: bool = False
+    due_time: Optional[str] = None
+    popup_at_due: bool = False
 
     def __post_init__(self):
         if self.details is None:

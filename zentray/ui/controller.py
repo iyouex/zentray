@@ -421,12 +421,6 @@ class TrayController(QObject):
             self.renderer.show_notification("今日目标达成 🎉", f"今天已完成 {goal} 个番茄！")
         self.update_display(update_menu=True)
         self.start_rotation()
-        try:
-            from zentray.plugins import triggers
-
-            triggers.dispatch_event("pomodoro_end")
-        except Exception:
-            logger.exception("pomodoro_end 插件事件分发失败")
 
     def _on_break_end(self) -> None:
         """休息段结束（自然走完或被跳过）。"""
@@ -437,12 +431,6 @@ class TrayController(QObject):
         self._carousel_started = True
         self.update_display(update_menu=True)
         self.start_rotation()
-        try:
-            from zentray.plugins import triggers
-
-            triggers.dispatch_event("break_end")
-        except Exception:
-            logger.exception("break_end 插件事件分发失败")
 
     # ==========================================
     # 插件脚本生命周期（信号槽，主线程）

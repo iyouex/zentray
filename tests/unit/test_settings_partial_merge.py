@@ -36,15 +36,11 @@ def test_notification_empty_channels_keeps_current(tmp_data_dir):
 
 def test_partial_ops_patch_keeps_overlays(tmp_data_dir):
     sm = _fresh(tmp_data_dir)
-    sm.ops.trigger_overrides["email-digest"] = [{"type": "daily", "time": "08:00"}]
     sm.ops.param_presets["p"] = {"k": "v"}
     sm.ops.installed_at["p"] = "2026-01-01T00:00:00"
     sm.ops.hidden_bundled.append("param-demo")
 
     sm._apply_dict({"ops": {"enabled": True}})
-    assert sm.ops.trigger_overrides == {
-        "email-digest": [{"type": "daily", "time": "08:00"}]
-    }
     assert sm.ops.param_presets == {"p": {"k": "v"}}
     assert sm.ops.installed_at == {"p": "2026-01-01T00:00:00"}
     assert sm.ops.hidden_bundled == ["param-demo"]
