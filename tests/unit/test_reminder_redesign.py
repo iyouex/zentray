@@ -233,6 +233,72 @@ class TestDailyStartAndDueInheritance:
         assert compute_instance_deadline(tmpl, datetime.date(2026, 2, 1)) == "2026-02-28"
 
 
+class TestTemplatePopupSlots:
+    """时间重设计二轮（2026-10-21）：模板周期内弹窗点位 → 派发实例 deliveries。"""
+
+    def test_daily_materializes_sorted(self):
+        d = datetime.date.today() + datetime.timedelta(days=400)
+        tmpl = PeriodicTemplate(
+            base_title="日报", category="工作", periodicity="daily",
+            popup_slots=[
+                ReminderSlot(time_of_day="09:30"),
+                ReminderSlot(time_of_day="07:00"),
+            ],
+        )
+        inst = build_due_instance(tmpl, d)
+        assert inst.deliveries == [
+            {"at": d.isoformat() + "T07:00", "notify": True},
+            {"at": d.isoformat() + "T09:30", "notify": True},
+        ]
+
+    def test_past_moment_not_materialized(self):
+        # 今日 00:00 恒已过 → 不物化
+        tmpl = PeriodicTemplate(
+            base_title="晨报", category="工作", periodicity="daily",
+            popup_slots=[ReminderSlot(time_of_day="00:00")],
+        )
+        inst = build_due_instance(tmpl, datetime.date.today())
+        assert inst.deliveries == []
+
+    def test_weekly_point_in_current_week(self):
+        monday = _future_monday()
+        tmpl = PeriodicTemplate(
+            base_title="周会", category="工作", periodicity="weekly",
+            deadline_weekday=4,
+            popup_slots=[ReminderSlot(time_of_day="10:00", weekday=3)],
+        )
+        inst = build_due_instance(tmpl, monday)
+        expect = (monday + datetime.timedelta(days=3)).isoformat() + "T10:00"
+        assert inst.deliveries == [{"at": expect, "notify": True}]
+
+    def test_monthly_point_clamps_month_end(self):
+        import calendar as _cal
+
+        monday = _future_monday()
+        tmpl = PeriodicTemplate(
+            base_title="月检", category="工作", periodicity="monthly",
+            deadline_day_of_month=31,
+            popup_slots=[ReminderSlot(time_of_day="12:00", day_of_month=35)],
+        )
+        inst = build_due_instance(tmpl, monday)
+        last = _cal.monthrange(monday.year, monday.month)[1]
+        expect = datetime.date(monday.year, monday.month, last).isoformat() + "T12:00"
+        assert inst.deliveries == [{"at": expect, "notify": True}]
+
+    def test_template_roundtrip_popup_slots(self):
+        tmpl = PeriodicTemplate(
+            base_title="月检", category="工作", periodicity="monthly",
+            popup_slots=[{"time_of_day": "12:00", "day_of_month": 5}],
+        )
+        d = tmpl.to_dict()
+        assert d["popup_slots"] == [
+            {"time_of_day": "12:00", "weekday": None, "day_of_month": 5}
+        ]
+        back = PeriodicTemplate.from_dict(d)
+        assert isinstance(back.popup_slots[0], ReminderSlot)
+        assert back.popup_slots[0].day_of_month == 5
+
+
 class TestServiceNormalize:
     def test_create_no_deadline_derivation_and_seeds_skip(self, task_service):
         """退役「最晚交付=截止」：截止只由截止行决定；skip_holidays 取分类预设。"""

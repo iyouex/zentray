@@ -127,6 +127,9 @@ class PeriodicTemplate:
     skip_holidays: bool = False
     due_time: Optional[str] = None
     popup_at_due: bool = False
+    # 时间重设计二轮（2026-10-21）：周期内弹窗点位（同 slot 形态，可多个）；
+    # 派发实例时物化为该周期的 deliveries（已过时刻不物化），插件随 task_popup 触发
+    popup_slots: list = field(default_factory=list)
 
     def __post_init__(self):
         if self.details is None:
@@ -148,6 +151,13 @@ class PeriodicTemplate:
         self.remind_start_slots = [
             s if isinstance(s, ReminderSlot) else ReminderSlot.from_dict(s)
             for s in self.remind_start_slots
+            if isinstance(s, (dict, ReminderSlot))
+        ]
+        if self.popup_slots is None:
+            self.popup_slots = []
+        self.popup_slots = [
+            s if isinstance(s, ReminderSlot) else ReminderSlot.from_dict(s)
+            for s in self.popup_slots
             if isinstance(s, (dict, ReminderSlot))
         ]
         try:
@@ -182,6 +192,12 @@ class PeriodicTemplate:
             known["remind_start_slots"] = [
                 s if isinstance(s, ReminderSlot) else ReminderSlot.from_dict(s)
                 for s in (known["remind_start_slots"] or [])
+                if isinstance(s, (dict, ReminderSlot))
+            ]
+        if "popup_slots" in known:
+            known["popup_slots"] = [
+                s if isinstance(s, ReminderSlot) else ReminderSlot.from_dict(s)
+                for s in (known["popup_slots"] or [])
                 if isinstance(s, (dict, ReminderSlot))
             ]
         return cls(**known)

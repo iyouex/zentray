@@ -153,7 +153,7 @@
           <section class="zt-block">
             <div class="zt-block-head tf-time-head">
               <h3 class="zt-h3">⏰ 时间与提醒</h3>
-              <div class="tf-brushes">
+              <div v-if="!isPeriodic" class="tf-brushes">
                 <button type="button" class="b-start" :class="{ on: brush === 'start' }" title="选中后在日历/周期格上点选开始点；再点同格取消" @click="brush = 'start'">▶ 开始</button>
                 <button type="button" class="b-due" :class="{ on: brush === 'due' }" title="选中后点选截止点；再点同格取消" @click="brush = 'due'">⏰ 截止</button>
                 <button v-if="!isPeriodic" type="button" class="b-pop" :class="{ on: brush === 'pop' }" title="选中后在起止范围内点选弹窗时刻（可多个）" @click="brush = 'pop'">● 弹窗</button>
@@ -198,48 +198,84 @@
               <p class="hint tf-usenote">单击落点 · 双击关键格改时分 · 时间轴可拖</p>
             </div>
 
-            <!-- 周期·每周：星期磁贴 -->
-            <div v-else-if="form.periodicity === 'weekly'" class="tf-calwrap">
-              <div class="tf-tiles">
-                <button
-                  v-for="(w, i) in WEEK_LABELS"
-                  :key="i"
-                  type="button"
-                  class="tf-tile"
-                  :class="tileCls(i)"
-                  :title="tileTitle(i)"
-                  :disabled="tileLocked(i)"
-                  @click="onTileClick(i)"
-                  @dblclick="onTileDbl(i)"
-                >{{ w }}</button>
+            <!-- 周期模板：无日历无时间轴，行式必选（图形件只属于一次性任务与已派发实例） -->
+            <div v-else-if="s0" class="tf-cycrows">
+              <div class="field-line">
+                <span class="field-k">开始</span>
+                <div class="tf-ctl">
+                  <a-select
+                    v-if="form.periodicity === 'weekly'"
+                    v-model="s0.weekday"
+                    :options="wdOpts"
+                    size="small"
+                    style="width: 88px"
+                  />
+                  <a-select
+                    v-else-if="form.periodicity === 'monthly'"
+                    v-model="s0.day_of_month"
+                    :options="domOpts"
+                    size="small"
+                    style="width: 88px"
+                  />
+                  <TimeSpinner v-model="s0.time_of_day" />
+                  <span class="hint">必选</span>
+                </div>
               </div>
-              <p class="hint tf-usenote">单击磁贴按当前笔刷设开始/截止（各一点），双击已设磁贴改时分。</p>
-            </div>
-
-            <!-- 周期·每月：号点格 -->
-            <div v-else-if="form.periodicity === 'monthly'" class="tf-calwrap">
-              <div class="tf-mgrid">
-                <button
-                  v-for="d in 31"
-                  :key="d"
-                  type="button"
-                  class="tf-mday"
-                  :class="mdayCls(d)"
-                  :title="mdayTitle(d)"
-                  @click="onMDayClick(d)"
-                  @dblclick="onMDayDbl(d)"
-                >{{ d }}</button>
+              <div class="field-line">
+                <span class="field-k">截止</span>
+                <div class="tf-ctl">
+                  <a-select
+                    v-if="form.periodicity === 'weekly'"
+                    v-model="form.deadline_weekday"
+                    :options="wdOpts"
+                    size="small"
+                    style="width: 88px"
+                  />
+                  <a-select
+                    v-else-if="form.periodicity === 'monthly'"
+                    v-model="form.deadline_day_of_month"
+                    :options="domOpts"
+                    size="small"
+                    style="width: 88px"
+                  />
+                  <TimeSpinner v-model="form.due_time" />
+                  <span class="hint">必选</span>
+                </div>
               </div>
-              <p class="hint tf-usenote">每月号点：▶ 开始 / ⏰ 截止各一点，双击已设号点改时分。</p>
+              <div class="field-line">
+                <span class="field-k">弹窗提醒</span>
+                <div class="tf-ctl tf-popwrap">
+                  <a-switch v-model="popupSlotsOn" size="small" />
+                  <div v-if="popupSlotsOn" class="tf-popslots">
+                    <div v-for="(p, i) in form.popup_slots" :key="i" class="tf-poprow">
+                      <a-select
+                        v-if="form.periodicity === 'weekly'"
+                        v-model="p.weekday"
+                        :options="wdOpts"
+                        size="small"
+                        style="width: 88px"
+                      />
+                      <a-select
+                        v-else-if="form.periodicity === 'monthly'"
+                        v-model="p.day_of_month"
+                        :options="domOpts"
+                        size="small"
+                        style="width: 88px"
+                      />
+                      <TimeSpinner v-model="p.time_of_day" />
+                      <button type="button" class="tf-x" title="删除该点位" @click="removePopupSlot(i)">✕</button>
+                    </div>
+                    <a-button size="mini" @click="addPopupSlot">➕ 点位</a-button>
+                  </div>
+                  <span v-else class="hint">开启后可设多个周期内弹窗时刻</span>
+                </div>
+              </div>
+              <p class="hint tf-usenote">派发生成实例后，实例编辑与一次性任务一样有日历与时间轴。</p>
             </div>
+            <div v-else class="tf-cycrows" />
 
-            <!-- 周期·每天 -->
-            <div v-else class="tf-calwrap">
-              <p class="hint tf-usenote">每天循环：开始/截止的时分在下方时间轴上设点（可拖动）。</p>
-            </div>
-
-            <!-- 24h 时间轴：所有时刻标记一轴总览 -->
-            <div ref="tlEl" class="tf-tl">
+            <!-- 24h 时间轴（仅一次性）：所有时刻标记一轴总览 -->
+            <div v-if="!isPeriodic" ref="tlEl" class="tf-tl">
               <div ref="railEl" class="tf-rail" />
               <span v-for="h in TL_TICKS" :key="h" class="tf-tick" :style="{ left: (h / 24) * 100 + '%' }">{{ h }}</span>
               <button
@@ -503,6 +539,7 @@ const form = reactive({
   start_date: '',
   start_time: '09:00',
   start_slots: [],
+  popup_slots: [],
   deliveries: [],
   subtasks: [],
   task_type: 'one-time',
@@ -520,6 +557,8 @@ const periodOpts = [
 const WEEK_LABELS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
 const DOW = ['一', '二', '三', '四', '五', '六', '日']
 const TL_TICKS = [0, 6, 12, 18, 24]
+const wdOpts = WEEK_LABELS.map((l, i) => ({ label: l, value: i }))
+const domOpts = Array.from({ length: 31 }, (_, i) => ({ label: `${i + 1} 号`, value: i + 1 }))
 const priorityOpts = [
   { label: '🔴 紧急高危', value: 'high' },
   { label: '🟡 中等优先级', value: 'medium' },
@@ -543,12 +582,6 @@ const secondaryOpts = computed(() => {
 
 const intervalUnit = computed(
   () => ({ daily: '天', weekly: '周', monthly: '月' })[form.periodicity] || '天',
-)
-
-const isWeeklyOrMonthly = computed(
-  () =>
-    form.mode === 'periodic' &&
-    (form.periodicity === 'weekly' || form.periodicity === 'monthly'),
 )
 
 /** 周期模式（含编辑模板）：开始/截止的形态按周期性切换 */
@@ -692,24 +725,69 @@ watch(isPeriodic, (v) => {
   if (v && brush.value === 'pop') brush.value = 'start'
 })
 
-/** 周期切换时归一化单 slot 形态（周↔月带不同点位字段） */
-watch(() => form.periodicity, (p) => {
-  if (!isPeriodic.value || p === 'daily') return
-  const s = form.start_slots[0]
-  if (!s) return
-  if (p === 'weekly' && s.weekday == null) {
-    form.start_slots = [{ ...s, weekday: 0, day_of_month: null }]
-  } else if (p === 'monthly' && s.day_of_month == null) {
-    form.start_slots = [{ ...s, weekday: null, day_of_month: 1 }]
+/** 周期必选项补默认（只填缺不覆盖已设）：周=周一/周日、月=1 号/月底(31)、
+ * 时分=分类提醒窗（未启用 00:00/23:59）；开始与截止必选，恒有值 */
+function applyPeriodicDefaults() {
+  const w = winTimes()
+  const weekly = form.periodicity === 'weekly'
+  const monthly = form.periodicity === 'monthly'
+  if (!form.start_slots[0]) {
+    form.start_slots = [{
+      weekday: weekly ? 0 : null,
+      day_of_month: monthly ? 1 : null,
+      time_of_day: w.start,
+    }]
+  } else {
+    const s = form.start_slots[0]
+    if (weekly && s.weekday == null) s.weekday = 0
+    if (monthly && s.day_of_month == null) s.day_of_month = 1
+    if (weekly) s.day_of_month = null
+    if (monthly) s.weekday = null
+    if (!s.time_of_day) s.time_of_day = w.start
   }
+  form.start_enabled = true
+  if (!form.due_time) form.due_time = w.end
+  if (weekly && form.deadline_weekday == null) form.deadline_weekday = 6
+  if (monthly && form.deadline_day_of_month == null) form.deadline_day_of_month = 31
+  form.has_deadline = true
+}
+
+/** 周期开始单点访问器（模板直绑；缺则懒补默认） */
+const s0 = computed(() => {
+  if (!form.start_slots[0]) applyPeriodicDefaults()
+  return form.start_slots[0]
 })
 
-/** 开始单点：写入/替换唯一 slot（保留原时分，首设取提醒窗起点） */
-function ensureSlot(weekday, dayOfMonth) {
-  const time = form.start_slots[0]?.time_of_day || winTimes().start
-  form.start_slots = [{ weekday, day_of_month: dayOfMonth, time_of_day: time }]
-  form.start_enabled = true
+/** 周期弹窗点位开关：开=至少一个点位，关=清空 */
+const popupSlotsOn = computed({
+  get: () => (form.popup_slots || []).length > 0,
+  set: (v) => {
+    if (v) {
+      if (!form.popup_slots.length) addPopupSlot()
+    } else {
+      form.popup_slots = []
+    }
+  },
+})
+
+function addPopupSlot() {
+  const weekly = form.periodicity === 'weekly'
+  const monthly = form.periodicity === 'monthly'
+  form.popup_slots.push({
+    weekday: weekly ? 0 : null,
+    day_of_month: monthly ? 1 : null,
+    time_of_day: winTimes().start,
+  })
 }
+
+function removePopupSlot(i) {
+  form.popup_slots.splice(i, 1)
+}
+
+/** 周期切换时补新周期形态的默认点位（周↔月字段互斥由 applyPeriodicDefaults 归零） */
+watch(() => form.periodicity, () => {
+  if (isPeriodic.value) applyPeriodicDefaults()
+})
 
 // ---- 节假日数据（/api/holidays，按年缓存） ----
 const holidays = ref(new Set())
@@ -918,95 +996,13 @@ function onDayDbl(c) {
   if (c.isStart) openTimePop('start')
   else if (c.isDue) openTimePop('due')
   else if (c.pops.length) openTimePop('pop:' + c.pops[0].i)
-}
-
-// ---- 周期格：每周磁贴 / 每月号点 ----
-
-function tileCls(i) {
-  const s = form.start_slots[0]
-  return {
-    start: form.start_enabled && s?.weekday === i,
-    due: form.has_deadline && form.deadline_weekday === i,
-    skip: form.skip_holidays && i >= 5,
+  else if (!dayLocked(c)) {
+    // 双击范围内可选格：无弹窗则直接创建（默认窗起时刻）并进编辑
+    form.deliveries.push({ date: c.date, time: winTimes().start || '09:00', notify: true })
+    openTimePop('pop:' + (form.deliveries.length - 1))
+  } else if (brush.value === 'pop') {
+    setPopHint('弹窗需设在开始与截止之间')
   }
-}
-
-function tileLocked(i) {
-  return form.skip_holidays && i >= 5
-}
-
-function tileTitle(i) {
-  const s = form.start_slots[0]
-  const parts = []
-  if (form.start_enabled && s?.weekday === i) parts.push(`开始 ${s.time_of_day}`)
-  if (form.has_deadline && form.deadline_weekday === i) parts.push(`截止 ${form.due_time || '23:59'}`)
-  if (tileLocked(i)) parts.push('公休日（跳过中，不可选）')
-  return parts.join(' · ') || WEEK_LABELS[i]
-}
-
-function onTileClick(i) {
-  if (tileLocked(i)) return
-  if (brush.value === 'start') {
-    if (form.start_enabled && form.start_slots[0]?.weekday === i) {
-      form.start_enabled = false
-      form.start_slots = []
-    } else {
-      ensureSlot(i, null)
-    }
-  } else if (brush.value === 'due') {
-    if (form.has_deadline && form.deadline_weekday === i) {
-      form.has_deadline = false
-    } else {
-      if (!form.due_time) form.due_time = winTimes().end
-      form.has_deadline = true
-      form.deadline_weekday = i
-    }
-  }
-}
-
-function onTileDbl(i) {
-  if (form.start_enabled && form.start_slots[0]?.weekday === i) openTimePop('start')
-  else if (form.has_deadline && form.deadline_weekday === i) openTimePop('due')
-}
-
-function mdayCls(d) {
-  const s = form.start_slots[0]
-  return {
-    start: form.start_enabled && s?.day_of_month === d,
-    due: form.has_deadline && form.deadline_day_of_month === d,
-  }
-}
-
-function mdayTitle(d) {
-  const s = form.start_slots[0]
-  const parts = []
-  if (form.start_enabled && s?.day_of_month === d) parts.push(`开始 ${s.time_of_day}`)
-  if (form.has_deadline && form.deadline_day_of_month === d) parts.push(`截止 ${form.due_time || '23:59'}`)
-  return parts.join(' · ') || `每月 ${d} 日`
-}
-
-function onMDayClick(d) {
-  if (brush.value === 'start') {
-    if (form.start_enabled && form.start_slots[0]?.day_of_month === d) {
-      form.start_enabled = false
-      form.start_slots = []
-    } else {
-      ensureSlot(null, d)
-    }
-  } else if (brush.value === 'due') {
-    if (form.has_deadline && form.deadline_day_of_month === d) {
-      form.has_deadline = false
-    } else {
-      if (!form.due_time) form.due_time = winTimes().end
-      form.has_deadline = true
-      form.deadline_day_of_month = d
-    }
-  }
-}
-
-function onMDayDbl(d) {
-  if (form.start_enabled && form.start_slots[0]?.day_of_month === d) openTimePop('start')
-  else if (form.has_deadline && form.deadline_day_of_month === d) openTimePop('due')
 }
 
 // ---- 24h 时间轴：标记总览 + 拖拽改时分 + 点击弹层编辑 ----
@@ -1036,36 +1032,21 @@ function duePointLabel() {
   return '每天'
 }
 
+/** 时间轴标记（仅一次性）：开始/截止/弹窗时刻一轴总览 */
 const tlMarkers = computed(() => {
   const out = []
   const pos = (t) => ((hm2min(t) / 1440) * 100).toFixed(2) + '%'
-  if (!isPeriodic.value) {
-    if (form.start_enabled && form.start_date) {
-      out.push({ key: 'start', kind: 'start', label: '▶', time: form.start_time, left: pos(form.start_time), title: `开始 ${form.start_date} ${form.start_time}` })
-    }
-    if (form.has_deadline && form.deadline) {
-      out.push({ key: 'due', kind: 'due', label: '⏰', time: form.due_time || '23:59', left: pos(form.due_time), title: `截止 ${form.deadline} ${form.due_time || '23:59'}` })
-    }
-    form.deliveries.forEach((d, i) => {
-      if (d.date && d.time) {
-        out.push({ key: 'pop:' + i, kind: 'pop', label: '●', time: d.time, left: pos(d.time), title: `弹窗 ${d.date} ${d.time}` })
-      }
-    })
-    return out
+  if (form.start_enabled && form.start_date) {
+    out.push({ key: 'start', kind: 'start', label: '▶', time: form.start_time, left: pos(form.start_time), title: `开始 ${form.start_date} ${form.start_time}` })
   }
-  if (form.periodicity === 'daily') {
-    if (form.start_enabled) {
-      out.push({ key: 'start', kind: 'start', label: '▶', time: form.start_time, left: pos(form.start_time), title: `每天 ${form.start_time} 开始` })
-    }
-  } else {
-    const s = form.start_slots[0]
-    if (form.start_enabled && s) {
-      out.push({ key: 'start', kind: 'start', label: '▶', time: s.time_of_day, left: pos(s.time_of_day), title: `${slotPointLabel()} ${s.time_of_day} 开始` })
-    }
+  if (form.has_deadline && form.deadline) {
+    out.push({ key: 'due', kind: 'due', label: '⏰', time: form.due_time || '23:59', left: pos(form.due_time), title: `截止 ${form.deadline} ${form.due_time || '23:59'}` })
   }
-  if (form.has_deadline) {
-    out.push({ key: 'due', kind: 'due', label: '⏰', time: form.due_time || '23:59', left: pos(form.due_time), title: `${duePointLabel()} ${form.due_time || '23:59'} 截止` })
-  }
+  form.deliveries.forEach((d, i) => {
+    if (d.date && d.time) {
+      out.push({ key: 'pop:' + i, kind: 'pop', label: '●', time: d.time, left: pos(d.time), title: `弹窗 ${d.date} ${d.time}` })
+    }
+  })
   return out
 })
 
@@ -1150,17 +1131,11 @@ const statusText = computed(() => {
     if (form.start_enabled && form.start_date) parts.push(`${md(form.start_date)} ${form.start_time} 开始`)
     if (form.has_deadline && form.deadline) parts.push(`${md(form.deadline)} ${form.due_time || '23:59'} 截止`)
     if (form.deliveries.length) parts.push(`${form.deliveries.length} 个交付弹窗`)
-  } else if (form.periodicity === 'weekly') {
-    const s = form.start_slots[0]
-    if (form.start_enabled && s) parts.push(`${slotPointLabel()} ${s.time_of_day} 开始`)
-    if (form.has_deadline) parts.push(`${duePointLabel()} ${form.due_time || '23:59'} 截止`)
-  } else if (form.periodicity === 'monthly') {
-    const s = form.start_slots[0]
-    if (form.start_enabled && s) parts.push(`${slotPointLabel()} ${s.time_of_day} 开始`)
-    if (form.has_deadline) parts.push(`${duePointLabel()} ${form.due_time || '23:59'} 截止`)
   } else {
-    if (form.start_enabled) parts.push(`每天 ${form.start_time} 开始`)
-    if (form.has_deadline) parts.push(`每天 ${form.due_time || '23:59'} 截止`)
+    const s = form.start_slots[0]
+    if (s) parts.push(`${slotPointLabel()} ${s.time_of_day} 开始`)
+    parts.push(`${duePointLabel()} ${form.due_time || '23:59'} 截止`)
+    if (form.popup_slots.length) parts.push(`${form.popup_slots.length} 个弹窗点位`)
   }
   if (parts.length || form.start_enabled || form.has_deadline) parts.push(form.popup_enabled ? '到期弹窗' : '不弹窗')
   if (form.skip_holidays) parts.push('跳过公休日')
@@ -1399,25 +1374,31 @@ function buildPayload() {
   }
 
   if (form.mode === 'periodic' || isTemplate.value) {
-    // 开始单点：日=仅时分；周/月=唯一点位 slot（UI 保证 ≤1）
-    const slots = !form.start_enabled
-      ? []
-      : isWeeklyOrMonthly.value
-        ? (form.start_slots || []).slice(0, 1).map((s) => {
-            if (form.periodicity === 'weekly') {
-              return {
-                time_of_day: s.time_of_day || '09:00',
-                weekday: Math.max(0, Math.min(6, Number(s.weekday) || 0)),
-                day_of_month: null,
-              }
-            }
-            return {
-              time_of_day: s.time_of_day || '09:00',
-              weekday: null,
-              day_of_month: Math.max(1, Math.min(31, Number(s.day_of_month) || 1)),
-            }
-          })
-        : [{ time_of_day: form.start_time || '09:00', weekday: null, day_of_month: null }]
+    // 必选结构：开始/截止恒有值（applyPeriodicDefaults 兜底）；点位按周期归一形态
+    const slotShape = (s) => {
+      if (form.periodicity === 'weekly') {
+        return {
+          time_of_day: s.time_of_day || '09:00',
+          weekday: Math.max(0, Math.min(6, Number(s.weekday ?? 0))),
+          day_of_month: null,
+        }
+      }
+      if (form.periodicity === 'monthly') {
+        return {
+          time_of_day: s.time_of_day || '09:00',
+          weekday: null,
+          day_of_month: Math.max(1, Math.min(31, Number(s.day_of_month ?? 1))),
+        }
+      }
+      return {
+        time_of_day: s.time_of_day || form.start_time || '09:00',
+        weekday: null,
+        day_of_month: null,
+      }
+    }
+    const startSlot = form.start_slots[0]
+      ? slotShape(form.start_slots[0])
+      : slotShape({ time_of_day: form.start_time })
     return {
       ...base,
       task_type: 'periodic',
@@ -1425,16 +1406,17 @@ function buildPayload() {
       interval: form.interval || 1,
       long_term: form.long_term,
       schedule_end_date: form.long_term ? null : form.schedule_end_date || null,
-      remind_start_slots: slots,
-      due_time: form.has_deadline ? form.due_time : null,
+      remind_start_slots: [startSlot],
+      popup_slots: (form.popup_slots || []).map(slotShape),
+      due_time: form.due_time || '23:59',
       popup_at_due: !!form.popup_enabled,
       deadline_weekday:
-        form.has_deadline && form.periodicity === 'weekly'
-          ? Math.max(0, Math.min(6, Number(form.deadline_weekday) || 0))
+        form.periodicity === 'weekly'
+          ? Math.max(0, Math.min(6, Number(form.deadline_weekday ?? 0)))
           : null,
       deadline_day_of_month:
-        form.has_deadline && form.periodicity === 'monthly'
-          ? Math.max(1, Math.min(31, Number(form.deadline_day_of_month) || 1))
+        form.periodicity === 'monthly'
+          ? Math.max(1, Math.min(31, Number(form.deadline_day_of_month ?? 1)))
           : null,
     }
   }
@@ -1519,7 +1501,22 @@ onMounted(async () => {
     if (route.query.mode === 'periodic') {
       form.mode = 'periodic'
     }
-    if (!taskId.value) seedSkipHolidays()
+    if (!taskId.value) {
+      seedSkipHolidays()
+      // 新建预填：一次性=今天开始/次日截止（窗起/窗终，未启用=00:00/23:59）
+      const w = winTimes()
+      if (isPeriodic.value) {
+        applyPeriodicDefaults()
+      } else {
+        const tm = new Date(Date.now() + 86400000)
+        form.start_enabled = true
+        form.start_date = todayStr()
+        form.start_time = w.start
+        form.has_deadline = true
+        form.deadline = `${tm.getFullYear()}-${String(tm.getMonth() + 1).padStart(2, '0')}-${String(tm.getDate()).padStart(2, '0')}`
+        form.due_time = w.end
+      }
+    }
     if (taskId.value) {
       if (route.query.template === '1') {
         const t = await getTemplate(taskId.value)
@@ -1539,32 +1536,34 @@ onMounted(async () => {
         form.subtasks = (t.subtasks || []).map((s) => ({ ...s }))
         form.plugin_id = t.plugin_id || null
         form.skip_holidays = !!t.skip_holidays
-        // 截止：due_time 或周几/几号规则任一存在即视为已设置
-        form.has_deadline = !!(
-          t.due_time ||
-          t.deadline_weekday != null ||
-          t.deadline_day_of_month != null
-        )
+        // 截止必选：旧模板无规则按默认补（周→周日/月→月底，applyPeriodicDefaults 兜底）
+        form.has_deadline = true
         form.due_time = t.due_time || winTimes().end
         form.deadline_weekday =
           t.deadline_weekday != null ? Number(t.deadline_weekday) : 6
         form.deadline_day_of_month =
           t.deadline_day_of_month != null ? Number(t.deadline_day_of_month) : 31
         form.popup_enabled = !!t.popup_at_due
-        // 开始单点：兼容旧弹窗提醒槽，多点模板只取首个（保存时收敛为单点）
+        // 开始单点（必选）：兼容旧弹窗提醒槽，多点模板只取首个
         const rawSlots =
           (t.remind_start_slots?.length ? t.remind_start_slots : t.reminder?.slots) || []
-        const s0 = rawSlots[0]
-        form.start_enabled = rawSlots.length > 0
+        const raw0 = rawSlots[0]
+        form.start_enabled = true
         if (form.periodicity === 'daily') {
-          form.start_time = s0?.time_of_day || winTimes().start
-        } else if (s0) {
+          form.start_time = raw0?.time_of_day || winTimes().start
+        } else if (raw0) {
           form.start_slots = [{
-            weekday: s0.weekday != null ? Number(s0.weekday) : 0,
-            day_of_month: s0.day_of_month != null ? Number(s0.day_of_month) : 1,
-            time_of_day: s0.time_of_day || winTimes().start,
+            weekday: raw0.weekday != null ? Number(raw0.weekday) : 0,
+            day_of_month: raw0.day_of_month != null ? Number(raw0.day_of_month) : 1,
+            time_of_day: raw0.time_of_day || winTimes().start,
           }]
         }
+        form.popup_slots = (t.popup_slots || []).map((p) => ({
+          weekday: p.weekday != null ? Number(p.weekday) : null,
+          day_of_month: p.day_of_month != null ? Number(p.day_of_month) : null,
+          time_of_day: p.time_of_day || '09:00',
+        }))
+        applyPeriodicDefaults()
       } else {
         const t = await getTask(taskId.value)
         form.title = t.title
@@ -1873,73 +1872,31 @@ onUnmounted(() => {
   margin: 0;
   flex: none;
 }
-.tf-tiles {
-  display: flex;
-  gap: 4px;
-}
-.tf-tile {
+
+/* ---- 周期模板：行式必选（开始/截止/弹窗点位） ---- */
+.tf-cycrows {
   flex: 1;
-  height: 42px;
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-  background: transparent;
-  color: var(--color-text-2);
-  cursor: pointer;
-  font-size: 12px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: hidden;
 }
-.tf-tile:hover:not(:disabled) {
-  border-color: var(--color-primary-hover);
+.tf-popwrap {
+  flex-wrap: wrap;
+  align-items: flex-start;
 }
-.tf-tile.start {
-  background: color-mix(in srgb, var(--color-primary) 16%, transparent);
-  border-color: var(--color-primary);
-  color: var(--color-primary);
-  font-weight: 650;
+.tf-popslots {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
 }
-.tf-tile.due {
-  background: color-mix(in srgb, var(--color-danger) 13%, transparent);
-  border-color: var(--color-danger);
-  color: var(--color-danger);
-  font-weight: 650;
-}
-.tf-tile.skip {
-  opacity: 0.38;
-  text-decoration: line-through;
-  cursor: not-allowed;
-}
-.tf-tile:disabled {
-  cursor: not-allowed;
-}
-.tf-mgrid {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 3px;
-}
-.tf-mday {
-  height: 26px;
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  font-size: 10.5px;
-  font-variant-numeric: tabular-nums;
-  padding: 0;
-}
-.tf-mday:hover {
-  border-color: var(--color-primary-hover);
-}
-.tf-mday.start {
-  background: var(--color-primary);
-  border-color: var(--color-primary);
-  color: #fff;
-  font-weight: 650;
-}
-.tf-mday.due {
-  background: var(--color-danger);
-  border-color: var(--color-danger);
-  color: #fff;
-  font-weight: 650;
+.tf-poprow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 /* ---- 24h 时间轴 ---- */

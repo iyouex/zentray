@@ -268,6 +268,40 @@ def resolve_remind_start(tmpl: "PeriodicTemplate", today: datetime.date) -> Opti
     return best.isoformat(timespec="minutes")
 
 
+def _popup_deliveries(tmpl: "PeriodicTemplate", today: datetime.date) -> list:
+    """
+    模板周期内弹窗点位 → 本周期实例 deliveries。weekly 取 [today, today+6] 内
+    首个匹配 weekday（同 resolve_remind_start 取向）；monthly 本月钳月末；daily
+    当天。已过时刻不物化（不会再弹）。notify 恒 True（加进列表即弹）。
+    """
+    from zentray.core.reminder import parse_hhmm
+
+    now = datetime.datetime.now()
+    out = []
+    for s in (getattr(tmpl, "popup_slots", None) or []):
+        h, m = parse_hhmm(getattr(s, "time_of_day", None) or "09:00")
+        periodicity = tmpl.periodicity or "daily"
+        if periodicity == "weekly":
+            wd = getattr(s, "weekday", None)
+            if wd is None:
+                continue
+            d = today + datetime.timedelta(days=(int(wd) - today.weekday()) % 7)
+        elif periodicity == "monthly":
+            dom = getattr(s, "day_of_month", None)
+            if dom is None:
+                continue
+            last = calendar.monthrange(today.year, today.month)[1]
+            d = datetime.date(today.year, today.month, min(max(1, int(dom)), last))
+        else:
+            d = today
+        cand = datetime.datetime.combine(d, datetime.time(h, m))
+        if cand <= now:
+            continue
+        out.append({"at": cand.isoformat(timespec="minutes"), "notify": True})
+    out.sort(key=lambda x: x["at"])
+    return out
+
+
 def build_due_instance(tmpl: "PeriodicTemplate", today: datetime.date) -> Optional[Task]:
     """
     到期则构造实例任务并推进模板水位；否则返回 None。纯构造，不落盘。
@@ -304,6 +338,7 @@ def build_due_instance(tmpl: "PeriodicTemplate", today: datetime.date) -> Option
         skip_holidays=bool(getattr(tmpl, "skip_holidays", False)),
         due_time=getattr(tmpl, "due_time", None),
         popup_at_due=bool(getattr(tmpl, "popup_at_due", False)),
+        deliveries=_popup_deliveries(tmpl, today),
     )
     tmpl.last_generated_period = spawn_key_after_create(tmpl, today)
     return new_task

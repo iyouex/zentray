@@ -504,6 +504,7 @@ class TaskService:
             calendar_horizon_mode=(data.get("calendar_horizon_mode") or "count"),
             calendar_horizon_value=(data.get("calendar_horizon_value", 4)),
             remind_start_slots=data.get("remind_start_slots") or [],
+            popup_slots=data.get("popup_slots") or [],
             skip_holidays=bool(data.get("skip_holidays", False)),
             due_time=normalize_due_time(data.get("due_time")),
             popup_at_due=bool(data.get("popup_at_due", False)),
