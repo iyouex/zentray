@@ -53,6 +53,7 @@
                     v-model="form.category_primary_id"
                     size="small"
                     :options="primaryOpts"
+                    :fallback-option="false"
                     placeholder="仅可选已有"
                     allow-search
                     @change="onPrimaryChange"
@@ -68,6 +69,7 @@
                       allow-clear
                       allow-search
                       :options="secondaryOpts"
+                      :fallback-option="false"
                       placeholder="可选"
                       style="flex: 1"
                     />
@@ -170,8 +172,10 @@
                   <span><i class="c-pop" />弹窗</span>
                 </span>
               </div>
-              <div class="tf-cal">
+              <div class="tf-dowrow">
                 <span v-for="w in DOW" :key="w" class="tf-dow">{{ w }}</span>
+              </div>
+              <div class="tf-cal">
                 <template v-for="(row, ri) in calRows" :key="ri">
                   <div v-if="row.ellipsis" class="tf-ell" :title="row.title">⋯ {{ row.label }} ⋯</div>
                   <template v-else>
@@ -191,7 +195,7 @@
                   </template>
                 </template>
               </div>
-              <p class="hint tf-usenote">单击按笔刷落点，双击关键格改时分；拖动下方时间轴标记改时分。</p>
+              <p class="hint tf-usenote">单击落点 · 双击关键格改时分 · 时间轴可拖</p>
             </div>
 
             <!-- 周期·每周：星期磁贴 -->
@@ -648,6 +652,27 @@ function onRunPlugin() {
 function onPrimaryChange() {
   form.category_secondary_id = null
   seedSkipHolidays()
+}
+
+/** 回填清洗：任务里的分类 id 可能已随分类删建失效（无匹配 option 时
+ * a-select 会把裸 uuid 当文本显示），按任务自带分类名找回，仍无则置空 */
+function sanitizeCategoryIds(categoryName) {
+  const list = meta.value?.categories?.primary_list || []
+  const sep = meta.value?.categories?.level_separator || '-'
+  const p = list.find((x) => x.id === form.category_primary_id)
+  if (!p) {
+    const name = String(categoryName || '').split(sep)[0]
+    const hit = list.find((x) => x.name === name)
+    form.category_primary_id = hit?.id ?? null
+    form.category_secondary_id = null
+    return
+  }
+  if (form.category_secondary_id && !(p.secondaries || []).some((s) => s.id === form.category_secondary_id)) {
+    const subName = String(categoryName || '').includes(sep)
+      ? String(categoryName).split(sep).slice(1).join(sep)
+      : ''
+    form.category_secondary_id = (p.secondaries || []).find((s) => s.name === subName)?.id ?? null
+  }
 }
 
 /** 新建时按一级分类预设带出「跳过公休日」；编辑不动已有值 */
@@ -1505,6 +1530,7 @@ onMounted(async () => {
         form.details = t.details || ''
         form.category_primary_id = t.category_primary_id
         form.category_secondary_id = t.category_secondary_id
+        sanitizeCategoryIds(t.category)
         form.periodicity = t.periodicity || 'daily'
         form.interval = t.interval || 1
         form.long_term = t.long_term !== false
@@ -1546,6 +1572,7 @@ onMounted(async () => {
         form.details = t.details || ''
         form.category_primary_id = t.category_primary_id
         form.category_secondary_id = t.category_secondary_id
+        sanitizeCategoryIds(t.category)
         form.has_deadline = Boolean(t.deadline)
         form.deadline = t.deadline || ''
         form.due_time = t.due_time || '23:59'
@@ -1615,6 +1642,7 @@ onUnmounted(() => {
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
+  padding: 10px 14px;
 }
 .tf-grid > section:nth-of-type(1) {
   grid-area: 1 / 1;
@@ -1651,7 +1679,7 @@ onUnmounted(() => {
 
 /* ---- 笔刷选择器 ---- */
 .tf-time-head {
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 .tf-brushes {
   display: inline-flex;
@@ -1692,7 +1720,8 @@ onUnmounted(() => {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
+  overflow: hidden;
 }
 .tf-calbar {
   display: flex;
@@ -1748,12 +1777,21 @@ onUnmounted(() => {
   min-height: 0;
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  grid-auto-rows: minmax(22px, 1fr);
+  /* minmax(0,1fr)：行可随容器收缩，杜绝整格溢出压住时间轴（v0.7.16 重叠根因） */
+  grid-auto-rows: minmax(0, 1fr);
   gap: 3px;
+}
+.tf-dowrow {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+  height: 14px;
+  flex: none;
 }
 .tf-dow {
   text-align: center;
   font-size: 10px;
+  line-height: 14px;
   color: var(--color-text-subdued);
 }
 .tf-day {
@@ -1907,7 +1945,7 @@ onUnmounted(() => {
 /* ---- 24h 时间轴 ---- */
 .tf-tl {
   position: relative;
-  height: 46px;
+  height: 42px;
   flex: none;
   margin: 2px 6px 0;
 }
@@ -1915,7 +1953,7 @@ onUnmounted(() => {
   position: absolute;
   left: 0;
   right: 0;
-  top: 26px;
+  top: 22px;
   height: 6px;
   border-radius: 99px;
   background: var(--color-surface-hover);
@@ -1923,7 +1961,7 @@ onUnmounted(() => {
 }
 .tf-tick {
   position: absolute;
-  top: 34px;
+  top: 30px;
   transform: translateX(-50%);
   font-size: 9px;
   color: var(--color-text-subdued);
@@ -1984,7 +2022,7 @@ onUnmounted(() => {
 .tf-mkpop {
   position: absolute;
   z-index: 6;
-  top: 40px;
+  top: 36px;
   transform: translateX(-50%);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
@@ -2009,7 +2047,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 14px;
-  margin-top: 2px;
+  margin-top: 0;
   flex: none;
 }
 .tf-tg {
@@ -2026,7 +2064,7 @@ onUnmounted(() => {
   font-size: 11px;
 }
 .tf-status {
-  margin: 4px 0 0;
+  margin: 2px 0 0;
   flex: none;
 }
 .tf-status.warn {
@@ -2035,7 +2073,10 @@ onUnmounted(() => {
 
 /* ---- 详情通栏 ---- */
 .tf-detail-rows {
-  gap: 6px;
+  gap: 4px;
+}
+.tf-detail-rows .field-line {
+  min-height: 28px;
 }
 .tf-chips {
   flex-wrap: wrap;

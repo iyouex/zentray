@@ -32,3 +32,12 @@ def test_no_dead_arco_card_selectors():
     css_files = [(_WEB / "styles.css")] + list((_WEB / "themes").glob("*.css"))
     for f in css_files:
         assert ".arco-card" not in f.read_text(encoding="utf-8"), f"{f.name} 仍含死选择器 .arco-card"
+
+
+def test_taskform_calendar_rows_collapse_and_no_raw_uuid():
+    # v0.7.16 两回归：日历行 minmax(0,1fr) 可收缩（否则溢出压住时间轴）；
+    # 分类下拉 fallback-option=false + 回填清洗（坏 id 不再把裸 uuid 当 label）
+    text = _vue_sources()["TaskForm.vue"]
+    assert "minmax(0, 1fr)" in text, "日历行须可收缩到 0，杜绝溢出重叠"
+    assert text.count(':fallback-option="false"') >= 2, "一级/二级分类下拉须关 fallback"
+    assert "sanitizeCategoryIds" in text, "编辑回填须清洗失效分类 id"
