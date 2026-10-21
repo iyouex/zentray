@@ -149,12 +149,12 @@
             </div>
           </section>
 
-          <!-- ============ ⏰ 时间与提醒（统一组件：笔刷 + 日历/周期格 + 24h 时间轴） ============ -->
+          <!-- ============ ⏰ 时间与提醒（统一组件：一次性笔刷 + 日历 + 24h 时间轴；周期行式设置） ============ -->
           <section class="zt-block">
             <div class="zt-block-head tf-time-head">
               <h3 class="zt-h3">⏰ 时间与提醒</h3>
               <div v-if="!isPeriodic" class="tf-brushes">
-                <button type="button" class="b-start" :class="{ on: brush === 'start' }" title="选中后在日历/周期格上点选开始点；再点同格取消" @click="brush = 'start'">▶ 开始</button>
+                <button type="button" class="b-start" :class="{ on: brush === 'start' }" title="选中后在日历上点选开始点；再点同格取消" @click="brush = 'start'">▶ 开始</button>
                 <button type="button" class="b-due" :class="{ on: brush === 'due' }" title="选中后点选截止点；再点同格取消" @click="brush = 'due'">⏰ 截止</button>
                 <button v-if="!isPeriodic" type="button" class="b-pop" :class="{ on: brush === 'pop' }" title="选中后在起止范围内点选弹窗时刻（可多个）" @click="brush = 'pop'">● 弹窗</button>
               </div>
@@ -717,7 +717,7 @@ function seedSkipHolidays() {
   form.skip_holidays = !!(p && p.skip_holidays)
 }
 
-// ============ 统一时间组件：笔刷 + 日历/周期格 + 24h 时间轴 ============
+// ============ 统一时间组件：一次性笔刷 + 日历 + 24h 时间轴；周期行式 ============
 
 /** 当前笔刷：start=设开始点 due=设截止点 pop=加弹窗时刻（仅一次性） */
 const brush = ref('start')
@@ -1713,7 +1713,7 @@ onUnmounted(() => {
   background: color-mix(in srgb, var(--color-warning) 12%, transparent);
 }
 
-/* ---- 月历 / 周期格区域 ---- */
+/* ---- 月历区域（仅一次性/实例）---- */
 .tf-calwrap {
   flex: 1;
   min-height: 0;
