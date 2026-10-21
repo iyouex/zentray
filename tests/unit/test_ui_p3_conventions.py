@@ -41,3 +41,10 @@ def test_taskform_calendar_rows_collapse_and_no_raw_uuid():
     assert "minmax(0, 1fr)" in text, "日历行须可收缩到 0，杜绝溢出重叠"
     assert text.count(':fallback-option="false"') >= 2, "一级/二级分类下拉须关 fallback"
     assert "sanitizeCategoryIds" in text, "编辑回填须清洗失效分类 id"
+
+
+def test_taskform_periodic_rows_not_calendar():
+    # v0.7.18：周期模板行式时间设置（tf-cycrows），无日历/时间轴图形件
+    text = _vue_sources()["TaskForm.vue"]
+    assert "tf-cycrows" in text, "周期分支须用行式容器 tf-cycrows"
+    assert "popup_slots" in text, "周期弹窗点位须接 form.popup_slots"
