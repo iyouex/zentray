@@ -149,12 +149,12 @@
             </div>
           </section>
 
-          <!-- ============ ⏰ 时间与提醒（统一组件：笔刷 + 日历/周期格 + 24h 时间轴） ============ -->
+          <!-- ============ ⏰ 时间与提醒（统一组件：一次性笔刷 + 日历 + 24h 时间轴；周期行式设置） ============ -->
           <section class="zt-block">
             <div class="zt-block-head tf-time-head">
               <h3 class="zt-h3">⏰ 时间与提醒</h3>
               <div v-if="!isPeriodic" class="tf-brushes">
-                <button type="button" class="b-start" :class="{ on: brush === 'start' }" title="选中后在日历/周期格上点选开始点；再点同格取消" @click="brush = 'start'">▶ 开始</button>
+                <button type="button" class="b-start" :class="{ on: brush === 'start' }" title="选中后在日历上点选开始点；再点同格取消" @click="brush = 'start'">▶ 开始</button>
                 <button type="button" class="b-due" :class="{ on: brush === 'due' }" title="选中后点选截止点；再点同格取消" @click="brush = 'due'">⏰ 截止</button>
                 <button v-if="!isPeriodic" type="button" class="b-pop" :class="{ on: brush === 'pop' }" title="选中后在起止范围内点选弹窗时刻（可多个）" @click="brush = 'pop'">● 弹窗</button>
               </div>
@@ -218,7 +218,6 @@
                     style="width: 88px"
                   />
                   <TimeSpinner v-model="s0.time_of_day" />
-                  <span class="hint">必选</span>
                 </div>
               </div>
               <div class="field-line">
@@ -239,7 +238,6 @@
                     style="width: 88px"
                   />
                   <TimeSpinner v-model="form.due_time" />
-                  <span class="hint">必选</span>
                 </div>
               </div>
               <div class="field-line">
@@ -717,7 +715,7 @@ function seedSkipHolidays() {
   form.skip_holidays = !!(p && p.skip_holidays)
 }
 
-// ============ 统一时间组件：笔刷 + 日历/周期格 + 24h 时间轴 ============
+// ============ 统一时间组件：一次性笔刷 + 日历 + 24h 时间轴；周期行式 ============
 
 /** 当前笔刷：start=设开始点 due=设截止点 pop=加弹窗时刻（仅一次性） */
 const brush = ref('start')
@@ -750,6 +748,16 @@ function applyPeriodicDefaults() {
   if (weekly && form.deadline_weekday == null) form.deadline_weekday = 6
   if (monthly && form.deadline_day_of_month == null) form.deadline_day_of_month = 31
   form.has_deadline = true
+  // 弹窗点位同样按周期形态归一，否则切换周/月后点位行的周几/几号选择器空显
+  form.popup_slots.forEach((p) => {
+    if (weekly) {
+      if (p.weekday == null) p.weekday = 0
+      p.day_of_month = null
+    } else if (monthly) {
+      if (p.day_of_month == null) p.day_of_month = 1
+      p.weekday = null
+    }
+  })
 }
 
 /** 周期开始单点访问器（模板直绑；缺则懒补默认） */
@@ -1713,7 +1721,7 @@ onUnmounted(() => {
   background: color-mix(in srgb, var(--color-warning) 12%, transparent);
 }
 
-/* ---- 月历 / 周期格区域 ---- */
+/* ---- 月历区域（仅一次性/实例）---- */
 .tf-calwrap {
   flex: 1;
   min-height: 0;
@@ -1882,6 +1890,11 @@ onUnmounted(() => {
   gap: 8px;
   overflow: hidden;
 }
+/* 时间区右栏仅 ~220px：select+spinner(~320px) 须换行堆叠，防右溢被裁 */
+.tf-cycrows .tf-ctl {
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
 .tf-popwrap {
   flex-wrap: wrap;
   align-items: flex-start;
@@ -1891,12 +1904,23 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 6px;
   flex: 1;
-  min-width: 0;
+  min-width: 100%; /* 点位区占满行宽：220px 内并排开关只剩 ~186px，放不下 spinner */
 }
 .tf-poprow {
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+.tf-poprow .tf-x {
+  margin-left: auto;
+}
+.tf-cycrows :deep(.num-input) {
+  width: 44px;
+}
+.tf-cycrows :deep(.spin-btn) {
+  width: 20px;
 }
 
 /* ---- 24h 时间轴 ---- */
