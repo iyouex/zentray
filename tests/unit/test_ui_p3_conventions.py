@@ -48,3 +48,14 @@ def test_taskform_periodic_rows_not_calendar():
     text = _vue_sources()["TaskForm.vue"]
     assert "tf-cycrows" in text, "周期分支须用行式容器 tf-cycrows"
     assert "popup_slots" in text, "周期弹窗点位须接 form.popup_slots"
+
+
+def test_taskform_periodic_rows_fit_column():
+    # 周期行 select+TimeSpinner 合计 ~320px，时间区右栏仅 ~220px：不换行会右溢被裁
+    # （v0.7.18 发布缺陷：周/月行分钟控件出界）。行内换行 + 点位区占满行宽 + 微缩 spinner。
+    text = _vue_sources()["TaskForm.vue"]
+    block = text[text.index(".tf-cycrows .tf-ctl"):][:200]
+    assert "flex-wrap: wrap" in block, "周期行容器须允许换行堆叠"
+    assert ".tf-popslots" in text and "min-width: 100%" in text, "弹窗点位区须占满行宽（220px 内放不下开关并排）"
+    assert "flex-wrap: wrap" in text[text.index(".tf-poprow {"):][:120], "点位行须允许换行"
+    assert ":deep(.spin-btn)" in text, "周期行内须微缩 spinner 按键宽度"
