@@ -218,7 +218,6 @@
                     style="width: 88px"
                   />
                   <TimeSpinner v-model="s0.time_of_day" />
-                  <span class="hint">必选</span>
                 </div>
               </div>
               <div class="field-line">
@@ -239,7 +238,6 @@
                     style="width: 88px"
                   />
                   <TimeSpinner v-model="form.due_time" />
-                  <span class="hint">必选</span>
                 </div>
               </div>
               <div class="field-line">
@@ -750,6 +748,16 @@ function applyPeriodicDefaults() {
   if (weekly && form.deadline_weekday == null) form.deadline_weekday = 6
   if (monthly && form.deadline_day_of_month == null) form.deadline_day_of_month = 31
   form.has_deadline = true
+  // 弹窗点位同样按周期形态归一，否则切换周/月后点位行的周几/几号选择器空显
+  form.popup_slots.forEach((p) => {
+    if (weekly) {
+      if (p.weekday == null) p.weekday = 0
+      p.day_of_month = null
+    } else if (monthly) {
+      if (p.day_of_month == null) p.day_of_month = 1
+      p.weekday = null
+    }
+  })
 }
 
 /** 周期开始单点访问器（模板直绑；缺则懒补默认） */
@@ -1882,6 +1890,11 @@ onUnmounted(() => {
   gap: 8px;
   overflow: hidden;
 }
+/* 时间区右栏仅 ~220px：select+spinner(~320px) 须换行堆叠，防右溢被裁 */
+.tf-cycrows .tf-ctl {
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
 .tf-popwrap {
   flex-wrap: wrap;
   align-items: flex-start;
@@ -1891,12 +1904,23 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 6px;
   flex: 1;
-  min-width: 0;
+  min-width: 100%; /* 点位区占满行宽：220px 内并排开关只剩 ~186px，放不下 spinner */
 }
 .tf-poprow {
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+.tf-poprow .tf-x {
+  margin-left: auto;
+}
+.tf-cycrows :deep(.num-input) {
+  width: 44px;
+}
+.tf-cycrows :deep(.spin-btn) {
+  width: 20px;
 }
 
 /* ---- 24h 时间轴 ---- */
