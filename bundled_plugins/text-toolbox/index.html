@@ -91,19 +91,14 @@ label.ck{display:inline-flex;align-items:center;gap:4px;color:var(--text);font-s
 .save-link:hover{text-decoration:underline}
 .dmsm{font-size:12px;color:#8a8a8a;padding-left:20px}
 .mg-work{display:flex;overflow:auto;max-height:78vh;min-height:320px;background:#1A1A1A}
-.mg-inner{display:flex;flex-direction:column;min-width:max(100%,1080px);position:relative;align-items:stretch}
-.mg-col{flex:1;min-width:220px;position:relative;border:1px solid #4A4A4A;
-  display:flex;flex-direction:column}
-.mg-col.lhs{background:#212121}
-.mg-col.rhs{background:#002035}
-.mg-col.drag{border-color:#a3d1ff}
+.mg-inner{display:flex;flex-direction:column;min-width:100%;position:relative;align-items:stretch}
 .mg-viewport{font:13px/19.5px ui-monospace,SFMono-Regular,Consolas,"Courier New",monospace;
-  color:#d5d5d5;padding:4px 0 40vh;min-width:100%;width:max-content}
+  color:#d5d5d5;padding:4px 0 15vh;min-width:100%;width:max-content}
 .mg-row{display:flex;min-height:19.5px}
-.mg-row .ln{flex:none;width:3.2em;text-align:right;padding:0 6px 0 2px;color:#7c7c7c;
+.mg-row .ln{flex:none;box-sizing:border-box;width:48px;text-align:right;padding:0 6px 0 2px;color:#7c7c7c;
   user-select:none;border-right:1px solid #3a3a3a;background:rgba(0,0,0,.18);
   font-size:12px;line-height:19.5px}
-.mg-row pre{margin:0;padding:0 8px;white-space:pre;flex:1;min-height:19.5px}
+.mg-row pre{margin:0;padding:0 8px;white-space:pre-wrap;overflow-wrap:break-word;flex:1;min-height:19.5px}
 .mg-row.pad .ln{background:transparent;border-right-color:transparent}
 .mg-row.a pre{background:#ddeeff;color:#000}
 .mg-row.d pre{background:#FFFCE9;color:#000}
@@ -117,15 +112,19 @@ label.ck{display:inline-flex;align-items:center;gap:4px;color:var(--text);font-s
 .mg-mark-del{color:red;font-weight:400}
 .mg-divider{flex:none;width:28px;position:relative;background:#1A1A1A}
 #mg-canvas{position:absolute;inset:0;display:block}
-/* 输入区常驻双栏（与下方比对视图同栅格对齐），实时比对；resize:both 可手动拉宽拉高 */
-.mg-inputs,.mg-diffrow{display:grid;grid-template-columns:1fr 28px 1fr}
-.mg-tawrap{position:relative;display:flex;min-width:0}
-.mg-ta{display:block;width:100%;min-height:170px;max-height:65vh;background:#161616;color:#d5d5d5;
-  border:1px solid #4A4A4A;outline:none;resize:both;padding:4px 8px;
+/* 融合框：输入与比对结果同一框——结果视图为底衬（.mg-viewport），透明文本 textarea 叠顶编辑；
+   底衬左让位 48px 行号槽 + 8px，textarea padding-left:56px 对齐；两侧 pre-wrap 软换行免横向滚动 */
+.mg-inputs{display:grid;grid-template-columns:1fr 28px 1fr}
+.mg-tawrap{position:relative;min-width:0;height:62vh;min-height:320px;max-height:82vh;
+  resize:vertical;overflow:hidden;border:1px solid #4A4A4A;background:#212121}
+.mg-tawrap.rhs{background:#002035}
+.mg-tawrap:focus-within{border-color:#a3d1ff}
+.mg-tawrap.drag{border-color:#a3d1ff}
+.mg-tawrap .mg-viewport{position:absolute;inset:0;overflow:hidden;width:auto}
+.mg-ta{position:absolute;inset:0;width:100%;height:100%;display:block;background:transparent;
+  color:transparent;caret-color:#d5d5d5;border:none;outline:none;resize:none;
+  padding:4px 8px 15vh 56px;white-space:pre-wrap;overflow-wrap:break-word;
   font:13px/19.5px ui-monospace,SFMono-Regular,Consolas,"Courier New",monospace}
-.mg-ta:focus{border-color:#a3d1ff}
-.mg-col.lhs .mg-ta,.mg-tawrap.lhs .mg-ta{background:#212121}
-.mg-col.rhs .mg-ta,.mg-tawrap.rhs .mg-ta{background:#002035}
 .mg-empty{position:absolute;inset:0;display:flex;align-items:flex-start;
   padding:10px 14px;color:#7c7c7c;font-size:12px;pointer-events:none}
 .mg-foot{display:flex;gap:14px;align-items:center;padding:8px 12px;
@@ -142,7 +141,7 @@ label.ck{display:inline-flex;align-items:center;gap:4px;color:var(--text);font-s
 .jl-h1{font-size:24px;font-weight:700;margin:0 0 4px;color:#FAFAFA}
 .jl-sub{font-size:14px;color:#8A8A8A;margin:0 0 12px}
 .jl .cdn-warn{background:rgba(245,158,11,.1);color:#FF9F0A}
-.jl-editor{display:flex;border-radius:8px;overflow:hidden;background:#1A1A1A;
+.jl-editor{display:flex;height:380px;border-radius:8px;overflow:hidden;background:#1A1A1A;
   border:1px solid #3a3f4b;transition:border-color .15s,box-shadow .15s}
 .jl-editor.valid{border-color:#32D74B;box-shadow:0 0 0 1px #32D74B}
 .jl-editor.invalid{border-color:#FF453A;box-shadow:0 0 0 1px #FF453A}
@@ -151,7 +150,7 @@ label.ck{display:inline-flex;align-items:center;gap:4px;color:var(--text);font-s
 .jl-gutter-in{padding:12px 10px 12px 0;white-space:pre;text-align:right;
   font:12px/21px ui-monospace,SFMono-Regular,Consolas,monospace;color:#8A8A8A}
 .jl-gutter-in .err{color:#FF453A;font-weight:700}
-#json-in{flex:1;min-width:0;height:380px;background:transparent;color:#FAFAFA;
+#json-in{flex:1;min-width:0;align-self:stretch;background:transparent;color:#FAFAFA;
   border:none;outline:none;resize:none;white-space:pre;overflow:auto;
   padding:12px 16px;font:14px/21px ui-monospace,SFMono-Regular,Consolas,"Courier New",monospace}
 #json-in::placeholder{color:#6e6e6e}
@@ -374,22 +373,15 @@ hr.sep{border:none;border-top:1px solid var(--border);margin:14px 0}
   <div class="mg-work"><div class="mg-inner">
     <div class="mg-inputs">
       <div class="mg-tawrap lhs" id="mg-taw-l">
-        <div class="mg-empty" id="mg-empty-l">在此输入您的代码或文本，或直接把文件拖入到框中</div>
-        <textarea class="mg-ta" id="diff-l" spellcheck="false" wrap="off"></textarea>
-      </div>
-      <div class="mg-gap"></div>
-      <div class="mg-tawrap rhs" id="mg-taw-r">
-        <div class="mg-empty" id="mg-empty-r">在此输入您的代码或文本，或直接把文件拖入到框中</div>
-        <textarea class="mg-ta" id="diff-r" spellcheck="false" wrap="off"></textarea>
-      </div>
-    </div>
-    <div class="mg-diffrow">
-      <div class="mg-col lhs" id="mg-col-l">
         <div class="mg-viewport" id="mg-view-l"></div>
+        <div class="mg-empty" id="mg-empty-l">在此输入您的代码或文本，或直接把文件拖入到框中</div>
+        <textarea class="mg-ta" id="diff-l" spellcheck="false"></textarea>
       </div>
       <div class="mg-divider"><canvas id="mg-canvas"></canvas></div>
-      <div class="mg-col rhs" id="mg-col-r">
+      <div class="mg-tawrap rhs" id="mg-taw-r">
         <div class="mg-viewport" id="mg-view-r"></div>
+        <div class="mg-empty" id="mg-empty-r">在此输入您的代码或文本，或直接把文件拖入到框中</div>
+        <textarea class="mg-ta" id="diff-r" spellcheck="false"></textarea>
       </div>
     </div>
   </div></div>
@@ -1687,7 +1679,6 @@ if (typeof globalThis !== 'undefined') globalThis.TT_CORE = TT;
    * 接受即两侧一致、差异消散，输入框同步回显。 */
   const diffState = { accepts: {}, spans: [], big: false, cjk: false, L: '', R: '' };
   const MG = {
-    colL: $('#mg-col-l'), colR: $('#mg-col-r'),
     tawL: $('#mg-taw-l'), tawR: $('#mg-taw-r'),
     viewL: $('#mg-view-l'), viewR: $('#mg-view-r'),
     emptyL: $('#mg-empty-l'), emptyR: $('#mg-empty-r'),
@@ -1858,6 +1849,9 @@ if (typeof globalThis !== 'undefined') globalThis.TT_CORE = TT;
       clearTimeout(diffDeb);
       diffDeb = setTimeout(diffRun, 150);
     });
+    ta.addEventListener('scroll', () => {   // 底衬结果视图跟随融合框滚动
+      (key === 'L' ? MG.viewL : MG.viewR).scrollTop = ta.scrollTop;
+    });
     ta.addEventListener('keydown', e => {      // Tab 缩进两格
       if (e.key === 'Tab') { e.preventDefault(); ta.setRangeText('  ', ta.selectionStart, ta.selectionEnd, 'end'); }
     });
@@ -1870,7 +1864,7 @@ if (typeof globalThis !== 'undefined') globalThis.TT_CORE = TT;
     syncTextareas();
     diffRun();
   }
-  [MG.tawL, MG.tawR, MG.colL, MG.colR].forEach((col, i) => {
+  [MG.tawL, MG.tawR].forEach((col, i) => {
     col.addEventListener('dragover', e => { e.preventDefault(); col.classList.add('drag'); });
     col.addEventListener('dragleave', () => col.classList.remove('drag'));
     col.addEventListener('drop', e => {
