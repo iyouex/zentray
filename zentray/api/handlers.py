@@ -240,6 +240,8 @@ def handle_request(
             return _updates_status()
         if method == "POST" and path == "/api/updates/install":
             return _updates_install()
+        if method == "POST" and path == "/api/updates/restart":
+            return _updates_restart()
 
         if method == "POST" and path == "/api/pomodoro/start":
             return _pomodoro_start(body)
@@ -596,7 +598,16 @@ def _updates_install() -> tuple[int, dict]:
     from zentray.services.updater import UpdaterService
 
     try:
-        return 200, UpdaterService.instance().install_and_restart()
+        return 200, UpdaterService.instance().install()
+    except Exception as e:
+        return 500, {"error": str(e)}
+
+
+def _updates_restart() -> tuple[int, dict]:
+    from zentray.services.updater import UpdaterService
+
+    try:
+        return 200, UpdaterService.instance().restart()
     except Exception as e:
         return 500, {"error": str(e)}
 
