@@ -35,3 +35,13 @@ def test_diff_underlay_sync():
     s = _html()
     assert "MG.viewL : MG.viewR).scrollTop = ta.scrollTop" in s, "底衬结果视图跟随滚动"
     assert ".mg-tawrap .mg-viewport{position:absolute;inset:0;overflow:hidden" in s
+
+
+def test_json_editor_height_on_container():
+    # JSON 编辑器定高须挂在 .jl-editor 容器上：挂 textarea 会让行号槽内容把容器
+    # 撑到全行数高（flex auto 高取最高子项），整个文本框溢出网页（v0.7.20 修复）
+    s = _html()
+    ed = s[s.index(".jl-editor{"):s.index(".jl-editor{") + 90]
+    assert "height:380px" in ed, "定高必须在容器（行号槽才能拉伸到框高）"
+    ta = s[s.index("#json-in{"):s.index("#json-in{") + 60]
+    assert "height:380px" not in ta, "textarea 不得自带定高（改为拉伸填满容器）"
