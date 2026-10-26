@@ -256,11 +256,12 @@ class UpdaterService:
 
     # —— 安装并重启 ——
 
-    def install_and_restart(self) -> dict:
-        """平台分派安装；成功后安排退出（helper 接管等待-替换/重启）。"""
+    def install(self) -> dict:
+        """平台分派安装并武装重启 helper（等 pid 退出即换新重启），但不退出——
+        退出由 restart() 在用户确认后触发；用户暂不确认则下次退出时生效。"""
         with self._lock:
             if self._helper_spawned:
-                return {"restarting": True}  # 重启流程已武装（重复点击/重装同版本不叠加 helper）
+                return {"installed": True}  # 已安装待重启（重复点击不叠加 helper）
             if self._state != "ready" or not self._path:
                 raise RuntimeError("安装包尚未就绪，请先下载")
             self._state = "installing"
@@ -280,6 +281,14 @@ class UpdaterService:
             raise
         with self._lock:
             self._helper_spawned = True  # 重启机制已武装（linux/mac helper、win bat）
+            self._state = "installed"
+        return {"installed": True}
+
+    def restart(self) -> dict:
+        """用户确认后退出当前进程（helper 接管等待-替换/重启）。"""
+        with self._lock:
+            if not self._helper_spawned:
+                raise RuntimeError("尚未安装更新")
         self._quit()
         return {"restarting": True}
 
