@@ -1050,7 +1050,10 @@
                     <a-alert v-if="upd.result && !upd.result.has_update" type="success" class="upd-alert">
                       已是最新版本 v{{ upd.result.version }}
                     </a-alert>
-                    <a-alert v-if="upd.result && upd.result.has_update" type="warning" class="upd-alert">
+                    <a-alert v-if="upd.state === 'installed'" type="success" class="upd-alert">
+                      新版本 v{{ upd.version || '…' }} 已安装，重启后生效
+                    </a-alert>
+                    <a-alert v-if="upd.result && upd.result.has_update && upd.state !== 'installed'" type="warning" class="upd-alert">
                       发现新版本 v{{ upd.result.version }}（{{ (upd.result.asset_size / 1048576).toFixed(1) }}MB）
                       <a :href="upd.result.notes_url" target="_blank" rel="noreferrer" style="margin-left: 8px">查看发布说明</a>
                     </a-alert>
@@ -1072,8 +1075,17 @@
                     >
                       下载更新
                     </a-button>
-                    <a-button v-if="upd.state === 'ready'" type="primary" status="warning" @click="onUpdatesInstall">
+                    <a-button
+                      v-if="upd.state === 'ready'"
+                      type="primary"
+                      status="warning"
+                      :loading="upd.installing"
+                      @click="onUpdatesInstall"
+                    >
                       安装并重启
+                    </a-button>
+                    <a-button v-else-if="upd.state === 'installed'" type="primary" status="warning" @click="onUpdatesInstall">
+                      重启应用
                     </a-button>
                   </div>
                 </div>
@@ -1331,6 +1343,7 @@ import {
   updatesCheck,
   updatesDownload,
   updatesInstall,
+  updatesRestart,
   updatesStatus,
   validatePluginPath,
 } from '@/api/client'
@@ -2079,7 +2092,7 @@ async function onCalendarExport() {
 
 /** —— 软件更新：检查 → 下载（轮询进度）→ 安装并重启 —— */
 const appVersion = ref('')
-const upd = reactive({ checking: false, state: 'idle', progress: 0, error: '', result: null })
+const upd = reactive({ checking: false, state: 'idle', progress: 0, error: '', result: null, installing: false, version: '' })
 let updTimer = null
 
 onBeforeUnmount(() => clearInterval(updTimer))
@@ -2121,16 +2134,38 @@ async function onUpdatesDownload() {
 }
 
 function onUpdatesInstall() {
+  if (upd.state === 'installed') return confirmUpdatesRestart()
   Modal.confirm({
-    title: '安装并重启 ZenTray？',
-    content: '安装完成后应用将自动重启（Linux 会先弹出系统认证窗口）。',
-    okText: '安装并重启',
+    title: '安装新版本 v' + (upd.result?.version || '…') + '？',
+    content: '安装完成后会再次询问是否重启（Linux 会先弹出系统认证窗口）。',
+    okText: '开始安装',
     onOk: async () => {
+      upd.installing = true
       try {
         await updatesInstall()
-        Message.info('正在安装，应用即将重启…')
+        upd.state = 'installed'
+        upd.version = upd.result?.version || ''
+        confirmUpdatesRestart()
       } catch (e) {
         upd.error = e?.response?.data?.error || e?.message || '安装失败'
+      } finally {
+        upd.installing = false
+      }
+    },
+  })
+}
+
+function confirmUpdatesRestart() {
+  Modal.confirm({
+    title: '重启 ZenTray？',
+    content: '新版本已安装完成，确认后应用将退出并自动重启。',
+    okText: '立即重启',
+    onOk: async () => {
+      try {
+        await updatesRestart()
+        Message.info('正在退出并重启…')
+      } catch (e) {
+        upd.error = e?.response?.data?.error || e?.message || '重启失败'
       }
     },
   })
