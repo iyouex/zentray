@@ -197,7 +197,7 @@ def test_install_requires_ready():
     svc = UpdaterService.instance()
     svc._state, svc._path = "idle", ""
     with pytest.raises(RuntimeError, match="尚未就绪"):
-        svc.install_and_restart()
+        svc.install()
 
 
 # —— helper 脚本内容（不真跑） ——
@@ -265,6 +265,27 @@ def test_install_no_double_helper(tmp_path, monkeypatch):
     monkeypatch.setattr(UpdaterService, "_quit", staticmethod(lambda: None))
     monkeypatch.setattr(updater.subprocess, "run", lambda *a, **k: _resp(None))
 
-    assert svc.install_and_restart() == {"restarting": True}
-    assert svc.install_and_restart() == {"restarting": True}
+    assert svc.install() == {"installed": True}
+    assert svc.install() == {"installed": True}
     assert len(spawned) == 1
+
+
+def test_install_then_confirm_restart(tmp_path, monkeypatch):
+    """安装与退出分离：install() 只武装 helper 不退出；restart() 经用户确认后才退出。"""
+    svc = UpdaterService()
+    svc._state = "ready"
+    svc._path = str(tmp_path / "x.deb")
+    quitted = []
+    monkeypatch.setattr(UpdaterService, "_spawn_helper", staticmethod(lambda argv: None))
+    monkeypatch.setattr(UpdaterService, "_quit", staticmethod(lambda: quitted.append(1)))
+    monkeypatch.setattr(updater.subprocess, "run", lambda *a, **k: _resp(None))
+
+    with pytest.raises(RuntimeError, match="尚未安装"):
+        svc.restart()  # 未安装就确认重启 → 拒绝
+
+    assert svc.install() == {"installed": True}
+    assert svc.status()["state"] == "installed"
+    assert quitted == []  # 安装完不得自行退出，等确认
+
+    assert svc.restart() == {"restarting": True}
+    assert quitted == [1]

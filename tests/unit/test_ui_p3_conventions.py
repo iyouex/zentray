@@ -59,3 +59,13 @@ def test_taskform_periodic_rows_fit_column():
     assert ".tf-popslots" in text and "min-width: 100%" in text, "弹窗点位区须占满行宽（220px 内放不下开关并排）"
     assert "flex-wrap: wrap" in text[text.index(".tf-poprow {"):][:120], "点位行须允许换行"
     assert ":deep(.spin-btn)" in text, "周期行内须微缩 spinner 按键宽度"
+
+
+def test_taskform_periodic_abandon_visible():
+    # v0.7.16 起「逾期废弃」行误挂 v-else（一次性专属），周期模板开关不可见（后端链路一直完好）
+    import re
+
+    text = _vue_sources()["TaskForm.vue"]
+    m = re.search(r'<div([^>]*)>\s*<span class="field-k">逾期废弃</span>', text)
+    assert m, "须有「逾期废弃」行"
+    assert "v-if" not in m.group(1) and "v-else" not in m.group(1), "逾期废弃行不得挂条件分支（两模式都要显示）"

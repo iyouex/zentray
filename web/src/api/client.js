@@ -455,3 +455,9 @@ export async function updatesInstall() {
   const { data } = await http.post('/api/updates/install')
   return data
 }
+
+/** 确认重启：退出当前进程，由更新 helper 接管换新并重启 */
+export async function updatesRestart() {
+  const { data } = await http.post('/api/updates/restart')
+  return data
+}

@@ -97,7 +97,7 @@
                     <span class="tf-unit">{{ intervalUnit }}</span>
                   </div>
                 </div>
-                <div v-else class="field-line">
+                <div class="field-line">
                   <span class="field-k">逾期废弃</span>
                   <a-switch v-model="form.auto_abandon_on_overdue" size="small" />
                   <span class="hint">逾期未完成自动废弃</span>
