@@ -97,27 +97,26 @@
                     <span class="tf-unit">{{ intervalUnit }}</span>
                   </div>
                 </div>
+                <div v-if="isPeriodic" class="field-line" :class="{ 'tf-span2': validity === 'until' }">
+                  <span class="field-k">有效期</span>
+                  <div class="tf-ctl">
+                    <a-select v-model="validity" size="small" style="width: 104px">
+                      <a-option value="long">长期有效</a-option>
+                      <a-option value="until">派发至</a-option>
+                    </a-select>
+                    <a-date-picker
+                      v-if="validity === 'until'"
+                      v-model="form.schedule_end_date"
+                      size="small"
+                      style="width: 138px"
+                      value-format="YYYY-MM-DD"
+                    />
+                  </div>
+                </div>
                 <div class="field-line">
                   <span class="field-k">逾期废弃</span>
                   <a-switch v-model="form.auto_abandon_on_overdue" size="small" />
                   <span class="hint">逾期未完成自动废弃</span>
-                </div>
-              </div>
-
-              <div v-if="isPeriodic" class="field-line">
-                <span class="field-k">有效期</span>
-                <div class="tf-ctl">
-                  <a-select v-model="validity" size="small" style="width: 104px">
-                    <a-option value="long">长期有效</a-option>
-                    <a-option value="until">派发至</a-option>
-                  </a-select>
-                  <a-date-picker
-                    v-if="validity === 'until'"
-                    v-model="form.schedule_end_date"
-                    size="small"
-                    style="width: 138px"
-                    value-format="YYYY-MM-DD"
-                  />
                 </div>
               </div>
 
@@ -1668,6 +1667,9 @@ onUnmounted(() => {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
+}
+.tf-span2 {
+  grid-column: 1 / -1; /* 派发至态日期控件超半栏宽，独占一行防溢出 */
 }
 .tf-ctl {
   flex: 1;
