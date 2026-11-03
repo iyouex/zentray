@@ -9,7 +9,7 @@ ZenTray **service** 类型插件：面板 ▶ 启动 → 起本地 Web 服务并
 |------|------|
 | JSON | 照搬 jsonlint.com 设计：单编辑器实时校验（绿/红横幅 + 行列定位 + 源行 `^` 指针 + 行号槽错误行红标）、Prettify⇄Compress（2/4/Tab 缩进）、Copy、Try Fix（jsonrepair CDN，降级内置启发式）、Load Sample、Ctrl+Enter / Ctrl+Shift+F 快捷键、拖文件载入、Valid JSON 统计（大小/键数/深度/对象/数组） |
 | SQL | 格式化（sql-formatter，mysql/hive/spark 方言）、压缩（去注释单行）、简单语法检查（配平+关键字粗检） |
-| 文本比对 | Mergely 深色双栏合并视图（照搬 jq22/textDifference 设计）：点栏即编辑、失焦自动重比对；中缝连线 + 每差异块 ◀/▶ 合并箭头；行内词高亮（CJK 逐字/西文按词，可切全逐字），拖拽读文件（路径标签显示文件名），ignore witespaces/忽略大小写，两侧 保存save 下载（含已接受合并），相似度（字符级 LCS / max 字符数） |
+| 文本比对 | Mergely 深色双栏合并视图（照搬 jq22/textDifference 设计）：输入即比对（融合框：输入与结果同框呈现，软换行自适应宽免横向拖动）；中缝连线 + 每差异块 ◀/▶ 合并箭头；行内词高亮（CJK 逐字/西文按词，可切全逐字），拖拽读文件（路径标签显示文件名），ignore witespaces/忽略大小写，两侧 保存save 下载（含已接受合并），相似度（字符级 LCS / max 字符数） |
 | 时间工具 | 单标签内二级页：**万年历**（公历+农历 1900–2100 码表、干支生肖、节气 ±1 分钟、节日、国务院休/班角标 2020–2026；点日看详情卡，右侧列出**当日任务**——截止日命中或提醒槽命中，读 `/api/tasks`）；**三合一页**（时间戳⇄时间：方向按钮切换，秒/毫秒下拉选择或位数自适应识别，本地/ISO/UTC/相对/星期·ISO 周/年积日；日期计算：加减（月末 clamp）+ 时间差（自然 Y年M月D日 + 合计 + 工作日）；格式化：25 种格式逐行复制，本地/UTC 切换）。所有日期时间输入为**分段式**：每单位一格（YYYY·MM·DD·HH·mm·ss），输满自动右移到下一格，退格回退，粘贴完整时间串自动分布 |
 | 随机字符串 | 长度/字符集勾选/排除易混字符/前缀，crypto.getRandomValues + 拒绝采样 |
 | 哈希/编码/加密 | MD5、Unicode \uXXXX、URL 百分号、AES-256-GCM（WebCrypto，PBKDF2 派生，base64 含 salt+IV） |
@@ -59,8 +59,8 @@ python3 tests/cross_check.py && node tests/frontend_core_test.mjs --verify-py
 - 「接受替换」按差异块独立应用（无冲突检测的三方合并 YAGNI）；相似度超 2500 字符/侧
   降级为行级口径（偏保守）。
 - 比对组件复刻 jq22/textDifference 的 Mergely 视觉与交互，但无 CodeMirror/jQuery
-  （约束：不加新 CDN）：编辑态为「点栏进入 textarea、失焦重比对」的近似，而非
-  CodeMirror 的边打字边高亮；站点 path 标签的 40px 字号按面板比例缩为 13px。
+  （约束：不加新 CDN）：编辑层为透明 textarea 叠顶结果底衬，边打字边
+  （150ms 防抖）重比对，软换行自适应面板宽；站点 path 标签的 40px 字号按面板比例缩为 13px。
 - JSON 页签复刻 jsonlint.com 深色主题（取色自站点 CSS：#0D0D0D/#1A1A1A/#2D2D2D 底、
   #0A84FF 主按钮、rgba(16,185,129,.1)/rgba(239,68,68,.1) 状态横幅、#32D74B/#FF453A
   编辑器描边环），但无 Monaco/Inter/JetBrains Mono（约束：不加新 CDN）：编辑器为
