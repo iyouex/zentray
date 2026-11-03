@@ -3,7 +3,7 @@ import time
 
 from PySide6.QtCore import QThread, Signal
 
-from zentray.core.periodic import build_due_instance
+from zentray.core.periodic import build_due_instance, period_key
 from zentray.core.repository import PeriodicTemplateRepository, TaskRepository
 
 
@@ -37,12 +37,41 @@ class WatcherWorker(QThread):
         today_str = today.strftime("%Y-%m-%d")
         overdue_emits = []
         abandon_ids = []
+        # 旧模板可能无截止规则 → 实例 deadline 空；按周期桶翻篇判定逾期（与派发同构）
+        tmpl_map = {}
+        if self.template_repo is not None:
+            try:
+                tmpl_map = {t.template_id: t for t in self.template_repo.find_all()}
+            except Exception:
+                tmpl_map = {}  # 扫描失败按无模板处理（保守不动）
 
         def mutate_tasks(tasks):
             changed = False
             remaining = []
             for task in tasks:
                 if not task.deadline:
+                    # 无截止的开「逾期作废」周期实例：周期桶翻篇（派发日与今天
+                    # 不在同桶）即视为被后续周期取代，作废归档
+                    if (
+                        getattr(task, "auto_abandon_on_overdue", False)
+                        and getattr(task, "task_type", "") == "periodic_instance"
+                    ):
+                        tmpl = tmpl_map.get(getattr(task, "template_id", None))
+                        created = str(getattr(task, "created_at", "") or "")[:10]
+                        if tmpl is not None and created:
+                            try:
+                                spawned = datetime.date.fromisoformat(created)
+                            except ValueError:
+                                remaining.append(task)
+                                continue
+                            n = max(1, int(getattr(tmpl, "interval", 1) or 1))
+                            rolled = period_key(
+                                tmpl.periodicity, spawned, n
+                            ) != period_key(tmpl.periodicity, today, n)
+                            if rolled:
+                                abandon_ids.append(task)
+                                changed = True
+                                continue
                     remaining.append(task)
                     continue
                 try:
