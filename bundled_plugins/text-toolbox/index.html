@@ -4,10 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>文本工具箱</title>
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://unpkg.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://unpkg.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <!-- CDN 组件（可选增强；加载失败自动降级并提示） -->
 <script src="https://cdn.jsdelivr.net/npm/jsonrepair@3.13.1/lib/umd/jsonrepair.min.js" onerror="window.__cdnJsonrepairFail=true" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/sql-formatter/15.9.0/sql-formatter.min.js" onerror="window.__cdnSqlFormatterFail=true" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<!-- CodeMirror 5（可选增强：大文档视口虚拟渲染 + 语法高亮；失败降级原 textarea UI） -->
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js" onerror="window.__cmFail=true" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/javascript/javascript.min.js" onerror="window.__cmFail=true" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/sql/sql.min.js" onerror="window.__cmFail=true" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/theme/material-darker.min.css" onerror="window.__cmFail=true">
 <style>
 :root{
   --bg:#f2f3f5; --card:#ffffff; --card2:#f7f8fa;
@@ -161,6 +166,11 @@ label.ck{display:inline-flex;align-items:center;gap:4px;color:var(--text);font-s
   border:none;outline:none;resize:none;white-space:pre;overflow:auto;
   padding:12px 16px;font:14px/21px ui-monospace,SFMono-Regular,Consolas,"Courier New",monospace}
 #json-in::placeholder{color:#6e6e6e}
+/* CodeMirror 增强（has-cm：CDN 可用时替换 textarea 展示；textarea 仍为值载体） */
+.jl-editor.has-cm .jl-gutter, .jl-editor.has-cm #json-in{display:none}
+.jl-cm{flex:1;min-width:0;align-self:stretch}
+.jl-cm .CodeMirror{height:100%;font:13px/1.5 ui-monospace,SFMono-Regular,Consolas,"Courier New",monospace}
+.CodeMirror .jl-err-bg{background:rgba(255,70,70,.18)}
 .jl-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:12px}
 .jl-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;
   border-radius:8px;padding:8px 16px;font-size:14px;line-height:20px;font-weight:600;
@@ -312,6 +322,7 @@ hr.sep{border:none;border-top:1px solid var(--border);margin:14px 0}
   <div class="jl-editor" id="jl-editor">
     <div class="jl-gutter"><div class="jl-gutter-in" id="jl-gutter-in">1</div></div>
     <textarea id="json-in" spellcheck="false" wrap="off" placeholder="Click here to start editing JSON..."></textarea>
+    <div class="jl-cm" id="json-cm" hidden></div>
   </div>
   <div class="jl-bar">
     <button class="jl-btn jl-btn-primary" id="json-validate" title="Ctrl/Cmd + Enter">
@@ -1526,11 +1537,18 @@ if (typeof globalThis !== 'undefined') globalThis.TT_CORE = TT;
     'tool-sql': SAMPLES['tool-sql'],
   };
   const JL = {
-    ta: $('#json-in'), editor: $('#jl-editor'), gutter: $('#jl-gutter-in'),
+    ta: $('#json-in'), editor: $('#jl-editor'), gutter: $('#jl-gutter-in'), cmEl: $('#json-cm'),
     prettify: $('#json-prettify'), indent: $('#json-indent'), copy: $('#json-copy'),
     fix: $('#json-tryfix'), sample: $('#json-sample'), tip: $('#json-tip'),
     status: $('#json-status'),
   };
+  let jlCM = null, jlCmErrLine = null;  // CodeMirror 实例（CDN 失败为 null，全走 textarea）
+  // 所有「程序写入 JSON 文本」统一走 jlSet：textarea 永远是值载体（copy/校验等读者零改动），
+  // CM 存在时同步回灌实例
+  function jlSet(v) {
+    JL.ta.value = v;
+    if (jlCM && jlCM.getValue() !== v) jlCM.setValue(v);
+  }
   // 示例与 jsonlint.com 首页 Load Sample 完全一致
   const JL_SAMPLE = '{\n  "name": "John Doe",\n  "email": "john@example.com",\n  "age": 30,\n  "active": true,\n  "roles": ["admin", "user"],\n  "address": {\n    "street": "123 Main St",\n    "city": "New York",\n    "country": "USA"\n  },\n  "projects": [\n    {"id": 1, "name": "Website Redesign"},\n    {"id": 2, "name": "Mobile App"}\n  ]\n}';
   const JL_SVG = {
@@ -1587,6 +1605,19 @@ if (typeof globalThis !== 'undefined') globalThis.TT_CORE = TT;
         (e.line ? `<span class="jl-err-pos">line ${e.line}, col ${e.col}</span>` : '') +
         `</div>${body}<p class="hint">${hint}</p></div></div></div>`;
     } else JL.status.innerHTML = '';
+    // CM 错误行底色（textarea 路径行号列红标已在上方，双 UI 一致）
+    if (jlCM) {
+      if (jlCmErrLine != null) {
+        try { jlCM.removeLineClass(jlCmErrLine, 'background', 'jl-err-bg'); } catch (e) {}
+        jlCmErrLine = null;
+      }
+      if (jlState === 'invalid' && jlErr && jlErr.line) {
+        const li = jlErr.line - 1;
+        if (li >= 0 && li < jlCM.lineCount()) {
+          try { jlCM.addLineClass(li, 'background', 'jl-err-bg'); jlCmErrLine = li; } catch (e) {}
+        }
+      }
+    }
   }
   function jlValidate() {
     jlSrc = JL.ta.value;
@@ -1601,15 +1632,15 @@ if (typeof globalThis !== 'undefined') globalThis.TT_CORE = TT;
     if (jlState !== 'valid') return;
     const v = JSON.parse(JL.ta.value);   // 刚校验过，必成功
     const ind = JL.indent.value;
-    JL.ta.value = jlIsPretty(JL.ta.value)
+    jlSet(jlIsPretty(JL.ta.value)
       ? JSON.stringify(v)                                                    // Compress
-      : JSON.stringify(v, null, ind === 'tab' ? '\t' : parseInt(ind, 10));   // Prettify
+      : JSON.stringify(v, null, ind === 'tab' ? '\t' : parseInt(ind, 10)));  // Prettify
     jlValidate();
   }
   JL.ta.addEventListener('input', jlValidate);
   JL.ta.addEventListener('scroll', () => { JL.gutter.style.transform = `translateY(${-JL.ta.scrollTop}px)`; });
   $('#json-validate').addEventListener('click', jlValidate);
-  $('#json-clear').addEventListener('click', () => { JL.ta.value = ''; jlValidate(); JL.ta.focus(); });
+  $('#json-clear').addEventListener('click', () => { jlSet(''); jlValidate(); (jlCM || JL.ta).focus(); });
   JL.prettify.addEventListener('click', jlPrettify);
   JL.copy.addEventListener('click', async () => {
     const txt = JL.ta.value;
@@ -1628,16 +1659,16 @@ if (typeof globalThis !== 'undefined') globalThis.TT_CORE = TT;
     setTimeout(() => { JL.copy.textContent = 'Copy'; }, 2000);
   });
   JL.fix.addEventListener('click', () => {
-    JL.ta.value = T.jsonRepairBest(JL.ta.value).text;
+    jlSet(T.jsonRepairBest(JL.ta.value).text);
     jlValidate();
   });
-  JL.sample.addEventListener('click', () => { JL.ta.value = JL_SAMPLE; jlValidate(); });
+  JL.sample.addEventListener('click', () => { jlSet(JL_SAMPLE); jlValidate(); });
   // 拖拽文件载入（对齐站点 onDrop）
   JL.editor.addEventListener('dragover', e => e.preventDefault());
   JL.editor.addEventListener('drop', e => {
     e.preventDefault();
     const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-    if (f) f.text().then(t => { JL.ta.value = t; jlValidate(); });
+    if (f) f.text().then(t => { jlSet(t); jlValidate(); });
   });
   // 快捷键：Ctrl/Cmd+Enter 校验 · Ctrl/Cmd+Shift+F 格式化（仅 JSON 页签激活时）
   document.addEventListener('keydown', e => {
@@ -1649,6 +1680,25 @@ if (typeof globalThis !== 'undefined') globalThis.TT_CORE = TT;
   if (window.__cdnJsonrepairFail || typeof JSONRepair === 'undefined')
     $('#json-cdn-warn').classList.add('show');
   jlValidate();
+  // CodeMirror 增强（CDN 可用才启用；textarea 隐藏但仍是值载体与降级路径）
+  if (window.CodeMirror && CodeMirror.modes && CodeMirror.modes.javascript && JL.cmEl) {
+    JL.cmEl.hidden = false;
+    JL.editor.classList.add('has-cm');
+    jlCM = CodeMirror(JL.cmEl, {
+      value: JL.ta.value, mode: 'application/json', theme: 'material-darker',
+      lineNumbers: true, indentUnit: 2, tabSize: 2, lineWrapping: false,
+      extraKeys: {
+        'Ctrl-Enter': () => jlValidate(), 'Cmd-Enter': () => jlValidate(),
+        'Shift-Ctrl-F': () => jlPrettify(), 'Cmd-Shift-F': () => jlPrettify(),
+      },
+    });
+    jlCM.on('change', () => {
+      const v = jlCM.getValue();
+      if (JL.ta.value !== v) JL.ta.value = v;
+      jlValidate();
+    });
+    jlValidate();  // 渲染一次错误行底色
+  }
 
   /* ---------------- SQL ---------------- */
   $('#sql-format').addEventListener('click', () => {

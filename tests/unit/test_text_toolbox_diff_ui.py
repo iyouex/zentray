@@ -54,3 +54,15 @@ def test_pane_height_system():
     s = _html()
     assert "height:clamp(220px, 42vh, 64vh)" in s, "SQL/AES 编辑框须视口伸缩"
     assert ".out-inline, .msg, .kv{max-height:40vh;overflow:auto}" in s, "输出区须钳制内滚"
+
+
+def test_json_codemirror_enhancement_with_fallback():
+    # CodeMirror 增强：CDN 标签（含 mode）+ has-cm 切换 CSS + jlSet 统一写入 +
+    # window.CodeMirror 守卫（CDN 失败 → 原 textarea+行号 UI 零差异）
+    s = _html()
+    assert "codemirror@5.65.16/lib/codemirror.min.js" in s
+    assert "codemirror@5.65.16/mode/javascript/javascript.min.js" in s
+    assert ".jl-editor.has-cm .jl-gutter, .jl-editor.has-cm #json-in{display:none}" in s
+    assert "function jlSet(v)" in s, "程序写入须统一走 jlSet（textarea 恒为值载体）"
+    assert "CodeMirror.modes.javascript && JL.cmEl" in s, "CDN 失败不得启用 CM"
+    assert s.count("jlSet(") >= 6, "prettify/clear/fix/sample/drop 五写入方 + 定义"
