@@ -6,12 +6,12 @@
 <title>文本工具箱</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://unpkg.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <!-- CDN 组件（可选增强；加载失败自动降级并提示） -->
-<script src="https://cdn.jsdelivr.net/npm/jsonrepair@3.13.1/lib/umd/jsonrepair.min.js" onerror="window.__cdnJsonrepairFail=true" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/sql-formatter/15.9.0/sql-formatter.min.js" onerror="window.__cdnSqlFormatterFail=true" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsonrepair@3.13.1/lib/umd/jsonrepair.min.js" onerror="window.__cdnJsonrepairFail=true" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sql-formatter/15.9.0/sql-formatter.min.js" onerror="window.__cdnSqlFormatterFail=true" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
 <!-- CodeMirror 5（可选增强：大文档视口虚拟渲染 + 语法高亮；失败降级原 textarea UI） -->
-<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js" onerror="window.__cmFail=true" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/javascript/javascript.min.js" onerror="window.__cmFail=true" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/sql/sql.min.js" onerror="window.__cmFail=true" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js" onerror="window.__cmFail=true" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/javascript/javascript.min.js" onerror="window.__cmFail=true" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/sql/sql.min.js" onerror="window.__cmFail=true" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/theme/material-darker.min.css" onerror="window.__cmFail=true">
 <style>
 :root{
@@ -1730,11 +1730,14 @@ if (typeof globalThis !== 'undefined') globalThis.TT_CORE = TT;
     if (mod && e.key === 'Enter') { e.preventDefault(); jlValidate(); }
     else if (mod && e.shiftKey && (e.key === 'F' || e.key === 'f')) { e.preventDefault(); jlPrettify(); }
   });
-  if (window.__cdnJsonrepairFail || typeof JSONRepair === 'undefined')
+  if (window.__cdnJsonrepairFail)
     $('#json-cdn-warn').classList.add('show');
   jlValidate();
-  // CodeMirror 增强（CDN 可用才启用；textarea 隐藏但仍是值载体与降级路径）
-  if (window.CodeMirror && CodeMirror.modes && CodeMirror.modes.javascript && JL.cmEl) {
+  // CodeMirror 增强（CDN 可用才启用；textarea 隐藏但仍是值载体与降级路径）。
+  // CDN 脚本 defer → 主内联脚本先执行，探测启用须挂 DOMContentLoaded（此时 defer 脚本已就绪）
+  const jlCmInit = () => {
+    if (typeof JSONRepair === 'undefined') $('#json-cdn-warn').classList.add('show');
+    if (window.CodeMirror && CodeMirror.modes && CodeMirror.modes.javascript && JL.cmEl) {
     JL.cmEl.hidden = false;
     JL.editor.classList.add('has-cm');
     jlCM = CodeMirror(JL.cmEl, {
@@ -1751,7 +1754,10 @@ if (typeof globalThis !== 'undefined') globalThis.TT_CORE = TT;
       jlValidate();
     });
     jlValidate();  // 渲染一次错误行底色
-  }
+    }
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', jlCmInit);
+  else jlCmInit();
 
   /* ---------------- SQL ---------------- */
   let sqlCmIn = null, sqlCmOut = null;  // CM 增强（CDN 失败为 null）
@@ -1785,31 +1791,36 @@ if (typeof globalThis !== 'undefined') globalThis.TT_CORE = TT;
     if (!issues.length) return msg(sec, '✓ 未发现明显问题（括号/引号配平、关键字拼写粗检；非全量语法校验）', 'ok');
     msg(sec, '⚠ 发现 ' + issues.length + ' 处疑似问题（非全量校验）：\n' + issues.join('\n'), 'warn');
   });
-  if (window.__cdnSqlFormatterFail || typeof sqlFormatter === 'undefined')
-    $('#sql-cdn-warn').classList.add('show');
-  // SQL 编辑器 CM 增强（textarea 恒为值载体；外部写入经 input 事件回灌）
-  if (window.CodeMirror && CodeMirror.modes && CodeMirror.modes.sql) {
-    const mk = (el, ta, extra) => {
-      el.hidden = false;
-      el.parentElement.classList.add('has-cm');
-      return CodeMirror(el, Object.assign({
-        value: ta.value, mode: 'sql', theme: 'material-darker',
-        lineNumbers: true, lineWrapping: true,
-      }, extra || {}));
-    };
-    sqlCmIn = mk($('#sql-cm-in'), $('#sql-in'));
-    sqlCmIn.on('change', () => {
-      const v = sqlCmIn.getValue();
-      if ($('#sql-in').value !== v) $('#sql-in').value = v;
-    });
-    $('#sql-in').addEventListener('input', () => {
-      if (sqlCmIn && sqlCmIn.getValue() !== $('#sql-in').value) sqlCmIn.setValue($('#sql-in').value);
-    });
-    sqlCmOut = mk($('#sql-cm-out'), $('#sql-out'), { readOnly: true });
-    $('#sql-out').addEventListener('input', () => {
-      if (sqlCmOut && sqlCmOut.getValue() !== $('#sql-out').value) sqlCmOut.setValue($('#sql-out').value);
-    });
-  }
+  // CDN defer：警告判断与 CM 启用一并挂 DOMContentLoaded（此时 defer 脚本已就绪）
+  const sqlCmInit = () => {
+    if (window.__cdnSqlFormatterFail || typeof sqlFormatter === 'undefined')
+      $('#sql-cdn-warn').classList.add('show');
+    // SQL 编辑器 CM 增强（textarea 恒为值载体；外部写入经 input 事件回灌）
+    if (window.CodeMirror && CodeMirror.modes && CodeMirror.modes.sql) {
+      const mk = (el, ta, extra) => {
+        el.hidden = false;
+        el.parentElement.classList.add('has-cm');
+        return CodeMirror(el, Object.assign({
+          value: ta.value, mode: 'sql', theme: 'material-darker',
+          lineNumbers: true, lineWrapping: true,
+        }, extra || {}));
+      };
+      sqlCmIn = mk($('#sql-cm-in'), $('#sql-in'));
+      sqlCmIn.on('change', () => {
+        const v = sqlCmIn.getValue();
+        if ($('#sql-in').value !== v) $('#sql-in').value = v;
+      });
+      $('#sql-in').addEventListener('input', () => {
+        if (sqlCmIn && sqlCmIn.getValue() !== $('#sql-in').value) sqlCmIn.setValue($('#sql-in').value);
+      });
+      sqlCmOut = mk($('#sql-cm-out'), $('#sql-out'), { readOnly: true });
+      $('#sql-out').addEventListener('input', () => {
+        if (sqlCmOut && sqlCmOut.getValue() !== $('#sql-out').value) sqlCmOut.setValue($('#sql-out').value);
+      });
+    }
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', sqlCmInit);
+  else sqlCmInit();
 
   /* ---------------- diff：照搬 jq22/textDifference（Mergely 深色双栏合并视图） ----------------
    * 形态：上方常驻双输入框（输入即实时比对，防抖 150ms，无需失焦），下方差异渲染；
