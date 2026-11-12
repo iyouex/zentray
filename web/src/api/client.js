@@ -432,6 +432,12 @@ export async function deletePlugin(id) {
   return data
 }
 
+/** 覆盖副本让位：备份用户副本到 plugins-disabled，采用同名内置插件 */
+export async function yieldPluginToBundled(id) {
+  const { data } = await http.post(`/api/plugins/${id}/yield-to-bundled`)
+  return data
+}
+
 /** 检查 GitHub Release 新版本（代理取设置 update.proxy） */
 export async function updatesCheck() {
   const { data } = await http.get('/api/updates/check')
