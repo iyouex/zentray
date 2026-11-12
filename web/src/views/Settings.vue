@@ -792,9 +792,22 @@
                       </a-tag>
                       <a-tag v-if="p.category" size="small" color="cyan">{{ p.category }}</a-tag>
                       <a-tag v-if="p.write_back" size="small" color="purple">结果写回任务</a-tag>
+                      <a-tag v-if="p.bundled_update_available" size="small" color="orangered">内置已更新</a-tag>
+                      <a-tag v-else-if="p.bundled_shadow" size="small">覆盖副本</a-tag>
                       <div class="plug-actions">
                         <a-button size="mini" type="text" @click.stop="opsDocPlugin = p">说明</a-button>
                         <a-button size="mini" type="text" :disabled="!p.params?.length" @click="toggleOpsEdit(p)">参数预设</a-button>
+                        <a-popconfirm
+                          v-if="p.bundled_shadow"
+                          :content="p.bundled_update_available
+                            ? `内置版本已更新，当前使用的是旧覆盖副本。让位更新？副本将备份到 plugins-disabled 后采用内置新版。`
+                            : `当前使用用户目录的覆盖副本（遮蔽同名内置插件）。改用内置版？副本将备份到 plugins-disabled，参数预设保留。`"
+                          ok-text="让位更新"
+                          position="tr"
+                          @ok="onOpsYield(p)"
+                        >
+                          <a-button size="mini" type="text" status="warning">{{ p.bundled_update_available ? '让位更新' : '改用内置版' }}</a-button>
+                        </a-popconfirm>
                         <a-button size="mini" type="text" @click="toggleOpsEdit(p)">编辑</a-button>
                         <a-popconfirm
                           :content="p.source === 'bundled'
@@ -1340,6 +1353,7 @@ import {
   saveSettings,
   setAutostart,
   updatePlugin,
+  yieldPluginToBundled,
   updatesCheck,
   updatesDownload,
   updatesInstall,
@@ -1621,6 +1635,17 @@ async function onOpsDelete(p) {
     Message.success('已删除')
   } catch (e) {
     Message.error(e?.response?.data?.error || e?.message || '删除失败')
+  }
+}
+
+async function onOpsYield(p) {
+  try {
+    const data = await yieldPluginToBundled(p.id)
+    applyOpsList(data.plugins)
+    delete opsEditOpen[p.id]
+    Message.success(`已采用内置版，副本备份至 ${data.backup}`)
+  } catch (e) {
+    Message.error(e?.response?.data?.error || e?.message || '让位失败')
   }
 }
 

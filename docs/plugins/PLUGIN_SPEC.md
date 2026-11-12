@@ -232,7 +232,10 @@ python scripts/validate_plugin.py path/to/plugin
 
 - v2 为**单一总开关**：设置 → 插件 → 启用后，内置与用户目录恒扫描（无分项加载开关）。  
 - 校验失败：不进菜单，在设置页插件列表「校验失败」区展示。  
-- **同 `id`：用户插件覆盖内置**（并打日志）。
+- **同 `id`：用户插件覆盖内置**（并打日志）。编辑示例插件产生的覆盖副本带
+  `.zentray-origin.json` 来源标记（记录复制时的应用版本）；应用升级后副本遮蔽了更新的内置版时，
+  设置页显示「内置已更新」并提供**让位更新**（副本整体备份到 `plugins-disabled/<id>-yielded-<时间戳>/`
+  后内置接管，`POST /api/plugins/<id>/yield-to-bundled`）。
 - 分发：设置页「导入插件」支持 zip 包 / 目录两种来源（均先预览校验、通过后才能安装；
   zip 含 zip-slip 防护与 manifest 校验，安装时记录 `installed_at` 供列表按更新时间排序）。
 

@@ -9,8 +9,11 @@ from __future__ import annotations
 
 import datetime
 import uuid
+from contextlib import nullcontext
 from typing import List, Optional, Union
 
+from zentray.core.categories import is_uuid_like
+from zentray.core.file_io import path_lock
 from zentray.core.models import PeriodicTemplate, Task
 from zentray.core.repository import PeriodicTemplateRepository, TaskRepository
 from zentray.core.scheduler import Scheduler
@@ -30,6 +33,20 @@ class TaskService:
         self.scheduler = scheduler
         # 启动时立即加载已有任务
         self._refresh_scheduler()
+
+    # ---------- 写互斥（D4）----------
+    # HTTP/watcher/提醒三线程共写同一 JSON 文件：RMW（find_all→改→save_all）
+    # 必须整体持锁，否则交错执行互相覆盖（丢任务/丢模板）。path_lock 按文件路径
+    # 共享且可重入，与仓库层 save_all 内建锁同把。测试 fake 仓库无文件属性时
+    # 用 nullcontext 兜底（单线程测试无竞争）。
+
+    def _task_write(self):
+        p = getattr(self.task_repo, "active_file", None)
+        return path_lock(p) if p is not None else nullcontext()
+
+    def _template_write(self):
+        p = getattr(self.template_repo, "filepath", None)
+        return path_lock(p) if p is not None else nullcontext()
 
     # ==========================================
     # 查询方法
@@ -113,9 +130,10 @@ class TaskService:
         clean = self._normalize_reminder_fields(clean)
         clean["subtasks"] = self._normalize_subtasks(clean.get("subtasks"))
         task = Task.from_dict(clean)
-        tasks = self.task_repo.find_all()
-        tasks.append(task)
-        self.task_repo.save_all(tasks)
+        with self._task_write():
+            tasks = self.task_repo.find_all()
+            tasks.append(task)
+            self.task_repo.save_all(tasks)
         self._refresh_scheduler()
         try:
             from zentray.services.activity_log import log_event
@@ -135,17 +153,18 @@ class TaskService:
     def create_template(self, data: dict) -> PeriodicTemplate:
         """创建周期任务模板，并立即生成当前周期实例（若尚未生成）。"""
         tmpl = self._template_from_data(data)
-        templates = self.template_repo.find_all()
-        templates.append(tmpl)
-        self.template_repo.save_all(templates)
+        with self._template_write():
+            templates = self.template_repo.find_all()
+            templates.append(tmpl)
+            self.template_repo.save_all(templates)
 
-        self._spawn_template_instance_if_needed(tmpl)
-        templates = self.template_repo.find_all()
-        for i, t in enumerate(templates):
-            if t.template_id == tmpl.template_id:
-                templates[i] = tmpl
-                break
-        self.template_repo.save_all(templates)
+            self._spawn_template_instance_if_needed(tmpl)
+            templates = self.template_repo.find_all()
+            for i, t in enumerate(templates):
+                if t.template_id == tmpl.template_id:
+                    templates[i] = tmpl
+                    break
+            self.template_repo.save_all(templates)
         self._refresh_scheduler()
         self._refresh_calendar()
         return tmpl
@@ -154,38 +173,40 @@ class TaskService:
         self, template_id: str, data: dict
     ) -> Optional[PeriodicTemplate]:
         """更新周期模板（不强制立刻改历史实例）。"""
-        templates = self.template_repo.find_all()
-        for i, t in enumerate(templates):
-            if t.template_id == template_id:
-                merged = {**t.to_dict(), **data, "template_id": template_id}
-                # base_title 兼容 title
-                if data.get("title") and not data.get("base_title"):
-                    merged["base_title"] = data["title"]
-                tmpl = self._template_from_data(merged)
-                tmpl.template_id = template_id
-                tmpl.last_generated_period = t.last_generated_period
-                templates[i] = tmpl
-                self.template_repo.save_all(templates)
-                self._spawn_template_instance_if_needed(tmpl)
-                # 回写 last_generated
-                templates = self.template_repo.find_all()
-                for j, tt in enumerate(templates):
-                    if tt.template_id == template_id:
-                        templates[j] = tmpl
-                        break
-                self.template_repo.save_all(templates)
-                self._refresh_scheduler()
-                self._refresh_calendar()
-                return tmpl
-        return None
+        with self._template_write():
+            templates = self.template_repo.find_all()
+            for i, t in enumerate(templates):
+                if t.template_id == template_id:
+                    merged = {**t.to_dict(), **data, "template_id": template_id}
+                    # base_title 兼容 title
+                    if data.get("title") and not data.get("base_title"):
+                        merged["base_title"] = data["title"]
+                    tmpl = self._template_from_data(merged)
+                    tmpl.template_id = template_id
+                    tmpl.last_generated_period = t.last_generated_period
+                    templates[i] = tmpl
+                    self.template_repo.save_all(templates)
+                    self._spawn_template_instance_if_needed(tmpl)
+                    # 回写 last_generated
+                    templates = self.template_repo.find_all()
+                    for j, tt in enumerate(templates):
+                        if tt.template_id == template_id:
+                            templates[j] = tmpl
+                            break
+                    self.template_repo.save_all(templates)
+                    self._refresh_scheduler()
+                    self._refresh_calendar()
+                    return tmpl
+            return None
 
     def delete_template(self, template_id: str) -> bool:
-        templates = [
-            t for t in self.template_repo.find_all() if t.template_id != template_id
-        ]
-        before = len(self.template_repo.find_all())
-        self.template_repo.save_all(templates)
-        changed = len(templates) < before
+        with self._template_write():
+            templates = [
+                t for t in self.template_repo.find_all() if t.template_id != template_id
+            ]
+            before = len(self.template_repo.find_all())
+            self.template_repo.save_all(templates)
+            changed = len(templates) < before
         if changed:
             self._refresh_calendar()
         return changed
@@ -203,12 +224,13 @@ class TaskService:
         tmpl.last_generated_period = skip_watermark_key(
             tmpl, datetime.date.today(), max(1, int(count))
         )
-        templates = self.template_repo.find_all()
-        for i, t in enumerate(templates):
-            if t.template_id == template_id:
-                templates[i] = tmpl
-                break
-        self.template_repo.save_all(templates)
+        with self._template_write():
+            templates = self.template_repo.find_all()
+            for i, t in enumerate(templates):
+                if t.template_id == template_id:
+                    templates[i] = tmpl
+                    break
+            self.template_repo.save_all(templates)
         self._refresh_scheduler()
         self._refresh_calendar()
         return tmpl
@@ -246,29 +268,30 @@ class TaskService:
         if "subtasks" in task_data:
             task_data["subtasks"] = self._normalize_subtasks(task_data.get("subtasks"))
 
-        tasks = self.task_repo.find_all()
-        for i, t in enumerate(tasks):
-            if t.id == task_id:
-                base = t.to_dict()
-                updated = Task.from_dict({**base, **task_data, "id": task_id})
-                tasks[i] = updated
-                self.task_repo.save_all(tasks)
-                self._refresh_scheduler()
-                try:
-                    from zentray.services.activity_log import log_event
+        with self._task_write():
+            tasks = self.task_repo.find_all()
+            for i, t in enumerate(tasks):
+                if t.id == task_id:
+                    base = t.to_dict()
+                    updated = Task.from_dict({**base, **task_data, "id": task_id})
+                    tasks[i] = updated
+                    self.task_repo.save_all(tasks)
+                    self._refresh_scheduler()
+                    try:
+                        from zentray.services.activity_log import log_event
 
-                    log_event(
-                        "task",
-                        "update",
-                        updated.title,
-                        "编辑任务",
-                        meta={"id": task_id},
-                    )
-                except Exception:
-                    pass
-                self._after_task_change(updated, "upsert")
-                return updated
-        return None
+                        log_event(
+                            "task",
+                            "update",
+                            updated.title,
+                            "编辑任务",
+                            meta={"id": task_id},
+                        )
+                    except Exception:
+                        pass
+                    self._after_task_change(updated, "upsert")
+                    return updated
+            return None
 
     # ==========================================
     # 任务状态操作
@@ -460,9 +483,10 @@ class TaskService:
         new_task = build_due_instance(tmpl, datetime.date.today())
         if new_task is None:
             return
-        tasks = self.task_repo.find_all()
-        tasks.append(new_task)
-        self.task_repo.save_all(tasks)
+        with self._task_write():
+            tasks = self.task_repo.find_all()
+            tasks.append(new_task)
+            self.task_repo.save_all(tasks)
 
     def _template_from_data(self, data: dict) -> PeriodicTemplate:
         from zentray.core.reminder import TaskReminder, normalize_due_time
@@ -518,6 +542,10 @@ class TaskService:
         data = {**data}
         primary_id = data.get("category_primary_id")
         name = data.get("category") or "工作"
+        if is_uuid_like(name):
+            # 历史坏数据：uuid 被当分类名存下——回落默认，绝不 ensure_primary_named(uuid)
+            # 再生出 uuid 名分类（污染分类表的原放大器）
+            name = "工作"
         primary = cats.find_primary(primary_id) or cats.find_primary_by_name(name)
         if primary is None:
             primary = cats.ensure_primary_named(name)
@@ -627,12 +655,13 @@ class TaskService:
 
     def update_task_reminder(self, task_id: str, reminder) -> Optional[Task]:
         """更新任务提醒状态（如 last_fired / snooze）。"""
-        tasks = self.task_repo.find_all()
-        for i, t in enumerate(tasks):
-            if t.id == task_id:
-                t.reminder = reminder
-                tasks[i] = t
-                self.task_repo.save_all(tasks)
-                self._after_task_change(t, "upsert")
-                return t
+        with self._task_write():
+            tasks = self.task_repo.find_all()
+            for i, t in enumerate(tasks):
+                if t.id == task_id:
+                    t.reminder = reminder
+                    tasks[i] = t
+                    self.task_repo.save_all(tasks)
+                    self._after_task_change(t, "upsert")
+                    return t
         return None

@@ -1,6 +1,7 @@
 """扫描插件目录并加载通过校验的插件。"""
 from __future__ import annotations
 
+import json
 import logging
 import time
 from dataclasses import dataclass
@@ -34,9 +35,16 @@ def _scan_signature(bundled_dir, user_dir, hidden) -> tuple:
                         continue
                     try:
                         st = (child / "plugin.yaml").stat()
-                        entries.append((child.name, st.st_mtime_ns, st.st_size))
                     except OSError:
-                        entries.append((child.name, None, 0))
+                        entries.append((child.name, None, 0, None))
+                        continue
+                    # origin 标记参与签名：它影响扫描输出（覆盖副本判定），
+                    # copytree 保留源 mtime，不含标记的签名会让标记变化被缓存遮蔽
+                    try:
+                        mk = (child / ".zentray-origin.json").stat().st_mtime_ns
+                    except OSError:
+                        mk = None
+                    entries.append((child.name, st.st_mtime_ns, st.st_size, mk))
         except OSError:
             pass
         parts.append((tag, tuple(entries)))
@@ -48,6 +56,11 @@ class LoadedPlugin:
     manifest: PluginManifest
     source: str  # bundled | user
     validation: ValidationResult
+    # 覆盖副本遮蔽同名内置插件（编辑示例插件时复制到用户目录产生）：
+    # bundled_shadow=存在同名内置；bundled_update_available=副本带 origin 标记
+    # 且复制时的应用版本 != 当前（内置的更新正被副本静默屏蔽，提示让位）。
+    bundled_shadow: bool = False
+    bundled_update_available: bool = False
 
 
 class PluginLoader:
@@ -56,6 +69,7 @@ class PluginLoader:
     def __init__(self) -> None:
         self._plugins: Dict[str, LoadedPlugin] = {}
         self._failures: List[tuple[Path, ValidationResult]] = []
+        self._bundled_ids: set = set()
 
     @property
     def plugins(self) -> List[LoadedPlugin]:
@@ -91,11 +105,29 @@ class PluginLoader:
 
         self._plugins.clear()
         self._failures.clear()
+        self._bundled_ids.clear()
 
         if bundled_dir:
             self._scan_root(Path(bundled_dir), source="bundled")
         if user_dir:
             self._scan_root(Path(user_dir), source="user")
+
+        # 覆盖副本检测：用户副本遮蔽同名内置 → 标记供设置页提示让位更新。
+        # origin 标记记录复制时的应用版本，与当前不同 = 内置已更新被屏蔽。
+        from zentray.config import VERSION
+
+        for pid, p in self._plugins.items():
+            if p.source != "user" or pid not in self._bundled_ids:
+                continue
+            p.bundled_shadow = True
+            try:
+                raw = json.loads(
+                    (p.manifest.root / ".zentray-origin.json").read_text(encoding="utf-8")
+                )
+            except Exception:
+                continue  # 无标记（历史副本/手工放置）：仅标 shadow，不动
+            if str(raw.get("copied_from_bundled_version") or "") != str(VERSION):
+                p.bundled_update_available = True
 
         # 已删除的示例插件：包目录不动（重装会复活），扫描期隐藏。
         # 同 id 的用户副本 source=user，不受影响。
@@ -137,6 +169,8 @@ class PluginLoader:
                     source,
                     prev.source,
                 )
+            if source == "bundled":
+                self._bundled_ids.add(result.manifest.id)
             self._plugins[result.manifest.id] = LoadedPlugin(
                 manifest=result.manifest,
                 source=source,
