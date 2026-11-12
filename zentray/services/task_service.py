@@ -12,6 +12,7 @@ import uuid
 from contextlib import nullcontext
 from typing import List, Optional, Union
 
+from zentray.core.categories import is_uuid_like
 from zentray.core.file_io import path_lock
 from zentray.core.models import PeriodicTemplate, Task
 from zentray.core.repository import PeriodicTemplateRepository, TaskRepository
@@ -541,6 +542,10 @@ class TaskService:
         data = {**data}
         primary_id = data.get("category_primary_id")
         name = data.get("category") or "工作"
+        if is_uuid_like(name):
+            # 历史坏数据：uuid 被当分类名存下——回落默认，绝不 ensure_primary_named(uuid)
+            # 再生出 uuid 名分类（污染分类表的原放大器）
+            name = "工作"
         primary = cats.find_primary(primary_id) or cats.find_primary_by_name(name)
         if primary is None:
             primary = cats.ensure_primary_named(name)

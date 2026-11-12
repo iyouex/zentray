@@ -12,6 +12,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Callable, Optional
 
+from zentray.core.categories import is_uuid_like
 from zentray.services.calendar_feed import build_tasks_ics as _build_tasks_ics
 from zentray.services.calendar_feed import ics_escape as _ics_escape
 
@@ -22,6 +23,10 @@ def _task_dict(task) -> dict:
     if task is None:
         return {}
     d = task.to_dict() if hasattr(task, "to_dict") else asdict(task)
+    # 历史坏数据遮蔽：category 存成已删分类的 uuid 时列表/筛选不显示垃圾
+    # （任务列表 chips 与卡片直读此名；v0.7.17 已修表单侧，此为读侧兜底）
+    if is_uuid_like(d.get("category")):
+        d["category"] = ""
     return d
 
 
@@ -29,6 +34,8 @@ def _template_dict(tmpl) -> dict:
     if tmpl is None:
         return {}
     d = tmpl.to_dict() if hasattr(tmpl, "to_dict") else asdict(tmpl)
+    if is_uuid_like(d.get("category")):
+        d["category"] = ""
     import datetime as _dt
 
     from zentray.core.periodic import next_spawn_date
