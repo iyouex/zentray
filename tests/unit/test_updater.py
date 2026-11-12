@@ -254,6 +254,17 @@ def test_quit_scheduled_from_worker_thread():
     assert time.monotonic() - t0 < 1.0, "quit 未从工作线程及时投递到 GUI 线程"
 
 
+def _stub_platform_installs(monkeypatch):
+    """平台安装器打桩：本组测试只测安装状态机（不叠加 helper / 安装重启分离），
+    不触碰真实暂存/解包——否则 macOS 分支会打开不存在的安装包文件。
+    桩保留「平台安装成功后武装 helper」语义（真实现的 _spawn_helper 调用）。"""
+    def _fake_install(self, path):
+        self._spawn_helper(["stub-installer"])
+
+    for name in ("_install_linux", "_install_windows", "_install_macos"):
+        monkeypatch.setattr(UpdaterService, name, _fake_install)
+
+
 def test_install_no_double_helper(tmp_path, monkeypatch):
     """重启机制武装后重复点安装（含重装同版本）不再叠加 helper。"""
     svc = UpdaterService()
@@ -263,7 +274,7 @@ def test_install_no_double_helper(tmp_path, monkeypatch):
     monkeypatch.setattr(UpdaterService, "_spawn_helper",
                         staticmethod(lambda argv: spawned.append(argv)))
     monkeypatch.setattr(UpdaterService, "_quit", staticmethod(lambda: None))
-    monkeypatch.setattr(updater.subprocess, "run", lambda *a, **k: _resp(None))
+    _stub_platform_installs(monkeypatch)
 
     assert svc.install() == {"installed": True}
     assert svc.install() == {"installed": True}
@@ -278,7 +289,7 @@ def test_install_then_confirm_restart(tmp_path, monkeypatch):
     quitted = []
     monkeypatch.setattr(UpdaterService, "_spawn_helper", staticmethod(lambda argv: None))
     monkeypatch.setattr(UpdaterService, "_quit", staticmethod(lambda: quitted.append(1)))
-    monkeypatch.setattr(updater.subprocess, "run", lambda *a, **k: _resp(None))
+    _stub_platform_installs(monkeypatch)
 
     with pytest.raises(RuntimeError, match="尚未安装"):
         svc.restart()  # 未安装就确认重启 → 拒绝

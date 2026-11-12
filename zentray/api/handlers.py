@@ -12,6 +12,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Callable, Optional
 
+from zentray.core.categories import is_uuid_like
 from zentray.services.calendar_feed import build_tasks_ics as _build_tasks_ics
 from zentray.services.calendar_feed import ics_escape as _ics_escape
 
@@ -22,6 +23,10 @@ def _task_dict(task) -> dict:
     if task is None:
         return {}
     d = task.to_dict() if hasattr(task, "to_dict") else asdict(task)
+    # 历史坏数据遮蔽：category 存成已删分类的 uuid 时列表/筛选不显示垃圾
+    # （任务列表 chips 与卡片直读此名；v0.7.17 已修表单侧，此为读侧兜底）
+    if is_uuid_like(d.get("category")):
+        d["category"] = ""
     return d
 
 
@@ -29,6 +34,8 @@ def _template_dict(tmpl) -> dict:
     if tmpl is None:
         return {}
     d = tmpl.to_dict() if hasattr(tmpl, "to_dict") else asdict(tmpl)
+    if is_uuid_like(d.get("category")):
+        d["category"] = ""
     import datetime as _dt
 
     from zentray.core.periodic import next_spawn_date
@@ -274,6 +281,12 @@ def handle_request(
             return _install_plugin_path(body or {})
         if method == "POST" and path.startswith("/api/plugins/") and path.endswith("/run"):
             return _run_plugin(path[len("/api/plugins/") : -len("/run")], body or {})
+        if method == "POST" and path.startswith("/api/plugins/") and path.endswith(
+            "/yield-to-bundled"
+        ):
+            return _yield_plugin_to_bundled(
+                path[len("/api/plugins/") : -len("/yield-to-bundled")]
+            )
         if method == "PUT" and path.startswith("/api/plugins/"):
             return _update_plugin(path[len("/api/plugins/") :], body or {})
         if method == "DELETE" and path.startswith("/api/plugins/"):
@@ -653,6 +666,14 @@ def _update_plugin(plugin_id: str, body: dict) -> tuple[int, dict]:
             }
         try:
             shutil.copytree(p.manifest.root, dest)
+            # 覆盖副本来源标记：记录复制时的应用版本。版本变更后 loader 据此判定
+            # 「内置已更新被副本屏蔽」，设置页提示让位（2026-11-12 text-toolbox 事故）。
+            from zentray.config import VERSION
+
+            dest.joinpath(".zentray-origin.json").write_text(
+                json.dumps({"copied_from_bundled_version": str(VERSION)}),
+                encoding="utf-8",
+            )
         except OSError as e:
             return 500, {"ok": False, "error": f"复制示例插件到用户目录失败: {e}"}
         p = _scanned_loader().get(plugin_id)
@@ -714,6 +735,52 @@ def _delete_plugin(plugin_id: str) -> tuple[int, dict]:
     return 200, {"ok": True, "plugins": _plugins_list(scan_always=True)}
 
 
+def _yield_plugin_to_bundled(plugin_id: str) -> tuple[int, dict]:
+    """
+    覆盖副本让位：把遮蔽同名内置插件的用户副本整体改名备份到
+    plugins-disabled/<id>-yielded-<时间戳>/（绝不删除），随后重扫——
+    loader 无用户副本即接管内置版本。适用于「内置已更新」与手动「改用内置版」。
+    """
+    import datetime as _dt
+
+    from zentray.services.settings_manager import SettingsManager
+
+    p = _scanned_loader().get(plugin_id)
+    if p is None:
+        return 404, {"ok": False, "error": "插件不存在或校验未通过"}
+    if p.source != "user":
+        return 400, {"ok": False, "error": "仅覆盖副本（用户目录插件）可让位"}
+    if not getattr(p, "bundled_shadow", False):
+        return 400, {"ok": False, "error": "无同名内置插件，无需让位"}
+    # service 先停，避免备份目录仍被守护进程占用
+    if _ctx.plugin_runtime is not None and p.manifest.type.value == "service":
+        try:
+            _ctx.plugin_runtime.service_cmd(p, "stop")
+        except Exception:
+            logger.exception("让位前停止服务失败: %s", p.manifest.id)
+    sm = SettingsManager()
+    root = p.manifest.root.resolve()
+    try:
+        root.relative_to(sm.get_ops_user_plugins_dir().resolve())
+    except ValueError:
+        return 400, {"ok": False, "error": "插件目录不在用户插件目录内"}
+    stamp = _dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+    backup_dir = root.parent.parent / "plugins-disabled" / f"{plugin_id}-yielded-{stamp}"
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    dest = backup_dir / plugin_id
+    if dest.exists():
+        return 409, {"ok": False, "error": f"备份目标已存在: {dest}"}
+    try:
+        root.rename(dest)
+    except OSError as e:
+        return 500, {"ok": False, "error": f"备份移动失败: {e}"}
+    return 200, {
+        "ok": True,
+        "backup": str(dest),
+        "plugins": _plugins_list(scan_always=True),
+    }
+
+
 def _read_plugin_readme(root: Path) -> str:
     """插件 README.md 原文（截断 64KB），无则空串。"""
     try:
@@ -764,6 +831,10 @@ def _plugins_list(*, scan_always: bool = False) -> dict:
                 "version": m.version,
                 "category": m.category or "",
                 "source": p.source,
+                "bundled_shadow": bool(getattr(p, "bundled_shadow", False)),
+                "bundled_update_available": bool(
+                    getattr(p, "bundled_update_available", False)
+                ),
                 "entry": m.entry,
                 "root": str(m.root),
                 "status": "ok",
