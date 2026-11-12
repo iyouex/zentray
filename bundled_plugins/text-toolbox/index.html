@@ -58,6 +58,12 @@ textarea{width:100%;min-height:190px;background:var(--card2);color:var(--text);
    大文本一律框内滚动，杜绝「190px 小窗 + 半页空白」的失调 */
 #tool-sql textarea, #tool-crypto #aes-in{height:clamp(220px, 42vh, 64vh)}
 #tool-sql textarea{resize:vertical}
+/* SQL 双 pane（CM 可用时承载编辑器；textarea 隐藏仍为值载体） */
+#tool-sql .sql-pane{display:flex;min-width:0;height:clamp(220px, 42vh, 64vh)}
+#tool-sql .sql-pane textarea{height:100%;flex:1}
+#tool-sql .sql-pane.has-cm > textarea{display:none}
+#tool-sql .sql-cm{flex:1;min-width:0}
+#tool-sql .sql-cm .CodeMirror{height:100%;font:13px/1.5 ui-monospace,SFMono-Regular,Consolas,"Courier New",monospace}
 /* 输出区钳制：结果/消息块超长内滚，不撑长页面 */
 .out-inline, .msg, .kv{max-height:40vh;overflow:auto}
 .jl-status{max-height:30vh;overflow:auto}
@@ -352,8 +358,14 @@ hr.sep{border:none;border-top:1px solid var(--border);margin:14px 0}
   <h2>SQL 工具<small>格式化 / 压缩 / 简单语法检查</small></h2>
   <div class="cdn-warn" id="sql-cdn-warn">⚠ sql-formatter CDN 未加载，格式化已降级为内置简易实现（仅换行与空白规整）。</div>
   <div class="row2">
-    <textarea id="sql-in" spellcheck="false" placeholder="-- 粘贴 SQL&#10;SELEC a, b FROM t WHERE x = 1"></textarea>
-    <textarea id="sql-out" spellcheck="false" readonly placeholder="结果输出"></textarea>
+    <div class="sql-pane">
+      <textarea id="sql-in" spellcheck="false" placeholder="-- 粘贴 SQL&#10;SELEC a, b FROM t WHERE x = 1"></textarea>
+      <div class="jl-cm sql-cm" id="sql-cm-in" hidden></div>
+    </div>
+    <div class="sql-pane">
+      <textarea id="sql-out" spellcheck="false" readonly placeholder="结果输出"></textarea>
+      <div class="jl-cm sql-cm" id="sql-cm-out" hidden></div>
+    </div>
   </div>
   <div class="bar">
     <button class="act primary" id="sql-format">格式化</button>
@@ -1511,8 +1523,10 @@ if (typeof globalThis !== 'undefined') globalThis.TT_CORE = TT;
     const inEl = sec.querySelector('textarea'), outEl = sec.querySelectorAll('textarea')[1];
     const act = btn.dataset.io;
     if (act === 'copy') btn.addEventListener('click', () => copyText(outEl.value, btn));
-    if (act === 'clear') btn.addEventListener('click', () => { inEl.value = ''; outEl.value = ''; msg(sec, ''); });
-    if (act === 'sample') btn.addEventListener('click', () => { inEl.value = SEC_SAMPLE[sec.id] || ''; });
+    if (act === 'clear') btn.addEventListener('click', () => { inEl.value = ''; outEl.value = ''; msg(sec, '');
+      inEl.dispatchEvent(new Event('input', {bubbles: true})); outEl.dispatchEvent(new Event('input', {bubbles: true})); });
+    if (act === 'sample') btn.addEventListener('click', () => { inEl.value = SEC_SAMPLE[sec.id] || '';
+      inEl.dispatchEvent(new Event('input', {bubbles: true})); });
   });
   document.querySelectorAll('[data-io2]').forEach(btn => {  // crypto 卡内小清空
     btn.addEventListener('click', () => {
@@ -1701,23 +1715,28 @@ if (typeof globalThis !== 'undefined') globalThis.TT_CORE = TT;
   }
 
   /* ---------------- SQL ---------------- */
+  let sqlCmIn = null, sqlCmOut = null;  // CM 增强（CDN 失败为 null）
+  function sqlSetOut(v) {
+    $('#sql-out').value = v;
+    if (sqlCmOut && sqlCmOut.getValue() !== v) sqlCmOut.setValue(v);
+  }
   $('#sql-format').addEventListener('click', () => {
     const src = $('#sql-in').value, sec = $('#tool-sql');
     if (!src.trim()) return msg(sec, '请输入 SQL', 'warn');
     const lang = $('#sql-dialect').value;
     if (typeof sqlFormatter !== 'undefined') {
       try {
-        $('#sql-out').value = sqlFormatter.format(src, { language: lang });
+        sqlSetOut(sqlFormatter.format(src, { language: lang }));
         return msg(sec, `✓ 格式化完成（sql-formatter · ${lang}）`, 'ok');
       } catch (e) { /* 落降级 */ }
     }
-    $('#sql-out').value = T.sqlNaiveFormat(src);
+    sqlSetOut(T.sqlNaiveFormat(src));
     msg(sec, '⚠ CDN 不可用，已用内置简易格式化', 'warn');
   });
   $('#sql-minify').addEventListener('click', () => {
     const src = $('#sql-in').value, sec = $('#tool-sql');
     if (!src.trim()) return msg(sec, '请输入 SQL', 'warn');
-    $('#sql-out').value = T.sqlStrip(src);
+    sqlSetOut(T.sqlStrip(src));
     msg(sec, `✓ 压缩完成（去注释、单行，保留字符串字面量）`, 'ok');
   });
   $('#sql-check').addEventListener('click', () => {
@@ -1729,6 +1748,29 @@ if (typeof globalThis !== 'undefined') globalThis.TT_CORE = TT;
   });
   if (window.__cdnSqlFormatterFail || typeof sqlFormatter === 'undefined')
     $('#sql-cdn-warn').classList.add('show');
+  // SQL 编辑器 CM 增强（textarea 恒为值载体；外部写入经 input 事件回灌）
+  if (window.CodeMirror && CodeMirror.modes && CodeMirror.modes.sql) {
+    const mk = (el, ta, extra) => {
+      el.hidden = false;
+      el.parentElement.classList.add('has-cm');
+      return CodeMirror(el, Object.assign({
+        value: ta.value, mode: 'sql', theme: 'material-darker',
+        lineNumbers: true, lineWrapping: true,
+      }, extra || {}));
+    };
+    sqlCmIn = mk($('#sql-cm-in'), $('#sql-in'));
+    sqlCmIn.on('change', () => {
+      const v = sqlCmIn.getValue();
+      if ($('#sql-in').value !== v) $('#sql-in').value = v;
+    });
+    $('#sql-in').addEventListener('input', () => {
+      if (sqlCmIn && sqlCmIn.getValue() !== $('#sql-in').value) sqlCmIn.setValue($('#sql-in').value);
+    });
+    sqlCmOut = mk($('#sql-cm-out'), $('#sql-out'), { readOnly: true });
+    $('#sql-out').addEventListener('input', () => {
+      if (sqlCmOut && sqlCmOut.getValue() !== $('#sql-out').value) sqlCmOut.setValue($('#sql-out').value);
+    });
+  }
 
   /* ---------------- diff：照搬 jq22/textDifference（Mergely 深色双栏合并视图） ----------------
    * 形态：上方常驻双输入框（输入即实时比对，防抖 150ms，无需失焦），下方差异渲染；

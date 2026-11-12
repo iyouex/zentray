@@ -66,3 +66,14 @@ def test_json_codemirror_enhancement_with_fallback():
     assert "function jlSet(v)" in s, "程序写入须统一走 jlSet（textarea 恒为值载体）"
     assert "CodeMirror.modes.javascript && JL.cmEl" in s, "CDN 失败不得启用 CM"
     assert s.count("jlSet(") >= 6, "prettify/clear/fix/sample/drop 五写入方 + 定义"
+
+
+def test_sql_codemirror_with_fallback():
+    # SQL 双 pane CM：textarea 恒为值载体；外部写入经 input 事件回灌 CM；
+    # CDN 失败（CodeMirror.modes.sql 缺）→ 原 textarea UI 零差异
+    s = _html()
+    assert 'id="sql-cm-in"' in s and 'id="sql-cm-out"' in s
+    assert "#tool-sql .sql-pane.has-cm > textarea{display:none}" in s
+    assert "function sqlSetOut(v)" in s, "输出写入统一走 sqlSetOut"
+    assert "CodeMirror.modes.sql" in s, "CDN 失败不得启用 SQL CM"
+    assert "inEl.dispatchEvent(new Event('input'" in s, "data-io 外部写入须派发 input 回灌 CM"
