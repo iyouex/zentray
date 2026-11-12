@@ -20,6 +20,32 @@ logger = logging.getLogger(__name__)
 
 _server_instance: Optional["LocalApiServer"] = None
 
+# 环回主机名白名单：Host 头校验用（防 DNS rebinding——恶意域名解析到 127.0.0.1 后
+# 借自身域名当 Origin/Host 访问本服务）。服务只绑 127.0.0.1，合法 Host 仅此三种。
+_LOOPBACK_HOSTNAMES = {"127.0.0.1", "localhost", "::1"}
+
+
+def host_header_allowed(host: str) -> bool:
+    """Host 头必须是环回主机名（端口任意，服务每次启动端口不同）。"""
+    name = (host or "").strip().lower()
+    if name.startswith("["):  # IPv6 [::1]:port
+        name = name.split("]", 1)[0].lstrip("[")
+    else:
+        name = name.split(":", 1)[0]
+    return name in _LOOPBACK_HOSTNAMES
+
+
+def origin_header_allowed(origin: str, port: int) -> bool:
+    """
+    写请求 Origin 防线：无 Origin 头（同源 GET/本地 curl/Qt 请求）放行；
+    有则必须精确匹配本服务自身源（127.0.0.1/localhost + 本服务端口）。
+    恶意网页发起的跨域写必带其自身 Origin → 拒之。
+    """
+    origin = (origin or "").strip().rstrip("/")
+    if not origin:
+        return True
+    return origin in (f"http://127.0.0.1:{port}", f"http://localhost:{port}")
+
 
 def web_dist_dir() -> Path:
     """打包/开发下的 Vue dist 目录。"""
@@ -46,11 +72,31 @@ class _Handler(BaseHTTPRequestHandler):
         logger.debug("API %s - %s", self.address_string(), fmt % args)
 
     def _cors(self):
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        # 仅对自身源回显（同源 fetch 的 POST 会带 Origin，匹配即回显保证 WebEngine 页面正常）；
+        # 其余（跨域网页）一律不发 CORS 头，浏览器按同源策略拦下跨域 JS 读写。
+        # 此前是无条件 `Access-Control-Allow-Origin: *`——任意网页可跨域调本机 API（D5 已修）。
+        origin = (self.headers.get("Origin") or "").strip()
+        port = self.server.server_address[1]
+        if origin_header_allowed(origin, port) and origin:
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+
+    def _guard(self) -> bool:
+        """请求级防线：Host 防 rebinding；写方法 Origin 防跨域写。违者 403。"""
+        if not host_header_allowed(self.headers.get("Host")):
+            self.send_error(403, "Host not allowed")
+            return False
+        if self.command in ("POST", "PUT", "DELETE") and not origin_header_allowed(
+            self.headers.get("Origin"), self.server.server_address[1]
+        ):
+            self.send_error(403, "Origin not allowed")
+            return False
+        return True
 
     def do_OPTIONS(self):
+        if not self._guard():
+            return
         self.send_response(204)
         self._cors()
         self.end_headers()
@@ -78,6 +124,8 @@ class _Handler(BaseHTTPRequestHandler):
             return None
 
     def _dispatch(self, method: str):
+        if not self._guard():
+            return
         parsed = urlparse(self.path)
         path = unquote(parsed.path)
         qs = {k: (v[0] if v else "") for k, v in parse_qs(parsed.query).items()}

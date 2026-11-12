@@ -4,8 +4,8 @@ import logging
 from pathlib import Path
 from typing import List
 
-from zentray.config import PERIODIC_TEMPLATES_FILE
-from zentray.core.file_io import load_json_list, save_json_list
+from zentray import config
+from zentray.core.file_io import load_json_list, path_lock, save_json_list
 from zentray.core.models import PeriodicTemplate
 from zentray.core.repository import PeriodicTemplateRepository
 
@@ -39,7 +39,8 @@ class FilePeriodicTemplateRepository(PeriodicTemplateRepository):
     """基于 JSON 文件的周期任务模板存储实现"""
 
     def __init__(self, filepath: Path | None = None):
-        self.filepath = Path(filepath) if filepath else PERIODIC_TEMPLATES_FILE
+        # 迟绑定：同 file_repository（monkeypatch config 后默认路径须跟随，防测试写真实数据）
+        self.filepath = Path(filepath) if filepath else config.PERIODIC_TEMPLATES_FILE
         # 主文件与 .bak 双失后只尝试一次备份自愈，避免 watcher 每分钟重扫 exports
         self._heal_attempted = False
 
@@ -51,7 +52,8 @@ class FilePeriodicTemplateRepository(PeriodicTemplateRepository):
             self._heal_attempted = True
             healed = _templates_from_latest_backup(self.filepath.parent / "exports")
             if healed:
-                save_json_list(self.filepath, healed)
+                with path_lock(self.filepath):
+                    save_json_list(self.filepath, healed)
                 logger.warning(
                     "周期模板文件丢失，已从最近备份自愈 %d 条: %s",
                     len(healed),
@@ -61,4 +63,6 @@ class FilePeriodicTemplateRepository(PeriodicTemplateRepository):
         return [PeriodicTemplate.from_dict(d) for d in data]
 
     def save_all(self, templates: List[PeriodicTemplate]) -> None:
-        save_json_list(self.filepath, [t.to_dict() for t in templates])
+        # 与任务仓库同款：写自带互斥（HTTP/watcher 两线程共写模板文件）
+        with path_lock(self.filepath):
+            save_json_list(self.filepath, [t.to_dict() for t in templates])
