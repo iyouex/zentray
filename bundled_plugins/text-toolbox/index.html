@@ -756,22 +756,61 @@ const TT = (() => {
   }
 
   /* ---------- diff：自研 LCS（O(n·m) DP；ponytail: 超大文本会慢，>2 万行建议分块） ---------- */
+  // 大文本保护（2026-11-13）：DP 格数超限 → 剪枝后主体退化为整块替换（保公共前后缀对齐）。
+  // 驻留整数 DP 实测 ~1.5 亿格/秒；6e7 上限 ≈ 差异区 7.7k×7.7k 内走精确 LCS，
+  // 更病态（全不同 8k+）才兜底。旧实现 12k 行近同（字符串比较）12.7s 冻死主线程
+  const LCS_CELL_CAP = 6e7;
   function lcsOps(a, b) {
-    const n = a.length, m = b.length, w = m + 1;
-    const dp = new Uint32Array((n + 1) * w);
-    for (let i = n - 1; i >= 0; i--)
-      for (let j = m - 1; j >= 0; j--)
-        dp[i * w + j] = a[i] === b[j]
-          ? dp[(i + 1) * w + j + 1] + 1
-          : Math.max(dp[(i + 1) * w + j], dp[i * w + j + 1]);
-    const ops = []; let i = 0, j = 0;
-    while (i < n && j < m) {
-      if (a[i] === b[j]) { ops.push(['=', a[i]]); i++; j++; }
-      else if (dp[(i + 1) * w + j] >= dp[i * w + j + 1]) { ops.push(['-', a[i]]); i++; }
-      else { ops.push(['+', b[j]]); j++; }
+    if (typeof a === 'string') a = a.split('');
+    if (typeof b === 'string') b = b.split('');
+    const n = a.length, m = b.length;
+    // 公共前后缀剪枝：大文档小改动（粘贴场景常态）DP 规模从 n·m 缩到差异区
+    let p = 0;
+    while (p < n && p < m && a[p] === b[p]) p++;
+    let s = 0;
+    while (s < n - p && s < m - p && a[n - 1 - s] === b[m - 1 - s]) s++;
+    const ops = [];
+    for (let i = 0; i < p; i++) ops.push(['=', a[i]]);
+    const ca = a.slice(p, n - s), cb = b.slice(p, m - s);
+    const cn = ca.length, cm = cb.length;
+    if (cn === 0 || cm === 0) {
+      // 一侧无剩余：纯增/纯删（含全等早退）
+      for (let i = 0; i < cn; i++) ops.push(['-', ca[i]]);
+      for (let j = 0; j < cm; j++) ops.push(['+', cb[j]]);
+    } else if ((cn + 1) * (cm + 1) > LCS_CELL_CAP) {
+      // 病态兜底：整块替换（- 全部再 + 全部），统计语义近似但永不冻结
+      for (let i = 0; i < cn; i++) ops.push(['-', ca[i]]);
+      for (let j = 0; j < cm; j++) ops.push(['+', cb[j]]);
+    } else {
+      // 值驻留：字符串比较 → 整数 id 比较（DP 内层提速数倍）
+      const pool = new Map();
+      const intern = v => {
+        let id = pool.get(v);
+        if (id === undefined) { id = pool.size; pool.set(v, id); }
+        return id;
+      };
+      const ia = ca.map(intern), ib = cb.map(intern);
+      const w = cm + 1;
+      const dp = new Uint32Array((cn + 1) * w);
+      for (let i = cn - 1; i >= 0; i--) {
+        const cur = i * w, nxt = cur + w, aiv = ia[i];
+        for (let j = cm - 1; j >= 0; j--) {
+          const down = dp[nxt + j], right = dp[cur + j + 1];
+          dp[cur + j] = aiv === ib[j]
+            ? dp[nxt + j + 1] + 1
+            : (down >= right ? down : right);
+        }
+      }
+      let i = 0, j = 0;
+      while (i < cn && j < cm) {
+        if (ia[i] === ib[j]) { ops.push(['=', ca[i]]); i++; j++; }
+        else if (dp[(i + 1) * w + j] >= dp[i * w + j + 1]) { ops.push(['-', ca[i]]); i++; }
+        else { ops.push(['+', cb[j]]); j++; }
+      }
+      while (i < cn) ops.push(['-', ca[i++]]);
+      while (j < cm) ops.push(['+', cb[j++]]);
     }
-    while (i < n) ops.push(['-', a[i++]]);
-    while (j < m) ops.push(['+', b[j++]]);
+    for (let i = 0; i < s; i++) ops.push(['=', a[n - 1 - i]]);
     return ops;
   }
   // 比较（可带 norm：忽略大小写/空白）用 norm 后的 token，输出保留原文：
