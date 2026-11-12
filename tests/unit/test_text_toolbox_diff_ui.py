@@ -39,9 +39,18 @@ def test_diff_underlay_sync():
 
 def test_json_editor_height_on_container():
     # JSON 编辑器定高须挂在 .jl-editor 容器上：挂 textarea 会让行号槽内容把容器
-    # 撑到全行数高（flex auto 高取最高子项），整个文本框溢出网页（v0.7.20 修复）
+    # 撑到全行数高（flex auto 高取最高子项），整个文本框溢出网页（v0.7.20 修复）。
+    # 2026-11-13 pane 体系：定高改为视口自适应 clamp（下限 300 / 上限 76vh），
+    # 「定高在容器 + textarea 拉伸」的结构约束不变。
     s = _html()
-    ed = s[s.index(".jl-editor{"):s.index(".jl-editor{") + 90]
-    assert "height:380px" in ed, "定高必须在容器（行号槽才能拉伸到框高）"
+    ed = s[s.index(".jl-editor{"):s.index(".jl-editor{") + 110]
+    assert "height:clamp(" in ed, "定高必须在容器（视口自适应 clamp）"
     ta = s[s.index("#json-in{"):s.index("#json-in{") + 60]
-    assert "height:380px" not in ta, "textarea 不得自带定高（改为拉伸填满容器）"
+    assert "height:" not in ta, "textarea 不得自带定高（改为拉伸填满容器）"
+
+
+def test_pane_height_system():
+    # pane 高度体系：SQL/crypto 编辑框视口伸缩；输出区（out-inline/msg/kv）钳制内滚
+    s = _html()
+    assert "height:clamp(220px, 42vh, 64vh)" in s, "SQL/AES 编辑框须视口伸缩"
+    assert ".out-inline, .msg, .kv{max-height:40vh;overflow:auto}" in s, "输出区须钳制内滚"

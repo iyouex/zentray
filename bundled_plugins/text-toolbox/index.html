@@ -49,6 +49,13 @@ section.tool h2 small{color:var(--muted);font-weight:normal;margin-left:8px}
 textarea{width:100%;min-height:190px;background:var(--card2);color:var(--text);
   border:1px solid var(--border);border-radius:6px;padding:10px;resize:vertical;
   font:13px/1.5 ui-monospace,SFMono-Regular,Consolas,"Courier New",monospace}
+/* pane 高度体系（2026-11-13 重设计）：编辑框随视口伸缩利用页面空间，
+   大文本一律框内滚动，杜绝「190px 小窗 + 半页空白」的失调 */
+#tool-sql textarea, #tool-crypto #aes-in{height:clamp(220px, 42vh, 64vh)}
+#tool-sql textarea{resize:vertical}
+/* 输出区钳制：结果/消息块超长内滚，不撑长页面 */
+.out-inline, .msg, .kv{max-height:40vh;overflow:auto}
+.jl-status{max-height:30vh;overflow:auto}
 textarea:focus{outline:none;border-color:var(--primary)}
 textarea[readonly]{opacity:.92}
 .bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0}
@@ -141,7 +148,7 @@ label.ck{display:inline-flex;align-items:center;gap:4px;color:var(--text);font-s
 .jl-h1{font-size:24px;font-weight:700;margin:0 0 4px;color:#FAFAFA}
 .jl-sub{font-size:14px;color:#8A8A8A;margin:0 0 12px}
 .jl .cdn-warn{background:rgba(245,158,11,.1);color:#FF9F0A}
-.jl-editor{display:flex;height:380px;border-radius:8px;overflow:hidden;background:#1A1A1A;
+.jl-editor{display:flex;height:clamp(300px, calc(100vh - 330px), 76vh);border-radius:8px;overflow:hidden;background:#1A1A1A;
   border:1px solid #3a3f4b;transition:border-color .15s,box-shadow .15s}
 .jl-editor.valid{border-color:#32D74B;box-shadow:0 0 0 1px #32D74B}
 .jl-editor.invalid{border-color:#FF453A;box-shadow:0 0 0 1px #FF453A}
