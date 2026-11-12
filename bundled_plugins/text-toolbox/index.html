@@ -4,10 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>文本工具箱</title>
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://unpkg.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://unpkg.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <!-- CDN 组件（可选增强；加载失败自动降级并提示） -->
-<script src="https://cdn.jsdelivr.net/npm/jsonrepair@3.13.1/lib/umd/jsonrepair.min.js" onerror="window.__cdnJsonrepairFail=true" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/sql-formatter/15.9.0/sql-formatter.min.js" onerror="window.__cdnSqlFormatterFail=true" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsonrepair@3.13.1/lib/umd/jsonrepair.min.js" onerror="window.__cdnJsonrepairFail=true" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/sql-formatter/15.9.0/sql-formatter.min.js" onerror="window.__cdnSqlFormatterFail=true" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+<!-- CodeMirror 5（可选增强：大文档视口虚拟渲染 + 语法高亮；失败降级原 textarea UI） -->
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js" onerror="window.__cmFail=true" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/javascript/javascript.min.js" onerror="window.__cmFail=true" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/sql/sql.min.js" onerror="window.__cmFail=true" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/theme/material-darker.min.css" onerror="window.__cmFail=true">
 <style>
 :root{
   --bg:#f2f3f5; --card:#ffffff; --card2:#f7f8fa;
@@ -49,6 +54,19 @@ section.tool h2 small{color:var(--muted);font-weight:normal;margin-left:8px}
 textarea{width:100%;min-height:190px;background:var(--card2);color:var(--text);
   border:1px solid var(--border);border-radius:6px;padding:10px;resize:vertical;
   font:13px/1.5 ui-monospace,SFMono-Regular,Consolas,"Courier New",monospace}
+/* pane 高度体系（2026-11-13 重设计）：编辑框随视口伸缩利用页面空间，
+   大文本一律框内滚动，杜绝「190px 小窗 + 半页空白」的失调 */
+#tool-sql textarea, #tool-crypto #aes-in{height:clamp(220px, 42vh, 64vh)}
+#tool-sql textarea{resize:vertical}
+/* SQL 双 pane（CM 可用时承载编辑器；textarea 隐藏仍为值载体） */
+#tool-sql .sql-pane{display:flex;min-width:0;height:clamp(220px, 42vh, 64vh)}
+#tool-sql .sql-pane textarea{height:100%;flex:1}
+#tool-sql .sql-pane.has-cm > textarea{display:none}
+#tool-sql .sql-cm{flex:1;min-width:0}
+#tool-sql .sql-cm .CodeMirror{height:100%;font:13px/1.5 ui-monospace,SFMono-Regular,Consolas,"Courier New",monospace}
+/* 输出区钳制：结果/消息块超长内滚，不撑长页面 */
+.out-inline, .msg, .kv{max-height:40vh;overflow:auto}
+.jl-status{max-height:30vh;overflow:auto}
 textarea:focus{outline:none;border-color:var(--primary)}
 textarea[readonly]{opacity:.92}
 .bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0}
@@ -141,7 +159,7 @@ label.ck{display:inline-flex;align-items:center;gap:4px;color:var(--text);font-s
 .jl-h1{font-size:24px;font-weight:700;margin:0 0 4px;color:#FAFAFA}
 .jl-sub{font-size:14px;color:#8A8A8A;margin:0 0 12px}
 .jl .cdn-warn{background:rgba(245,158,11,.1);color:#FF9F0A}
-.jl-editor{display:flex;height:380px;border-radius:8px;overflow:hidden;background:#1A1A1A;
+.jl-editor{display:flex;height:clamp(300px, calc(100vh - 330px), 76vh);border-radius:8px;overflow:hidden;background:#1A1A1A;
   border:1px solid #3a3f4b;transition:border-color .15s,box-shadow .15s}
 .jl-editor.valid{border-color:#32D74B;box-shadow:0 0 0 1px #32D74B}
 .jl-editor.invalid{border-color:#FF453A;box-shadow:0 0 0 1px #FF453A}
@@ -154,6 +172,11 @@ label.ck{display:inline-flex;align-items:center;gap:4px;color:var(--text);font-s
   border:none;outline:none;resize:none;white-space:pre;overflow:auto;
   padding:12px 16px;font:14px/21px ui-monospace,SFMono-Regular,Consolas,"Courier New",monospace}
 #json-in::placeholder{color:#6e6e6e}
+/* CodeMirror 增强（has-cm：CDN 可用时替换 textarea 展示；textarea 仍为值载体） */
+.jl-editor.has-cm .jl-gutter, .jl-editor.has-cm #json-in{display:none}
+.jl-cm{flex:1;min-width:0;align-self:stretch}
+.jl-cm .CodeMirror{height:100%;font:13px/1.5 ui-monospace,SFMono-Regular,Consolas,"Courier New",monospace}
+.CodeMirror .jl-err-bg{background:rgba(255,70,70,.18)}
 .jl-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:12px}
 .jl-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;
   border-radius:8px;padding:8px 16px;font-size:14px;line-height:20px;font-weight:600;
@@ -305,6 +328,7 @@ hr.sep{border:none;border-top:1px solid var(--border);margin:14px 0}
   <div class="jl-editor" id="jl-editor">
     <div class="jl-gutter"><div class="jl-gutter-in" id="jl-gutter-in">1</div></div>
     <textarea id="json-in" spellcheck="false" wrap="off" placeholder="Click here to start editing JSON..."></textarea>
+    <div class="jl-cm" id="json-cm" hidden></div>
   </div>
   <div class="jl-bar">
     <button class="jl-btn jl-btn-primary" id="json-validate" title="Ctrl/Cmd + Enter">
@@ -334,8 +358,14 @@ hr.sep{border:none;border-top:1px solid var(--border);margin:14px 0}
   <h2>SQL 工具<small>格式化 / 压缩 / 简单语法检查</small></h2>
   <div class="cdn-warn" id="sql-cdn-warn">⚠ sql-formatter CDN 未加载，格式化已降级为内置简易实现（仅换行与空白规整）。</div>
   <div class="row2">
-    <textarea id="sql-in" spellcheck="false" placeholder="-- 粘贴 SQL&#10;SELEC a, b FROM t WHERE x = 1"></textarea>
-    <textarea id="sql-out" spellcheck="false" readonly placeholder="结果输出"></textarea>
+    <div class="sql-pane">
+      <textarea id="sql-in" spellcheck="false" placeholder="-- 粘贴 SQL&#10;SELEC a, b FROM t WHERE x = 1"></textarea>
+      <div class="jl-cm sql-cm" id="sql-cm-in" hidden></div>
+    </div>
+    <div class="sql-pane">
+      <textarea id="sql-out" spellcheck="false" readonly placeholder="结果输出"></textarea>
+      <div class="jl-cm sql-cm" id="sql-cm-out" hidden></div>
+    </div>
   </div>
   <div class="bar">
     <button class="act primary" id="sql-format">格式化</button>
@@ -726,22 +756,61 @@ const TT = (() => {
   }
 
   /* ---------- diff：自研 LCS（O(n·m) DP；ponytail: 超大文本会慢，>2 万行建议分块） ---------- */
+  // 大文本保护（2026-11-13）：DP 格数超限 → 剪枝后主体退化为整块替换（保公共前后缀对齐）。
+  // 驻留整数 DP 实测 ~1.5 亿格/秒；6e7 上限 ≈ 差异区 7.7k×7.7k 内走精确 LCS，
+  // 更病态（全不同 8k+）才兜底。旧实现 12k 行近同（字符串比较）12.7s 冻死主线程
+  const LCS_CELL_CAP = 6e7;
   function lcsOps(a, b) {
-    const n = a.length, m = b.length, w = m + 1;
-    const dp = new Uint32Array((n + 1) * w);
-    for (let i = n - 1; i >= 0; i--)
-      for (let j = m - 1; j >= 0; j--)
-        dp[i * w + j] = a[i] === b[j]
-          ? dp[(i + 1) * w + j + 1] + 1
-          : Math.max(dp[(i + 1) * w + j], dp[i * w + j + 1]);
-    const ops = []; let i = 0, j = 0;
-    while (i < n && j < m) {
-      if (a[i] === b[j]) { ops.push(['=', a[i]]); i++; j++; }
-      else if (dp[(i + 1) * w + j] >= dp[i * w + j + 1]) { ops.push(['-', a[i]]); i++; }
-      else { ops.push(['+', b[j]]); j++; }
+    if (typeof a === 'string') a = a.split('');
+    if (typeof b === 'string') b = b.split('');
+    const n = a.length, m = b.length;
+    // 公共前后缀剪枝：大文档小改动（粘贴场景常态）DP 规模从 n·m 缩到差异区
+    let p = 0;
+    while (p < n && p < m && a[p] === b[p]) p++;
+    let s = 0;
+    while (s < n - p && s < m - p && a[n - 1 - s] === b[m - 1 - s]) s++;
+    const ops = [];
+    for (let i = 0; i < p; i++) ops.push(['=', a[i]]);
+    const ca = a.slice(p, n - s), cb = b.slice(p, m - s);
+    const cn = ca.length, cm = cb.length;
+    if (cn === 0 || cm === 0) {
+      // 一侧无剩余：纯增/纯删（含全等早退）
+      for (let i = 0; i < cn; i++) ops.push(['-', ca[i]]);
+      for (let j = 0; j < cm; j++) ops.push(['+', cb[j]]);
+    } else if ((cn + 1) * (cm + 1) > LCS_CELL_CAP) {
+      // 病态兜底：整块替换（- 全部再 + 全部），统计语义近似但永不冻结
+      for (let i = 0; i < cn; i++) ops.push(['-', ca[i]]);
+      for (let j = 0; j < cm; j++) ops.push(['+', cb[j]]);
+    } else {
+      // 值驻留：字符串比较 → 整数 id 比较（DP 内层提速数倍）
+      const pool = new Map();
+      const intern = v => {
+        let id = pool.get(v);
+        if (id === undefined) { id = pool.size; pool.set(v, id); }
+        return id;
+      };
+      const ia = ca.map(intern), ib = cb.map(intern);
+      const w = cm + 1;
+      const dp = new Uint32Array((cn + 1) * w);
+      for (let i = cn - 1; i >= 0; i--) {
+        const cur = i * w, nxt = cur + w, aiv = ia[i];
+        for (let j = cm - 1; j >= 0; j--) {
+          const down = dp[nxt + j], right = dp[cur + j + 1];
+          dp[cur + j] = aiv === ib[j]
+            ? dp[nxt + j + 1] + 1
+            : (down >= right ? down : right);
+        }
+      }
+      let i = 0, j = 0;
+      while (i < cn && j < cm) {
+        if (ia[i] === ib[j]) { ops.push(['=', ca[i]]); i++; j++; }
+        else if (dp[(i + 1) * w + j] >= dp[i * w + j + 1]) { ops.push(['-', ca[i]]); i++; }
+        else { ops.push(['+', cb[j]]); j++; }
+      }
+      while (i < cn) ops.push(['-', ca[i++]]);
+      while (j < cm) ops.push(['+', cb[j++]]);
     }
-    while (i < n) ops.push(['-', a[i++]]);
-    while (j < m) ops.push(['+', b[j++]]);
+    for (let i = 0; i < s; i++) ops.push(['=', a[n - 1 - i]]);
     return ops;
   }
   // 比较（可带 norm：忽略大小写/空白）用 norm 后的 token，输出保留原文：
@@ -1493,8 +1562,10 @@ if (typeof globalThis !== 'undefined') globalThis.TT_CORE = TT;
     const inEl = sec.querySelector('textarea'), outEl = sec.querySelectorAll('textarea')[1];
     const act = btn.dataset.io;
     if (act === 'copy') btn.addEventListener('click', () => copyText(outEl.value, btn));
-    if (act === 'clear') btn.addEventListener('click', () => { inEl.value = ''; outEl.value = ''; msg(sec, ''); });
-    if (act === 'sample') btn.addEventListener('click', () => { inEl.value = SEC_SAMPLE[sec.id] || ''; });
+    if (act === 'clear') btn.addEventListener('click', () => { inEl.value = ''; outEl.value = ''; msg(sec, '');
+      inEl.dispatchEvent(new Event('input', {bubbles: true})); outEl.dispatchEvent(new Event('input', {bubbles: true})); });
+    if (act === 'sample') btn.addEventListener('click', () => { inEl.value = SEC_SAMPLE[sec.id] || '';
+      inEl.dispatchEvent(new Event('input', {bubbles: true})); });
   });
   document.querySelectorAll('[data-io2]').forEach(btn => {  // crypto 卡内小清空
     btn.addEventListener('click', () => {
@@ -1519,11 +1590,18 @@ if (typeof globalThis !== 'undefined') globalThis.TT_CORE = TT;
     'tool-sql': SAMPLES['tool-sql'],
   };
   const JL = {
-    ta: $('#json-in'), editor: $('#jl-editor'), gutter: $('#jl-gutter-in'),
+    ta: $('#json-in'), editor: $('#jl-editor'), gutter: $('#jl-gutter-in'), cmEl: $('#json-cm'),
     prettify: $('#json-prettify'), indent: $('#json-indent'), copy: $('#json-copy'),
     fix: $('#json-tryfix'), sample: $('#json-sample'), tip: $('#json-tip'),
     status: $('#json-status'),
   };
+  let jlCM = null, jlCmErrLine = null;  // CodeMirror 实例（CDN 失败为 null，全走 textarea）
+  // 所有「程序写入 JSON 文本」统一走 jlSet：textarea 永远是值载体（copy/校验等读者零改动），
+  // CM 存在时同步回灌实例
+  function jlSet(v) {
+    JL.ta.value = v;
+    if (jlCM && jlCM.getValue() !== v) jlCM.setValue(v);
+  }
   // 示例与 jsonlint.com 首页 Load Sample 完全一致
   const JL_SAMPLE = '{\n  "name": "John Doe",\n  "email": "john@example.com",\n  "age": 30,\n  "active": true,\n  "roles": ["admin", "user"],\n  "address": {\n    "street": "123 Main St",\n    "city": "New York",\n    "country": "USA"\n  },\n  "projects": [\n    {"id": 1, "name": "Website Redesign"},\n    {"id": 2, "name": "Mobile App"}\n  ]\n}';
   const JL_SVG = {
@@ -1580,6 +1658,19 @@ if (typeof globalThis !== 'undefined') globalThis.TT_CORE = TT;
         (e.line ? `<span class="jl-err-pos">line ${e.line}, col ${e.col}</span>` : '') +
         `</div>${body}<p class="hint">${hint}</p></div></div></div>`;
     } else JL.status.innerHTML = '';
+    // CM 错误行底色（textarea 路径行号列红标已在上方，双 UI 一致）
+    if (jlCM) {
+      if (jlCmErrLine != null) {
+        try { jlCM.removeLineClass(jlCmErrLine, 'background', 'jl-err-bg'); } catch (e) {}
+        jlCmErrLine = null;
+      }
+      if (jlState === 'invalid' && jlErr && jlErr.line) {
+        const li = jlErr.line - 1;
+        if (li >= 0 && li < jlCM.lineCount()) {
+          try { jlCM.addLineClass(li, 'background', 'jl-err-bg'); jlCmErrLine = li; } catch (e) {}
+        }
+      }
+    }
   }
   function jlValidate() {
     jlSrc = JL.ta.value;
@@ -1594,15 +1685,15 @@ if (typeof globalThis !== 'undefined') globalThis.TT_CORE = TT;
     if (jlState !== 'valid') return;
     const v = JSON.parse(JL.ta.value);   // 刚校验过，必成功
     const ind = JL.indent.value;
-    JL.ta.value = jlIsPretty(JL.ta.value)
+    jlSet(jlIsPretty(JL.ta.value)
       ? JSON.stringify(v)                                                    // Compress
-      : JSON.stringify(v, null, ind === 'tab' ? '\t' : parseInt(ind, 10));   // Prettify
+      : JSON.stringify(v, null, ind === 'tab' ? '\t' : parseInt(ind, 10)));  // Prettify
     jlValidate();
   }
   JL.ta.addEventListener('input', jlValidate);
   JL.ta.addEventListener('scroll', () => { JL.gutter.style.transform = `translateY(${-JL.ta.scrollTop}px)`; });
   $('#json-validate').addEventListener('click', jlValidate);
-  $('#json-clear').addEventListener('click', () => { JL.ta.value = ''; jlValidate(); JL.ta.focus(); });
+  $('#json-clear').addEventListener('click', () => { jlSet(''); jlValidate(); (jlCM || JL.ta).focus(); });
   JL.prettify.addEventListener('click', jlPrettify);
   JL.copy.addEventListener('click', async () => {
     const txt = JL.ta.value;
@@ -1621,16 +1712,16 @@ if (typeof globalThis !== 'undefined') globalThis.TT_CORE = TT;
     setTimeout(() => { JL.copy.textContent = 'Copy'; }, 2000);
   });
   JL.fix.addEventListener('click', () => {
-    JL.ta.value = T.jsonRepairBest(JL.ta.value).text;
+    jlSet(T.jsonRepairBest(JL.ta.value).text);
     jlValidate();
   });
-  JL.sample.addEventListener('click', () => { JL.ta.value = JL_SAMPLE; jlValidate(); });
+  JL.sample.addEventListener('click', () => { jlSet(JL_SAMPLE); jlValidate(); });
   // 拖拽文件载入（对齐站点 onDrop）
   JL.editor.addEventListener('dragover', e => e.preventDefault());
   JL.editor.addEventListener('drop', e => {
     e.preventDefault();
     const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-    if (f) f.text().then(t => { JL.ta.value = t; jlValidate(); });
+    if (f) f.text().then(t => { jlSet(t); jlValidate(); });
   });
   // 快捷键：Ctrl/Cmd+Enter 校验 · Ctrl/Cmd+Shift+F 格式化（仅 JSON 页签激活时）
   document.addEventListener('keydown', e => {
@@ -1639,28 +1730,58 @@ if (typeof globalThis !== 'undefined') globalThis.TT_CORE = TT;
     if (mod && e.key === 'Enter') { e.preventDefault(); jlValidate(); }
     else if (mod && e.shiftKey && (e.key === 'F' || e.key === 'f')) { e.preventDefault(); jlPrettify(); }
   });
-  if (window.__cdnJsonrepairFail || typeof JSONRepair === 'undefined')
+  if (window.__cdnJsonrepairFail)
     $('#json-cdn-warn').classList.add('show');
   jlValidate();
+  // CodeMirror 增强（CDN 可用才启用；textarea 隐藏但仍是值载体与降级路径）。
+  // CDN 脚本 defer → 主内联脚本先执行，探测启用须挂 DOMContentLoaded（此时 defer 脚本已就绪）
+  const jlCmInit = () => {
+    if (typeof JSONRepair === 'undefined') $('#json-cdn-warn').classList.add('show');
+    if (window.CodeMirror && CodeMirror.modes && CodeMirror.modes.javascript && JL.cmEl) {
+    JL.cmEl.hidden = false;
+    JL.editor.classList.add('has-cm');
+    jlCM = CodeMirror(JL.cmEl, {
+      value: JL.ta.value, mode: 'application/json', theme: 'material-darker',
+      lineNumbers: true, indentUnit: 2, tabSize: 2, lineWrapping: false,
+      extraKeys: {
+        'Ctrl-Enter': () => jlValidate(), 'Cmd-Enter': () => jlValidate(),
+        'Shift-Ctrl-F': () => jlPrettify(), 'Cmd-Shift-F': () => jlPrettify(),
+      },
+    });
+    jlCM.on('change', () => {
+      const v = jlCM.getValue();
+      if (JL.ta.value !== v) JL.ta.value = v;
+      jlValidate();
+    });
+    jlValidate();  // 渲染一次错误行底色
+    }
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', jlCmInit);
+  else jlCmInit();
 
   /* ---------------- SQL ---------------- */
+  let sqlCmIn = null, sqlCmOut = null;  // CM 增强（CDN 失败为 null）
+  function sqlSetOut(v) {
+    $('#sql-out').value = v;
+    if (sqlCmOut && sqlCmOut.getValue() !== v) sqlCmOut.setValue(v);
+  }
   $('#sql-format').addEventListener('click', () => {
     const src = $('#sql-in').value, sec = $('#tool-sql');
     if (!src.trim()) return msg(sec, '请输入 SQL', 'warn');
     const lang = $('#sql-dialect').value;
     if (typeof sqlFormatter !== 'undefined') {
       try {
-        $('#sql-out').value = sqlFormatter.format(src, { language: lang });
+        sqlSetOut(sqlFormatter.format(src, { language: lang }));
         return msg(sec, `✓ 格式化完成（sql-formatter · ${lang}）`, 'ok');
       } catch (e) { /* 落降级 */ }
     }
-    $('#sql-out').value = T.sqlNaiveFormat(src);
+    sqlSetOut(T.sqlNaiveFormat(src));
     msg(sec, '⚠ CDN 不可用，已用内置简易格式化', 'warn');
   });
   $('#sql-minify').addEventListener('click', () => {
     const src = $('#sql-in').value, sec = $('#tool-sql');
     if (!src.trim()) return msg(sec, '请输入 SQL', 'warn');
-    $('#sql-out').value = T.sqlStrip(src);
+    sqlSetOut(T.sqlStrip(src));
     msg(sec, `✓ 压缩完成（去注释、单行，保留字符串字面量）`, 'ok');
   });
   $('#sql-check').addEventListener('click', () => {
@@ -1670,8 +1791,36 @@ if (typeof globalThis !== 'undefined') globalThis.TT_CORE = TT;
     if (!issues.length) return msg(sec, '✓ 未发现明显问题（括号/引号配平、关键字拼写粗检；非全量语法校验）', 'ok');
     msg(sec, '⚠ 发现 ' + issues.length + ' 处疑似问题（非全量校验）：\n' + issues.join('\n'), 'warn');
   });
-  if (window.__cdnSqlFormatterFail || typeof sqlFormatter === 'undefined')
-    $('#sql-cdn-warn').classList.add('show');
+  // CDN defer：警告判断与 CM 启用一并挂 DOMContentLoaded（此时 defer 脚本已就绪）
+  const sqlCmInit = () => {
+    if (window.__cdnSqlFormatterFail || typeof sqlFormatter === 'undefined')
+      $('#sql-cdn-warn').classList.add('show');
+    // SQL 编辑器 CM 增强（textarea 恒为值载体；外部写入经 input 事件回灌）
+    if (window.CodeMirror && CodeMirror.modes && CodeMirror.modes.sql) {
+      const mk = (el, ta, extra) => {
+        el.hidden = false;
+        el.parentElement.classList.add('has-cm');
+        return CodeMirror(el, Object.assign({
+          value: ta.value, mode: 'sql', theme: 'material-darker',
+          lineNumbers: true, lineWrapping: true,
+        }, extra || {}));
+      };
+      sqlCmIn = mk($('#sql-cm-in'), $('#sql-in'));
+      sqlCmIn.on('change', () => {
+        const v = sqlCmIn.getValue();
+        if ($('#sql-in').value !== v) $('#sql-in').value = v;
+      });
+      $('#sql-in').addEventListener('input', () => {
+        if (sqlCmIn && sqlCmIn.getValue() !== $('#sql-in').value) sqlCmIn.setValue($('#sql-in').value);
+      });
+      sqlCmOut = mk($('#sql-cm-out'), $('#sql-out'), { readOnly: true });
+      $('#sql-out').addEventListener('input', () => {
+        if (sqlCmOut && sqlCmOut.getValue() !== $('#sql-out').value) sqlCmOut.setValue($('#sql-out').value);
+      });
+    }
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', sqlCmInit);
+  else sqlCmInit();
 
   /* ---------------- diff：照搬 jq22/textDifference（Mergely 深色双栏合并视图） ----------------
    * 形态：上方常驻双输入框（输入即实时比对，防抖 150ms，无需失焦），下方差异渲染；

@@ -7,9 +7,9 @@ ZenTray **service** 类型插件：面板 ▶ 启动 → 起本地 Web 服务并
 
 | 工具 | 能力 |
 |------|------|
-| JSON | 照搬 jsonlint.com 设计：单编辑器实时校验（绿/红横幅 + 行列定位 + 源行 `^` 指针 + 行号槽错误行红标）、Prettify⇄Compress（2/4/Tab 缩进）、Copy、Try Fix（jsonrepair CDN，降级内置启发式）、Load Sample、Ctrl+Enter / Ctrl+Shift+F 快捷键、拖文件载入、Valid JSON 统计（大小/键数/深度/对象/数组） |
-| SQL | 格式化（sql-formatter，mysql/hive/spark 方言）、压缩（去注释单行）、简单语法检查（配平+关键字粗检） |
-| 文本比对 | Mergely 深色双栏合并视图（照搬 jq22/textDifference 设计）：输入即比对（融合框：输入与结果同框呈现，软换行自适应宽免横向拖动）；中缝连线 + 每差异块 ◀/▶ 合并箭头；行内词高亮（CJK 逐字/西文按词，可切全逐字），拖拽读文件（路径标签显示文件名），ignore witespaces/忽略大小写，两侧 保存save 下载（含已接受合并），相似度（字符级 LCS / max 字符数） |
+| JSON | 照搬 jsonlint.com 设计：单编辑器实时校验（绿/红横幅 + 行列定位 + 源行 `^` 指针 + 行号槽错误行红标）、Prettify⇄Compress（2/4/Tab 缩进）、Copy、Try Fix（jsonrepair CDN，降级内置启发式）、Load Sample、Ctrl+Enter / Ctrl+Shift+F 快捷键、拖文件载入、Valid JSON 统计（大小/键数/深度/对象/数组）。**CodeMirror 增强**（CDN 可用时）：语法高亮 + 大文档视口虚拟渲染 + 错误行底色，加载失败回退 textarea+行号 UI 零差异 |
+| SQL | 格式化（sql-formatter，mysql/hive/spark 方言）、压缩（去注释单行）、简单语法检查（配平+关键字粗检）。**CodeMirror 增强**：输入/输出双 pane 语法高亮（输出只读），CDN 失败回退 textarea |
+| 文本比对 | Mergely 深色双栏合并视图（照搬 jq22/textDifference 设计）：输入即比对（融合框：输入与结果同框呈现，软换行自适应宽免横向拖动）；中缝连线 + 每差异块 ◀/▶ 合并箭头；行内词高亮（CJK 逐字/西文按词，可切全逐字），拖拽读文件（路径标签显示文件名），ignore witespaces/忽略大小写，两侧 保存save 下载（含已接受合并），相似度（字符级 LCS / max 字符数）。**大文本优化**：比对核心公共前后缀剪枝 + 整数驻留 DP（12k 行近同文本从冻死 >25s 提到 ~1.2s），超限病态输入退化为整块替换不冻结 |
 | 时间工具 | 单标签内二级页：**万年历**（公历+农历 1900–2100 码表、干支生肖、节气 ±1 分钟、节日、国务院休/班角标 2020–2026；点日看详情卡，右侧列出**当日任务**——截止日命中或提醒槽命中，读 `/api/tasks`）；**三合一页**（时间戳⇄时间：方向按钮切换，秒/毫秒下拉选择或位数自适应识别，本地/ISO/UTC/相对/星期·ISO 周/年积日；日期计算：加减（月末 clamp）+ 时间差（自然 Y年M月D日 + 合计 + 工作日）；格式化：25 种格式逐行复制，本地/UTC 切换）。所有日期时间输入为**分段式**：每单位一格（YYYY·MM·DD·HH·mm·ss），输满自动右移到下一格，退格回退，粘贴完整时间串自动分布 |
 | 随机字符串 | 长度/字符集勾选/排除易混字符/前缀，crypto.getRandomValues + 拒绝采样 |
 | 哈希/编码/加密 | MD5、Unicode \uXXXX、URL 百分号、AES-256-GCM（WebCrypto，PBKDF2 派生，base64 含 salt+IV） |
@@ -21,8 +21,8 @@ ZenTray **service** 类型插件：面板 ▶ 启动 → 起本地 Web 服务并
 - HTTP 仅 GET：`/`（页面）、`/healthz`（探活）、`/api/tasks`（读 `DATA_DIR/active_tasks.json`
   的只读投影：title/deadline/category/reminder；读取失败返回 `[]`）、`/favicon.ico`；
   无任何写文件/执行命令端点。
-- 页面下发 CSP（允许 cdnjs/jsdelivr/unpkg 的 script-src）与 `X-Content-Type-Options: nosniff`。
-- 前端为单个自包含 index.html；仅两处 CDN `<script>`（jsonrepair、sql-formatter），加载失败自动降级并提示。
+- 页面下发 CSP（允许 cdnjs/jsdelivr/unpkg 的 script-src、jsdelivr 的 style-src）与 `X-Content-Type-Options: nosniff`。
+- 前端为单个自包含 index.html；CDN `<script>` 全部 `defer`（jsonrepair、sql-formatter、CodeMirror×3）：慢网不阻塞首屏，加载失败自动降级（JSON/SQL 回退 textarea UI，比对/其余工具本就零依赖）。编辑/输出框为视口自适应 pane（clamp 高度、框内滚动），大文本不再撑破页面。
 - 自动开浏览器仅在服务启动端口就绪后发生一次（Linux 走 xdg-open）。
 - 状态文件/pid 与 daemon 日志写在 `ZENTRAY_PLUGIN_DATA_DIR`（无该环境时回落
   `~/.local/share/ZenTray/plugin_data/text-toolbox/`），不写插件自身目录。
