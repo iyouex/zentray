@@ -1,9 +1,20 @@
 """二级分类领域模型与标题前缀组装（纯函数，无 UI 依赖）。"""
 from __future__ import annotations
 
+import re
 import uuid
 from dataclasses import asdict, dataclass, field
 from typing import List, Optional, Tuple
+
+# 历史坏数据判定：分类名形如 uuid = 已删分类的旧 id 被当名字存下
+# （任务/模板曾直存 id，分类删建后 a-select 无匹配 option 把 value 当 label 渲染）。
+_UUID_NAME_RE = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+)
+
+
+def is_uuid_like(value) -> bool:
+    return bool(_UUID_NAME_RE.match(str(value or "").strip()))
 
 # 全局括号预设：(显示名, left, right) — 包住「一级-二级」整体
 WRAP_PRESETS: List[Tuple[str, str, str]] = [
@@ -118,6 +129,8 @@ class CategorySettings:
             for p in (data.get("primary_list") or [])
             if isinstance(p, dict)
         ]
+        # 自愈：剔除历史坏数据再生出来的 uuid 名分类（ensure_primary_named(uuid) 遗物）
+        primaries = [p for p in primaries if not is_uuid_like(p.name)]
         if not primaries:
             primaries = default_category_settings().primary_list
 

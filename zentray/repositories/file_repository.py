@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 from typing import List, Optional
 
-from zentray.config import ACTIVE_TASKS_FILE, ARCHIVE_DIR
+from zentray import config
 from zentray.core.file_io import append_text_line, load_json_list, path_lock, save_json_list
 from zentray.core.models import Task
 from zentray.core.repository import TaskRepository
@@ -47,8 +47,11 @@ def parse_archive_line(line: str) -> Optional[dict]:
 
 class FileTaskRepository(TaskRepository):
     def __init__(self, active_file: Path | None = None, archive_dir: Path | None = None):
-        self.active_file = Path(active_file) if active_file else ACTIVE_TASKS_FILE
-        self.archive_dir = Path(archive_dir) if archive_dir else ARCHIVE_DIR
+        # 迟绑定读 zentray.config 属性（而非 import 时拷贝常量）：测试隔离对
+        # config.ACTIVE_TASKS_FILE 的 monkeypatch 才能传导到默认路径——否则
+        # 默认构造的仓库会静默写真实用户数据（2026-11-12 事故实录）。
+        self.active_file = Path(active_file) if active_file else config.ACTIVE_TASKS_FILE
+        self.archive_dir = Path(archive_dir) if archive_dir else config.ARCHIVE_DIR
 
     def find_all(self) -> List[Task]:
         data = load_json_list(self.active_file)
@@ -72,8 +75,11 @@ class FileTaskRepository(TaskRepository):
             self.save_all(tasks)
 
     def save_all(self, tasks: List[Task]) -> None:
-        data = [t.to_dict() for t in tasks]
-        save_json_list(self.active_file, data)
+        # 写原子化：本方法被 service 层 RMW 之外单独调用时（watcher 兜底等），
+        # 也要与并发写互斥；path_lock 可重入，save()/mutate_all 内嵌调用不受影响。
+        with path_lock(self.active_file):
+            data = [t.to_dict() for t in tasks]
+            save_json_list(self.active_file, data)
 
     def delete(self, task_id: str) -> None:
         with path_lock(self.active_file):
