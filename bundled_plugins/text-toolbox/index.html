@@ -5,14 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>文本工具箱</title>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://unpkg.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
-<!-- CDN 组件（可选增强；加载失败自动降级并提示） -->
-<script src="https://cdn.jsdelivr.net/npm/jsonrepair@3.13.1/lib/umd/jsonrepair.min.js" onerror="window.__cdnJsonrepairFail=true" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/sql-formatter/15.9.0/sql-formatter.min.js" onerror="window.__cdnSqlFormatterFail=true" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
-<!-- CodeMirror 5（可选增强：大文档视口虚拟渲染 + 语法高亮；失败降级原 textarea UI） -->
-<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js" onerror="window.__cmFail=true" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
-<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/javascript/javascript.min.js" onerror="window.__cmFail=true" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
-<script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/sql/sql.min.js" onerror="window.__cmFail=true" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/theme/material-darker.min.css" onerror="window.__cmFail=true">
+<!-- CDN 组件（jsonrepair / sql-formatter / CodeMirror×3+主题）零标签加载：
+     DOMContentLoaded 后动态注入（6s 超时放弃）——CDN 挂起/弱网不再阻塞
+     页面可用（曾致 DCL 20s+ 打不开，2026-11-13），本地内联代码即完整基线 -->
 <style>
 :root{
   --bg:#f2f3f5; --card:#ffffff; --card2:#f7f8fa;
@@ -1730,13 +1725,11 @@ if (typeof globalThis !== 'undefined') globalThis.TT_CORE = TT;
     if (mod && e.key === 'Enter') { e.preventDefault(); jlValidate(); }
     else if (mod && e.shiftKey && (e.key === 'F' || e.key === 'f')) { e.preventDefault(); jlPrettify(); }
   });
-  if (window.__cdnJsonrepairFail)
-    $('#json-cdn-warn').classList.add('show');
   jlValidate();
   // CodeMirror 增强（CDN 可用才启用；textarea 隐藏但仍是值载体与降级路径）。
-  // CDN 脚本 defer → 主内联脚本先执行，探测启用须挂 DOMContentLoaded（此时 defer 脚本已就绪）
+  // CDN 资源由文件尾 bootCdn 在 DOMContentLoaded 后动态注入，此处仅做能力探测
   const jlCmInit = () => {
-    if (typeof JSONRepair === 'undefined') $('#json-cdn-warn').classList.add('show');
+    if (jlCM) return;  // 已启用（bootCdn 注入后可能被再次调用）
     if (window.CodeMirror && CodeMirror.modes && CodeMirror.modes.javascript && JL.cmEl) {
     JL.cmEl.hidden = false;
     JL.editor.classList.add('has-cm');
@@ -1756,8 +1749,6 @@ if (typeof globalThis !== 'undefined') globalThis.TT_CORE = TT;
     jlValidate();  // 渲染一次错误行底色
     }
   };
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', jlCmInit);
-  else jlCmInit();
 
   /* ---------------- SQL ---------------- */
   let sqlCmIn = null, sqlCmOut = null;  // CM 增强（CDN 失败为 null）
@@ -1791,11 +1782,10 @@ if (typeof globalThis !== 'undefined') globalThis.TT_CORE = TT;
     if (!issues.length) return msg(sec, '✓ 未发现明显问题（括号/引号配平、关键字拼写粗检；非全量语法校验）', 'ok');
     msg(sec, '⚠ 发现 ' + issues.length + ' 处疑似问题（非全量校验）：\n' + issues.join('\n'), 'warn');
   });
-  // CDN defer：警告判断与 CM 启用一并挂 DOMContentLoaded（此时 defer 脚本已就绪）
+  // SQL 编辑器 CM 增强（textarea 恒为值载体；外部写入经 input 事件回灌）。
+  // CDN 由文件尾 bootCdn 动态注入后调用；防重入
   const sqlCmInit = () => {
-    if (window.__cdnSqlFormatterFail || typeof sqlFormatter === 'undefined')
-      $('#sql-cdn-warn').classList.add('show');
-    // SQL 编辑器 CM 增强（textarea 恒为值载体；外部写入经 input 事件回灌）
+    if (sqlCmIn) return;
     if (window.CodeMirror && CodeMirror.modes && CodeMirror.modes.sql) {
       const mk = (el, ta, extra) => {
         el.hidden = false;
@@ -1819,8 +1809,6 @@ if (typeof globalThis !== 'undefined') globalThis.TT_CORE = TT;
       });
     }
   };
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', sqlCmInit);
-  else sqlCmInit();
 
   /* ---------------- diff：照搬 jq22/textDifference（Mergely 深色双栏合并视图） ----------------
    * 形态：上方常驻双输入框（输入即实时比对，防抖 150ms，无需失焦），下方差异渲染；
@@ -2261,6 +2249,54 @@ if (typeof globalThis !== 'undefined') globalThis.TT_CORE = TT;
       msg('#aes-msg', '✗ 解密失败：口令错误或密文不是本页格式（' + e.message + '）', 'err');
     }
   });
+  // CDN 引导桥（文件尾 bootCdn 注入完成后回调）：启用 CM 增强
+  globalThis.__tbCmEnable = () => { jlCmInit(); sqlCmInit(); };
+})();
+
+/* ---------------- CDN 增强：DCL 后动态注入（6s 超时放弃） ----------------
+ * 页面零外部阻塞标签：本地内联代码即完整可用基线，CDN 只做渐进增强——
+ * 挂起/弱网/断网都不再卡页面（曾因 defer 脚本未完成而 DCL 20s+ 打不开）。 */
+(() => {
+  const CDN_BASE_JS = 'https://cdn.jsdelivr.net/npm/codemirror@5.65.16/';
+  const SRC = {
+    cmLib: CDN_BASE_JS + 'lib/codemirror.min.js',
+    cmJs: CDN_BASE_JS + 'mode/javascript/javascript.min.js',
+    cmSql: CDN_BASE_JS + 'mode/sql/sql.min.js',
+    cmCss: CDN_BASE_JS + 'theme/material-darker.min.css',
+    jr: 'https://cdn.jsdelivr.net/npm/jsonrepair@3.13.1/lib/umd/jsonrepair.min.js',
+    sf: 'https://cdnjs.cloudflare.com/ajax/libs/sql-formatter/15.9.0/sql-formatter.min.js',
+  };
+  function loadOnce(url, css) {
+    return new Promise(res => {
+      const t = setTimeout(() => res(null), 6000);  // 弱网兜底：6s 放弃该增强
+      const el = document.createElement(css ? 'link' : 'script');
+      if (css) { el.rel = 'stylesheet'; el.href = url; }
+      else el.src = url;
+      el.onload = () => { clearTimeout(t); res(url); };
+      el.onerror = () => { clearTimeout(t); res(null); };
+      document.head.appendChild(el);
+    });
+  }
+  const boot = async () => {
+    // 主题样式不参与逻辑，先行注入不等待
+    loadOnce(SRC.cmCss, true);
+    // lib 先行，mode 依赖 lib 全局（保证顺序）
+    if (await loadOnce(SRC.cmLib)) {
+      await Promise.all([loadOnce(SRC.cmJs), loadOnce(SRC.cmSql)]);
+    }
+    if (globalThis.__tbCmEnable) globalThis.__tbCmEnable();  // typeof 守卫：可用即启用，不可用即降级
+    // 独立增强：失败仅提示降级，不影响任何功能
+    loadOnce(SRC.jr).then(ok => {
+      if (!ok || typeof JSONRepair === 'undefined')
+        document.querySelector('#json-cdn-warn').classList.add('show');
+    });
+    loadOnce(SRC.sf).then(ok => {
+      if (!ok || typeof sqlFormatter === 'undefined')
+        document.querySelector('#sql-cdn-warn').classList.add('show');
+    });
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
 })();
 </script>
 

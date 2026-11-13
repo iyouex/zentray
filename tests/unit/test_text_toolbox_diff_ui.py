@@ -60,12 +60,17 @@ def test_json_codemirror_enhancement_with_fallback():
     # CodeMirror 增强：CDN 标签（含 mode）+ has-cm 切换 CSS + jlSet 统一写入 +
     # window.CodeMirror 守卫（CDN 失败 → 原 textarea+行号 UI 零差异）
     s = _html()
-    assert "codemirror@5.65.16/lib/codemirror.min.js" in s
-    assert "codemirror@5.65.16/mode/javascript/javascript.min.js" in s
+    # 2026-11-13 CDN 零阻塞：head 无外部 script 标签，bootCdn DCL 后动态注入
+    head = s[: s.index("<style>")]
+    assert "<script src=" not in head and "<link" not in head.replace(
+        '<meta http-equiv="Content-Security-Policy"', "", 1
+    ), "head 不得有外部加载标签（曾致 CDN 挂起整页打不开）"
+    assert "codemirror@5.65.16" in s and "loadOnce(SRC.cmLib)" in s, "bootCdn 须注入 CM lib"
     assert ".jl-editor.has-cm .jl-gutter, .jl-editor.has-cm #json-in{display:none}" in s
     assert "function jlSet(v)" in s, "程序写入须统一走 jlSet（textarea 恒为值载体）"
     assert "CodeMirror.modes.javascript && JL.cmEl" in s, "CDN 失败不得启用 CM"
     assert s.count("jlSet(") >= 6, "prettify/clear/fix/sample/drop 五写入方 + 定义"
+    assert "6000" in s, "CDN 注入须有超时放弃"
 
 
 def test_sql_codemirror_with_fallback():
