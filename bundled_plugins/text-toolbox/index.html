@@ -1532,6 +1532,9 @@ if (typeof globalThis !== 'undefined') globalThis.TT_CORE = TT;
     tabs.forEach(b => b.classList.toggle('active', b === btn));
     document.querySelectorAll('section.tool').forEach(sec =>
       sec.classList.toggle('active', sec.dataset.tool === btn.dataset.tool));
+    // CM5 在隐藏容器中创建时会退化成「随内容生长」模式（大文本把页面撑爆——
+    // 2026-11-15 实测 .CodeMirror-scroll 撑到 93 万 px）。切到可见时 refresh 重测。
+    if (globalThis.__tbCmRefresh) globalThis.__tbCmRefresh();
   }));
 
   /* 通用：复制/清空/示例 */
@@ -2251,6 +2254,10 @@ if (typeof globalThis !== 'undefined') globalThis.TT_CORE = TT;
   });
   // CDN 引导桥（文件尾 bootCdn 注入完成后回调）：启用 CM 增强
   globalThis.__tbCmEnable = () => { jlCmInit(); sqlCmInit(); };
+  // 标签切换时重测 CM（隐藏创建的编辑器须在可见后 refresh 才能恢复固定高模式）
+  globalThis.__tbCmRefresh = () => {
+    try { if (jlCM) jlCM.refresh(); if (sqlCmIn) sqlCmIn.refresh(); if (sqlCmOut) sqlCmOut.refresh(); } catch (e) {}
+  };
 })();
 
 /* ---------------- CDN 增强：DCL 后动态注入（6s 超时放弃） ----------------
@@ -2262,6 +2269,9 @@ if (typeof globalThis !== 'undefined') globalThis.TT_CORE = TT;
     cmLib: CDN_BASE_JS + 'lib/codemirror.min.js',
     cmJs: CDN_BASE_JS + 'mode/javascript/javascript.min.js',
     cmSql: CDN_BASE_JS + 'mode/sql/sql.min.js',
+    // 基础样式必需：滚动容器裁剪/滚动条定位/行渲染全靠它——缺失时大文本
+    // 滚动条参与布局（实测撑出 58k px），主题 css 只是配色（2026-11-15 排障实录）
+    cmCssBase: CDN_BASE_JS + 'lib/codemirror.css',
     cmCss: CDN_BASE_JS + 'theme/material-darker.min.css',
     jr: 'https://cdn.jsdelivr.net/npm/jsonrepair@3.13.1/lib/umd/jsonrepair.min.js',
     sf: 'https://cdnjs.cloudflare.com/ajax/libs/sql-formatter/15.9.0/sql-formatter.min.js',
@@ -2278,22 +2288,24 @@ if (typeof globalThis !== 'undefined') globalThis.TT_CORE = TT;
     });
   }
   const boot = async () => {
-    // 主题样式不参与逻辑，先行注入不等待
+    // 样式不参与逻辑，先行注入不等待（基础 css 必须先于主题）
+    loadOnce(SRC.cmCssBase, true);
     loadOnce(SRC.cmCss, true);
+    // 独立增强与 CM 并行加载（串行会让降级提示等到 cmLib 超时之后才出现）
+    const pJr = loadOnce(SRC.jr).then(ok => {
+      if (!ok || typeof JSONRepair === 'undefined')
+        document.querySelector('#json-cdn-warn').classList.add('show');
+    });
+    const pSf = loadOnce(SRC.sf).then(ok => {
+      if (!ok || typeof sqlFormatter === 'undefined')
+        document.querySelector('#sql-cdn-warn').classList.add('show');
+    });
     // lib 先行，mode 依赖 lib 全局（保证顺序）
     if (await loadOnce(SRC.cmLib)) {
       await Promise.all([loadOnce(SRC.cmJs), loadOnce(SRC.cmSql)]);
     }
     if (globalThis.__tbCmEnable) globalThis.__tbCmEnable();  // typeof 守卫：可用即启用，不可用即降级
-    // 独立增强：失败仅提示降级，不影响任何功能
-    loadOnce(SRC.jr).then(ok => {
-      if (!ok || typeof JSONRepair === 'undefined')
-        document.querySelector('#json-cdn-warn').classList.add('show');
-    });
-    loadOnce(SRC.sf).then(ok => {
-      if (!ok || typeof sqlFormatter === 'undefined')
-        document.querySelector('#sql-cdn-warn').classList.add('show');
-    });
+    await Promise.allSettled([pJr, pSf]);
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();
