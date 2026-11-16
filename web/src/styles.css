@@ -597,32 +597,6 @@ body {
 .zt-dl-late { color: var(--zt-due-late); font-weight: 600; }
 .zt-dl-soon { color: var(--zt-due-soon); }
 
-/* ================= 列表增删（spec §4） ================= */
-.zt-list-enter-active {
-  transition: opacity var(--zt-dur-fast) var(--zt-ease-out),
-    transform var(--zt-dur-fast) var(--zt-ease-out);
-}
-
-.zt-list-leave-active {
-  transition: opacity var(--zt-dur-off) ease, transform var(--zt-dur-off) ease;
-  position: absolute;
-  width: 100%;
-}
-
-.zt-list-move {
-  transition: transform var(--zt-dur-fast) var(--zt-ease-out);
-}
-
-.zt-list-enter-from {
-  opacity: 0;
-  transform: translateY(8px);
-}
-
-.zt-list-leave-to {
-  opacity: 0;
-  transform: translateY(4px);
-}
-
 /* ================= 动效降级（spec §6 修订：off = 彻底关闭） ================= */
 body.zt-motion-off *,
 body.zt-motion-off *::before,
@@ -651,8 +625,6 @@ body.zt-motion-off .arco-icon-spin {
     animation-duration: 1s !important;
   }
 
-  .zt-list-enter-from,
-  .zt-list-leave-to,
   .task-card-item:hover,
   .arco-btn-primary:hover {
     transform: none;

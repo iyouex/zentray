@@ -4,7 +4,7 @@ import { fileURLToPath, URL } from 'node:url'
 
 export default defineConfig({
   plugins: [vue()],
-  base: './',
+  base: '/', // 绝对路径：嵌套路由深链下相对 ./assets 会解析到 /tasks/assets（2026-11-15 自测暴露）
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

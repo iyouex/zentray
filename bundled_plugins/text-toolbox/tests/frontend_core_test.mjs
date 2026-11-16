@@ -79,6 +79,39 @@ assert.equal(dl2.filter(o => o[0] === '+').length, 2);
 const dl3 = T.diffLines('A\nb', 'a\nb', s => s.toLowerCase());
 assert.equal(j(dl3), j([['=', 'A'], ['=', 'b']]));   // norm 只影响比较，保留原文
 ok('diffLines LCS（含 norm 保原文）');
+
+/* ---------- lcsOps 大文本性能与剪枝正确性（2026-11-13：O(n·m) 全量 DP 冻死主线程修复） ---------- */
+{
+  // 行为不变：公共前后缀剪枝 + 值驻留后输出与语义一致
+  const t1 = T.lcsOps('abc', 'abc');
+  assert.equal(j(t1), j([['=','a'],['=','b'],['=','c']]), '全等剪枝');
+  const t2 = T.lcsOps('abcd'.split(''), 'abxd'.split(''));
+  assert.equal(j(t2.map(x => x[0])), j(['=','=','-', '+','=']), '中段差异');
+  const t3 = T.lcsOps([], ['x', 'y']);
+  assert.equal(j(t3), j([['+','x'],['+','y']]), '空侧');
+  const t4 = T.lcsOps(['p','q'], []);
+  assert.equal(j(t4), j([['-','p'],['-','q']]), '空对侧');
+  ok('lcsOps 剪枝行为向量');
+  // 冻死复现案：12000 行近同文本（旧 O(n·m)=1.44 亿格 >25s；剪枝后应为毫秒级）
+  const N = 12000;
+  const base = Array.from({ length: N }, (_, i) => 'line-' + i + ' 内容填充');
+  const lhs = base.slice();
+  const rhs = base.slice(); rhs[N - 1] += ' 差异'; rhs.splice(5000, 0, '插入行');
+  const t0 = Date.now();
+  const ops = T.lcsOps(lhs, rhs);
+  const dt = Date.now() - t0;
+  const eqCnt = ops.filter(o => o[0] === '=').length;
+  assert.ok(eqCnt >= N - 1, '等行对齐数不低于 N-1');
+  assert.ok(dt < 2000, `12k 行近同比对须 <2s（实测 ${dt}ms）`);
+  // 病态兜底：两侧全不同且超格数上限 → 退化为整块替换（保留公共前后缀对齐）
+  const bigA = Array.from({ length: 9000 }, (_, i) => 'A' + i + Math.random());
+  const bigB = Array.from({ length: 9000 }, (_, i) => 'B' + i + Math.random());
+  bigA[0] = bigB[0] = 'same-head';
+  const t5 = T.lcsOps(bigA, bigB);
+  assert.equal(t5[0][0], '=', '公共头仍对齐');
+  assert.ok(t5.length >= 17999, '全不同主体退化为替换块');
+  ok('lcsOps 大文本性能（12k 行 <2s）与病态兜底');
+}
 const dw = T.diffWords('the quick fox', 'the slow fox');
 // 分词含独立空白 token：the | ' ' | quick→del | slow→add | ' ' | fox
 assert.equal(j(dw), j([['=', 'the'], ['=', ' '], ['-', 'quick'], ['+', 'slow'], ['=', ' '], ['=', 'fox']]));
