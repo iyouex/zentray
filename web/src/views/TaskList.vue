@@ -67,7 +67,10 @@
           </div>
           <div class="col-scroll">
             <a-spin :loading="loading || histLoading" style="width: 100%">
-              <TransitionGroup v-if="leftItems.length" ref="listRef" name="zt-list" tag="div" class="task-card-list">
+              <!-- 列表动画唯一来源 GSAP（runFlip/celebrateCard）：不再挂 TransitionGroup
+                   的 CSS move/leave 过渡——两套系统同驱 transform 会在 reload 时互相
+                   重启逐帧样式重算，大列表点击完成后 300ms 级主线程冻结 -->
+              <div v-if="leftItems.length" ref="listRef" class="task-card-list">
                 <div
                   v-for="item in leftItems"
                   :key="item.key"
@@ -136,7 +139,7 @@
                     </div>
                   </div>
                 </div>
-              </TransitionGroup>
+              </div>
               <a-empty v-else-if="!loading" :description="emptyText" />
             </a-spin>
           </div>
@@ -509,7 +512,9 @@ async function onOpenAttachment(value) {
 // ---- 三视图数据：活跃任务（一次性 + 周期实例）/ 周期模板 / 历史任务 ----
 const knownTemplateIds = computed(() => new Set(templates.value.map((t) => t.template_id)))
 
-/** 左栏统一条目：任务 key='t:'+id（周期实例带 orphan 标），模板 key='m:'+tid，历史 key='h:'+时间+序号 */
+/** 左栏统一条目：任务 key='t:'+id（周期实例带 orphan 标），模板 key='m:'+tid，
+ 历史 key='h:'+时间+状态+标题（内容稳定键——带索引时每次完成归档前插都会
+ 整列销毁重建隐藏历史卡，数百次 DOM 变更直接冻结主线程） */
 const leftItems = computed(() => [
   ...tasks.value.map((t) => ({
     ...t,
@@ -524,9 +529,9 @@ const leftItems = computed(() => [
     kind: 'tmpl',
     title: t.base_title,
   })),
-  ...archived.value.map((a, i) => ({
+  ...archived.value.map((a) => ({
     ...a,
-    key: `h:${a.archived_at}:${i}`,
+    key: `h:${a.archived_at}:${a.status}:${a.title}`,
     kind: 'hist',
     title: a.title,
   })),
@@ -683,7 +688,7 @@ function ensureSelectionVisible() {
 
 /** DOM 集合变化前后捕获/回放：幸存卡片流动，离场收缩淡出、回归弹性放大 */
 async function runFlip(mutate) {
-  const root = listRef.value?.$el ?? listRef.value // TransitionGroup 的 ref 是组件实例，$el 才是 tag 渲染的 div
+  const root = listRef.value?.$el ?? listRef.value // 列表容器（历史为 TransitionGroup 组件实例）
   if (!root || motionOff() || isReduced()) {
     await mutate()
     return
@@ -691,14 +696,18 @@ async function runFlip(mutate) {
   const cards = root.querySelectorAll('.task-card-item')
   // 上一次 Flip 未完时接管，从当前视觉位置继续
   gsap.killTweensOf(cards)
-  const state = Flip.getState(cards)
+  // simple：只记 getBoundingClientRect 位移尺寸。默认模式逐元素算全局矩阵，
+  // gsap 会往列表里临时插测量脚手架再拆（每卡一次 appendChild+回流）——
+  // 百卡级列表 reload 时同步产生数百次 DOM 变更，250ms 级主线程冻结
+  const state = Flip.getState(cards, { simple: true })
   await mutate()
   await nextTick()
   Flip.from(state, {
     duration: DUR.flip,
     ease: EASE.spring,
-    stagger: 0.02,
+    stagger: { amount: 0.18 }, // 总量封顶：each:0.02 × 百卡 = 3s+ 尾拖补间
     absolute: true,
+    simple: true,
     onEnter: (els) => gsap.fromTo(els, { opacity: 0, scale: 0.88 }, { opacity: 1, scale: 1, duration: DUR.enter, ease: EASE.spring, clearProps: 'all' }),
     onLeave: (els) => gsap.to(els, { opacity: 0, scale: 0.88, duration: 0.2, ease: EASE.out }),
   })
@@ -814,6 +823,9 @@ function celebrateCard(itemId) {
   const cards = Array.from(root.querySelectorAll('.task-card-item'))
   const idx = cards.findIndex((c) => c.dataset.taskId === String(itemId))
   const target = idx >= 0 ? cards[idx] : null
+  // 基类 .task-card-item 的 transform 过渡（hover 升起用）会逐帧重启、与逐帧写入的
+  // 补间值互相插值——软件合成下整段庆祝动画掉帧，动画期间先关掉，结束恢复
+  gsap.set(cards, { transition: 'none' })
   if (target) {
     gsap.to(target, { scale: 1.02, y: -3, duration: 0.2, ease: EASE.spring })
     gsap.to(target, { autoAlpha: 0, scale: 0.88, y: -8, duration: 0.26, ease: EASE.out, delay: 0.18 })
@@ -823,14 +835,42 @@ function celebrateCard(itemId) {
     const dir = j < idx ? -1 : 1
     gsap.fromTo(c, { y: dir * 2 }, { y: 0, duration: 0.5, ease: EASE.spring })
   })
+  gsap.delayedCall(0.55, () => gsap.set(cards, { clearProps: 'transition' }))
   return !!target
 }
 
-/** 完成/废弃后留在列表刷新（列表为中心，不关窗） */
-function finishAndRefresh(taskId) {
+/** 完成/废弃后留在列表刷新（列表为中心，不关窗）。响应后才知结果的路径用：
+ 子任务自动完成等（点击时无法预知），动画从响应点起算 */
+function celebrateAndRefresh(taskId) {
   celebrateCard(taskId)
   selectedKey.value = null
   setTimeout(reload, 520)
+}
+
+/** 完成/废弃（乐观）：点击即起离场动画再持久化——等 POST /done 返回才动画
+ 有 57-116ms 可感启动延迟（响应 20-40ms + Message 渲染）。失败回滚复现卡片。 */
+async function optimisticFinish(t, action, okMsg) {
+  celebrateCard(t.id)
+  selectedKey.value = null
+  try {
+    await action()
+    Message.success(okMsg)
+  } catch (e) {
+    Message.error(e?.response?.data?.error || e?.message || '操作失败')
+    restoreCard(t.id)
+  }
+  setTimeout(reload, 520)
+}
+
+/** 乐观动画失败回滚：清掉 celebrateCard 留下的 inline 隐身样式，卡片复现 */
+function restoreCard(taskId) {
+  const root = listRef.value?.$el ?? listRef.value
+  if (!root) return
+  const card = root.querySelector(`[data-task-id="${CSS.escape(String(taskId))}"]`)
+  if (card) {
+    gsap.killTweensOf(card)
+    gsap.set(card, { clearProps: 'all' })
+  }
 }
 
 /** 存在活跃子任务时完成/废弃父任务需确认（连带结束子任务） */
@@ -854,26 +894,19 @@ async function onDone() {
   const t = currentTask.value
   if (!t) return
   if (!(await confirmWithSubs(t, '完成'))) return
-  await markDone(t.id)
-  Message.success('已完成')
-  finishAndRefresh(t.id)
+  await optimisticFinish(t, () => markDone(t.id), '已完成')
 }
 
 function onAbandon() {
   const t = currentTask.value
   if (!t) return
-  const doAbandon = async () => {
-    await abandonTask(t.id)
-    Message.success('已废弃')
-    finishAndRefresh(t.id)
-  }
   confirmWithSubs(t, '废弃').then((ok) => {
     if (!ok) return
     Modal.confirm({
       draggable: true,
       title: '确认废弃',
       content: `确定废弃「${t.title}」？`,
-      onOk: doAbandon,
+      onOk: () => optimisticFinish(t, () => abandonTask(t.id), '已废弃'),
     })
   })
 }
@@ -907,7 +940,7 @@ async function onSub(sid, action) {
     if (data.auto_completed) {
       // 子任务全部结束 → 父任务已自动完成归档，卡片离场
       Message.success('子任务全部结束，任务自动完成')
-      finishAndRefresh(t.id)
+      celebrateAndRefresh(t.id)
       return
     }
     const i = tasks.value.findIndex((x) => x.id === t.id)

@@ -39,7 +39,10 @@ CSP = (
     "default-src 'self'; "
     "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com "
     "https://cdn.jsdelivr.net https://unpkg.com; "
-    "style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+    # style-src 放行 jsdelivr：CodeMirror 基础+主题 css 必需（此前两份 CSP 取交集
+    # 静默拦截，CM 滚动裁剪全失效、大文本撑爆页面——2026-11-15 排障实录）
+    "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+    "img-src 'self' data:; "
     "connect-src 'self'; font-src 'self'; object-src 'none'; "
     "base-uri 'none'; form-action 'none'"
 )
