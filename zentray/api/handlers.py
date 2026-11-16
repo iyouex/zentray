@@ -1135,25 +1135,37 @@ def _install_plugin_zip(body: dict) -> tuple[int, dict]:
 
 
 def _plugin_runs(query: dict) -> tuple[int, dict]:
-    """运行历史：ops_runs/*.json 时间戳倒序（无索引，目录扫描够用）。"""
+    """运行历史：ops_runs/*.json 时间戳倒序（无索引，目录扫描够用）。
+    可选过滤：plugin_id（记录的 id 字段）/ task_id / today（YYYY-MM-DD，
+    匹配 started_at 当天）——任务详情页「当天已运行→查看报告」用。"""
     from zentray.config import DATA_DIR
 
     try:
         limit = max(1, min(200, int(query.get("limit", 50))))
     except (TypeError, ValueError):
         limit = 50
+    plugin_id = str(query.get("plugin_id") or "").strip()
+    task_id = str(query.get("task_id") or "").strip()
+    today = str(query.get("today") or "").strip()
     runs_dir = DATA_DIR / "ops_runs"
     items = []
     if runs_dir.is_dir():
         for p in sorted(runs_dir.glob("*.json"), reverse=True):
             if p.name == "last.json":
                 continue
-            if len(items) >= limit:
-                break
             try:
-                items.append(json.loads(p.read_text(encoding="utf-8")))
+                it = json.loads(p.read_text(encoding="utf-8"))
             except Exception:
                 continue
+            if plugin_id and it.get("id") != plugin_id:
+                continue
+            if task_id and it.get("task_id") != task_id:
+                continue
+            if today and str(it.get("started_at") or "")[:10] != today:
+                continue
+            items.append(it)
+            if len(items) >= limit:
+                break
     return 200, {"items": items, "count": len(items)}
 
 
