@@ -1031,26 +1031,93 @@
                 </div>
               </section>
 
-              <!-- Windows 状态条（任务栏正上方，设计 §3.0）；非 Windows 整块隐藏 -->
+              <!-- Windows 贴边悬浮托盘（2026-11-21 重设计）；非 Windows 整块隐藏 -->
               <section v-if="statusbarSupported" class="zt-block">
-                <div class="zt-h3">状态条显示（Windows）</div>
+                <div class="zt-h3">贴边悬浮托盘（Windows）</div>
                 <div class="sys-row">
                   <div>
-                    <div class="zt-h4">任务栏正上方状态条</div>
+                    <div class="zt-h4">贴边胶囊</div>
                     <div class="sys-desc">
-                      任务栏上缘常驻全宽条带：动态图标 + 完整任务标题不截断，左键=速览面板、右键=菜单；
-                      系统级保留，最大化窗口自动避让，不依赖任务栏合并模式。关闭则退回仅通知区图标。
+                      悬浮在桌面之上、紧贴屏幕四边：宽边悬停/详情/长按拖动，窄边 A=插件/任务列表、B=设置/退出。
+                      拖动胶囊会记忆位置；关闭后退回仅通知区图标。
                     </div>
                   </div>
-                  <a-switch v-model="form.appearance.statusbar_enabled" />
+                  <a-switch v-model="form.appearance.win_tray_enabled" />
                 </div>
                 <div class="field-table" style="margin-top: 12px">
                   <div class="field-line">
-                    <span class="field-k">超宽标题跑马灯</span>
-                    <a-switch v-model="form.appearance.statusbar_marquee" size="small" />
+                    <span class="field-k">默认停靠</span>
+                    <a-select v-model="form.appearance.win_tray_edge" style="width: 160px">
+                      <a-option value="bottom">底部（任务栏上方）</a-option>
+                      <a-option value="top">顶部</a-option>
+                      <a-option value="left">左侧</a-option>
+                      <a-option value="right">右侧</a-option>
+                    </a-select>
+                  </div>
+                  <div class="field-line">
+                    <span class="field-k">
+                      沿边位置 {{ Math.round((form.appearance.win_tray_ratio || 0) * 100) }}%
+                    </span>
+                    <a-input-number
+                      v-model="form.appearance.win_tray_ratio"
+                      :min="0"
+                      :max="1"
+                      :step="0.05"
+                      size="small"
+                      style="width: 96px"
+                    />
+                  </div>
+                  <div class="field-line">
+                    <span class="field-k">形态</span>
+                    <a-select v-model="form.appearance.win_tray_form" style="width: 160px">
+                      <a-option value="capsule">胶囊（推荐）</a-option>
+                      <a-option value="island" disabled>灵动岛（后续）</a-option>
+                      <a-option value="ear" disabled>边缘耳（后续）</a-option>
+                    </a-select>
+                  </div>
+                  <div class="field-line">
+                    <span class="field-k">悬停展开 · ms</span>
+                    <a-input-number
+                      v-model="form.appearance.win_tray_hover_ms"
+                      :min="80" :max="1000" :step="20" size="small" style="width: 96px"
+                    />
+                  </div>
+                  <div class="field-line">
+                    <span class="field-k">闲置收纳 · s</span>
+                    <a-input-number
+                      v-model="form.appearance.win_tray_idle_sec"
+                      :min="2" :max="120" size="small" style="width: 96px"
+                    />
+                  </div>
+                  <div class="field-line">
+                    <span class="field-k">长按拖动 · ms</span>
+                    <a-input-number
+                      v-model="form.appearance.win_tray_longpress_ms"
+                      :min="150" :max="1500" :step="50" size="small" style="width: 96px"
+                    />
+                  </div>
+                  <div class="field-line">
+                    <span class="field-k">全屏时隐藏</span>
+                    <a-switch v-model="form.appearance.win_tray_hide_fullscreen" size="small" />
+                  </div>
+                  <div class="field-line">
+                    <span class="field-k">多显示器</span>
+                    <a-select v-model="form.appearance.win_tray_monitor" style="width: 160px">
+                      <a-option value="primary">仅主屏</a-option>
+                      <a-option value="all">所有屏</a-option>
+                    </a-select>
+                  </div>
+                  <div class="field-line">
+                    <span class="field-k">呼出快捷键（后续）</span>
+                    <a-select v-model="form.appearance.win_tray_hotkey" style="width: 160px" disabled>
+                      <a-option value="">关闭</a-option>
+                      <a-option value="ctrl+alt+space">Ctrl+Alt+Space</a-option>
+                    </a-select>
                   </div>
                 </div>
-                <p class="sys-desc" style="margin-top: 10px">超宽标题默认尾部省略号；跑马灯开启后整条滚动。改动随底部「保存设置」生效。</p>
+                <p class="sys-desc" style="margin-top: 10px">
+                  8 个停顿点（4 角 + 4 边中点）；拖动 34px 吸住、松手 68px 吸附。改动随底部「保存设置」生效。
+                </p>
               </section>
               </div>
 
@@ -1910,6 +1977,16 @@ function emptyForm() {
       skin: 'neo',
       statusbar_enabled: true,
       statusbar_marquee: false,
+      win_tray_enabled: true,
+      win_tray_edge: 'bottom',
+      win_tray_ratio: 0.75,
+      win_tray_form: 'capsule',
+      win_tray_hover_ms: 180,
+      win_tray_idle_sec: 8,
+      win_tray_longpress_ms: 400,
+      win_tray_hide_fullscreen: true,
+      win_tray_monitor: 'primary',
+      win_tray_hotkey: '',
     },
     backup: { dir: '', auto_enabled: false, interval_days: 1, keep: 7, trigger_hour: 9 },
     ops: {
@@ -2626,6 +2703,19 @@ function normalizeLoaded(s) {
   if (!['neo', 'aurora', 'synth', 'clay'].includes(form.appearance.skin)) form.appearance.skin = 'neo'
   if (form.appearance.statusbar_enabled == null) form.appearance.statusbar_enabled = true
   if (form.appearance.statusbar_marquee == null) form.appearance.statusbar_marquee = false
+  if (form.appearance.win_tray_enabled == null) form.appearance.win_tray_enabled = true
+  if (!['top', 'bottom', 'left', 'right'].includes(form.appearance.win_tray_edge)) form.appearance.win_tray_edge = 'bottom'
+  {
+    const r = Number(form.appearance.win_tray_ratio)
+    form.appearance.win_tray_ratio = Number.isFinite(r) ? Math.max(0, Math.min(1, r)) : 0.75
+  }
+  if (!['capsule', 'island', 'ear'].includes(form.appearance.win_tray_form)) form.appearance.win_tray_form = 'capsule'
+  if (form.appearance.win_tray_hover_ms == null) form.appearance.win_tray_hover_ms = 180
+  if (form.appearance.win_tray_idle_sec == null) form.appearance.win_tray_idle_sec = 8
+  if (form.appearance.win_tray_longpress_ms == null) form.appearance.win_tray_longpress_ms = 400
+  if (form.appearance.win_tray_hide_fullscreen == null) form.appearance.win_tray_hide_fullscreen = true
+  if (!['primary', 'all'].includes(form.appearance.win_tray_monitor)) form.appearance.win_tray_monitor = 'primary'
+  if (form.appearance.win_tray_hotkey == null) form.appearance.win_tray_hotkey = ''
   if (!form.categories) form.categories = emptyForm().categories
   if (!Array.isArray(form.categories.primary_list)) form.categories.primary_list = []
   // 提醒预设字段兜底（旧数据无这些键）

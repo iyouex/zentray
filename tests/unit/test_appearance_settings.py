@@ -57,3 +57,51 @@ def test_appearance_theme_int_dirty_value(tmp_data_dir):
     sm = SettingsManager.reload()
     assert sm.appearance.theme == "system"
     assert sm.appearance.motion == "off"
+
+
+def test_win_tray_defaults(tmp_data_dir):
+    sm = SettingsManager.reload()
+    a = sm.appearance
+    assert a.win_tray_enabled is True
+    assert a.win_tray_edge == "bottom"
+    assert a.win_tray_ratio == 0.75
+    assert a.win_tray_form == "capsule"
+    assert a.win_tray_hover_ms == 180
+    assert a.win_tray_idle_sec == 8
+    assert a.win_tray_longpress_ms == 400
+    assert a.win_tray_hide_fullscreen is True
+    assert a.win_tray_monitor == "primary"
+
+
+def test_win_tray_roundtrip_and_clamp(tmp_data_dir):
+    sm = SettingsManager.reload()
+    sm.appearance.win_tray_edge = "left"
+    sm.appearance.win_tray_ratio = 0.4
+    sm.appearance.win_tray_monitor = "all"
+    sm.appearance.win_tray_idle_sec = 12
+    sm.save()
+    sm2 = SettingsManager.reload()
+    assert sm2.appearance.win_tray_edge == "left"
+    assert sm2.appearance.win_tray_ratio == 0.4
+    assert sm2.appearance.win_tray_monitor == "all"
+    assert sm2.appearance.win_tray_idle_sec == 12
+
+    sf = sm_mod.SETTINGS_FILE
+    sf.write_text(
+        json.dumps(
+            {
+                "appearance": {
+                    "win_tray_edge": "middle",
+                    "win_tray_ratio": 2,
+                    "win_tray_monitor": "x",
+                    "win_tray_longpress_ms": 99999,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    sm3 = SettingsManager.reload()
+    assert sm3.appearance.win_tray_edge == "bottom"
+    assert sm3.appearance.win_tray_ratio == 1.0
+    assert sm3.appearance.win_tray_monitor == "primary"
+    assert sm3.appearance.win_tray_longpress_ms == 1500

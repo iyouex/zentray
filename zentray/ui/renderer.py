@@ -30,6 +30,18 @@ class TrayRenderer:
             self.backend.set_icon(icon)
             self.backend.set_label(text)
 
+    def set_detail(self, detail: dict) -> None:
+        """结构化胶囊数据（Windows 贴边托盘用；其它后端忽略）。"""
+        fn = getattr(self.backend, "set_detail", None)
+        if fn is not None:
+            fn(detail)
+
+    def show_event(self, text: str, kind: str = "info", on_click=None, duration_ms: int = 3000) -> None:
+        """事件胶囊（Windows 贴边托盘用；其它后端忽略）。"""
+        fn = getattr(self.backend, "show_event", None)
+        if fn is not None:
+            fn(text, kind=kind, on_click=on_click, duration_ms=duration_ms)
+
     def update_menu(self, items: list) -> None:
         """更新右键菜单"""
         self.backend.update_menu(items)

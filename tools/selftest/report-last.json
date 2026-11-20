@@ -4,7 +4,7 @@
   "case": "tasks-列表渲染种子数",
   "round_": 1,
   "ok": true,
-  "detail": "42/3"
+  "detail": "43/3"
  },
  {
   "group": "app[normal]",
@@ -36,6 +36,13 @@
  },
  {
   "group": "app[normal]",
+  "case": "settings-Windows贴边托盘字段",
+  "round_": 1,
+  "ok": true,
+  "detail": "{'edge': 'bottom', 'ratio': 0.75, 'idle': 8, 'monitor': 'primary'}"
+ },
+ {
+  "group": "app[normal]",
   "case": "plugins-面板加载",
   "round_": 1,
   "ok": true,
@@ -50,458 +57,493 @@
  },
  {
   "group": "app[normal]",
-  "case": "form-保存落库",
+  "case": "glance-下一步操作卡",
   "round_": 1,
   "ok": true,
-  "detail": "41->42"
- },
- {
-  "group": "toolbox[normal]",
-  "case": "DCL<800ms",
-  "round_": 1,
-  "ok": true,
-  "detail": "90ms"
- },
- {
-  "group": "toolbox[normal]",
-  "case": "CM按CDN态启用",
-  "round_": 1,
-  "ok": true,
-  "detail": ""
- },
- {
-  "group": "toolbox[normal]",
-  "case": "json-校验合法",
-  "round_": 1,
-  "ok": true,
-  "detail": ""
- },
- {
-  "group": "toolbox[normal]",
-  "case": "json-校验非法",
-  "round_": 1,
-  "ok": true,
-  "detail": ""
- },
- {
-  "group": "toolbox[normal]",
-  "case": "json-prettify/compress往返",
-  "round_": 1,
-  "ok": true,
-  "detail": "{\n  \"a\": 1,\n  \"b\": {\n    \"c\": 2\n  }\n}"
- },
- {
-  "group": "toolbox[normal]",
-  "case": "json-tryfix尾逗号",
-  "round_": 1,
-  "ok": true,
-  "detail": ""
- },
- {
-  "group": "toolbox[normal]",
-  "case": "json-sample/clear",
-  "round_": 1,
-  "ok": true,
-  "detail": "310->0"
- },
- {
-  "group": "toolbox[normal]",
-  "case": "sql-格式化",
-  "round_": 1,
-  "ok": true,
-  "detail": "SELECT\n  a,\n  b\nFROM\n  t\nWHERE\n  x = 1"
- },
- {
-  "group": "toolbox[normal]",
-  "case": "sql-压缩单行",
-  "round_": 1,
-  "ok": true,
-  "detail": "SELECT a,b FROM t WHERE x=1"
- },
- {
-  "group": "toolbox[normal]",
-  "case": "sql-语法粗检报错",
-  "round_": 1,
-  "ok": true,
-  "detail": "⚠ 发现 2 处疑似问题（非全量校验）：\n第 1 行起：'(' 未闭合（缺 1 个 ')'）\n第 1"
- },
- {
-  "group": "toolbox[normal]",
-  "case": "diff-差异统计",
-  "round_": 1,
-  "ok": true,
-  "detail": "差异块 1 · -1 +1 行 · 相似度 80.0%"
- },
- {
-  "group": "toolbox[normal]",
-  "case": "diff-连线画布绘制",
-  "round_": 1,
-  "ok": true,
-  "detail": ""
- },
- {
-  "group": "toolbox[normal]",
-  "case": "diff-合并箭头点击不崩",
-  "round_": 1,
-  "ok": true,
-  "detail": ""
- },
- {
-  "group": "toolbox[normal]",
-  "case": "diff-忽略大小写",
-  "round_": 1,
-  "ok": true,
-  "detail": "两侧一致"
- },
- {
-  "group": "toolbox[normal]",
-  "case": "time-万年历渲染",
-  "round_": 1,
-  "ok": true,
-  "detail": "49"
- },
- {
-  "group": "toolbox[normal]",
-  "case": "time-今日详情",
-  "round_": 1,
-  "ok": true,
-  "detail": "99"
- },
- {
-  "group": "toolbox[normal]",
-  "case": "time-当日任务区",
-  "round_": 1,
-  "ok": true,
-  "detail": "18"
- },
- {
-  "group": "toolbox[normal]",
-  "case": "random-生成64位",
-  "round_": 1,
-  "ok": true,
-  "detail": "len=64 msg=字符集 57 种 · 随机部分 64 字符 · 熵约 373 bit len字段=64"
- },
- {
-  "group": "toolbox[normal]",
-  "case": "crypto-md5向量",
-  "round_": 1,
-  "ok": true,
-  "detail": "900150983cd24fb0d6963f7d28e17f72"
- },
- {
-  "group": "toolbox[normal]",
-  "case": "crypto-AES往返",
-  "round_": 1,
-  "ok": true,
-  "detail": "自测明文"
- },
- {
-  "group": "toolbox[normal]",
-  "case": "真粘贴200KB",
-  "round_": 1,
-  "ok": true,
-  "detail": ""
- },
- {
-  "group": "toolbox[blocked]",
-  "case": "DCL<800ms",
-  "round_": 1,
-  "ok": true,
-  "detail": "27ms"
- },
- {
-  "group": "toolbox[blocked]",
-  "case": "CM按CDN态启用",
-  "round_": 1,
-  "ok": true,
-  "detail": ""
- },
- {
-  "group": "toolbox[blocked]",
-  "case": "json-校验合法",
-  "round_": 1,
-  "ok": true,
-  "detail": ""
- },
- {
-  "group": "toolbox[blocked]",
-  "case": "json-校验非法",
-  "round_": 1,
-  "ok": true,
-  "detail": ""
- },
- {
-  "group": "toolbox[blocked]",
-  "case": "json-prettify/compress往返",
-  "round_": 1,
-  "ok": true,
-  "detail": "{\n  \"a\": 1,\n  \"b\": {\n    \"c\": 2\n  }\n}"
- },
- {
-  "group": "toolbox[blocked]",
-  "case": "json-CDN断降级提示",
-  "round_": 1,
-  "ok": true,
-  "detail": "warn=True jr=undefined"
- },
- {
-  "group": "toolbox[blocked]",
-  "case": "json-sample/clear",
-  "round_": 1,
-  "ok": true,
-  "detail": "310->0"
- },
- {
-  "group": "toolbox[blocked]",
-  "case": "sql-格式化",
-  "round_": 1,
-  "ok": true,
-  "detail": "SELECT a,b\nFROM t\nWHERE x=1"
- },
- {
-  "group": "toolbox[blocked]",
-  "case": "sql-压缩单行",
-  "round_": 1,
-  "ok": true,
-  "detail": "SELECT a,b FROM t WHERE x=1"
- },
- {
-  "group": "toolbox[blocked]",
-  "case": "sql-语法粗检报错",
-  "round_": 1,
-  "ok": true,
-  "detail": "⚠ 发现 2 处疑似问题（非全量校验）：\n第 1 行起：'(' 未闭合（缺 1 个 ')'）\n第 1"
- },
- {
-  "group": "toolbox[blocked]",
-  "case": "diff-差异统计",
-  "round_": 1,
-  "ok": true,
-  "detail": "差异块 1 · -1 +1 行 · 相似度 80.0%"
- },
- {
-  "group": "toolbox[blocked]",
-  "case": "diff-连线画布绘制",
-  "round_": 1,
-  "ok": true,
-  "detail": ""
- },
- {
-  "group": "toolbox[blocked]",
-  "case": "diff-合并箭头点击不崩",
-  "round_": 1,
-  "ok": true,
-  "detail": ""
- },
- {
-  "group": "toolbox[blocked]",
-  "case": "diff-忽略大小写",
-  "round_": 1,
-  "ok": true,
-  "detail": "两侧一致"
- },
- {
-  "group": "toolbox[blocked]",
-  "case": "time-万年历渲染",
-  "round_": 1,
-  "ok": true,
-  "detail": "49"
- },
- {
-  "group": "toolbox[blocked]",
-  "case": "time-今日详情",
-  "round_": 1,
-  "ok": true,
-  "detail": "99"
- },
- {
-  "group": "toolbox[blocked]",
-  "case": "time-当日任务区",
-  "round_": 1,
-  "ok": true,
-  "detail": "18"
- },
- {
-  "group": "toolbox[blocked]",
-  "case": "random-生成64位",
-  "round_": 1,
-  "ok": true,
-  "detail": "len=64 msg=字符集 57 种 · 随机部分 64 字符 · 熵约 373 bit len字段=64"
- },
- {
-  "group": "toolbox[blocked]",
-  "case": "crypto-md5向量",
-  "round_": 1,
-  "ok": true,
-  "detail": "900150983cd24fb0d6963f7d28e17f72"
- },
- {
-  "group": "toolbox[blocked]",
-  "case": "crypto-AES往返",
-  "round_": 1,
-  "ok": true,
-  "detail": "自测明文"
- },
- {
-  "group": "toolbox[blocked]",
-  "case": "真粘贴200KB",
-  "round_": 1,
-  "ok": true,
-  "detail": ""
- },
- {
-  "group": "toolbox_bigtext[normal]",
-  "case": "DCL<800ms",
-  "round_": 1,
-  "ok": true,
-  "detail": "23ms"
- },
- {
-  "group": "toolbox_bigtext[normal]",
-  "case": "diff-12k行<3.5s",
-  "round_": 1,
-  "ok": true,
-  "detail": "1.7s"
- },
- {
-  "group": "toolbox_bigtext[normal]",
-  "case": "diff-12k统计",
-  "round_": 1,
-  "ok": true,
-  "detail": "差异块 1 · -1 +1 行 · 相似度 100.0%"
- },
- {
-  "group": "toolbox_bigtext[normal]",
-  "case": "diff-12k行渲染",
-  "round_": 1,
-  "ok": true,
-  "detail": "12001"
- },
- {
-  "group": "toolbox_bigtext[normal]",
-  "case": "json-6000键校验",
-  "round_": 1,
-  "ok": true,
-  "detail": ""
- },
- {
-  "group": "toolbox_bigtext[normal]",
-  "case": "json-大文本零横向溢出",
-  "round_": 1,
-  "ok": true,
-  "detail": ""
- },
- {
-  "group": "toolbox_bigtext[normal]",
-  "case": "sql-3000语句页面有界",
-  "round_": 1,
-  "ok": true,
-  "detail": ""
- },
- {
-  "group": "toolbox_bigtext[normal]",
-  "case": "sql-CM钳制在pane内(<1000px)",
-  "round_": 1,
-  "ok": true,
-  "detail": "386px"
- },
- {
-  "group": "cdn[hang]",
-  "case": "DCL<800ms",
-  "round_": 1,
-  "ok": true,
-  "detail": "28ms"
- },
- {
-  "group": "cdn[hang]",
-  "case": "hang-六工具齐",
-  "round_": 1,
-  "ok": true,
-  "detail": "6"
- },
- {
-  "group": "cdn[hang]",
-  "case": "hang-json可用",
-  "round_": 1,
-  "ok": true,
-  "detail": ""
- },
- {
-  "group": "cdn[hang]",
-  "case": "hang-降级提示",
-  "round_": 1,
-  "ok": true,
-  "detail": ""
- },
- {
-  "group": "cdn[hang]",
-  "case": "hang-CM未启用",
-  "round_": 1,
-  "ok": true,
-  "detail": ""
+  "detail": "{'text': '下一步操作\\n完成子任务 2/2「待办项」\\n预计 25 分钟\\n开始专注\\n打开任务', 'btns': ['开始专注', '打开任务']}"
  },
  {
   "group": "app[normal]",
-  "case": "tasks-列表渲染种子数",
-  "round_": 2,
+  "case": "glance-下一步有动作",
+  "round_": 1,
   "ok": true,
-  "detail": "43/40"
- },
- {
-  "group": "app[normal]",
-  "case": "form-时间组件渲染(笔刷+月历)",
-  "round_": 2,
-  "ok": true,
-  "detail": "True"
- },
- {
-  "group": "app[normal]",
-  "case": "form-周期行式时间区",
-  "round_": 2,
-  "ok": true,
-  "detail": "{'cyc': True, 'hash': '#/tasks/new', 'radios': 2, 'timeText': '⏰ 时间与提醒\\n开始\\n−\\n+\\n:\\n−\\n+\\n截止\\n−\\n+\\n:\\n−\\n+\\n弹窗提醒\\n开启后可设多个周期内弹'}"
- },
- {
-  "group": "app[normal]",
-  "case": "settings-导航分组",
-  "round_": 2,
-  "ok": true,
-  "detail": "6"
- },
- {
-  "group": "app[normal]",
-  "case": "settings-更新卡片",
-  "round_": 2,
-  "ok": true,
-  "detail": "{'has': True, 'menus': ['📋 任务', '🍅 番茄钟', '✨ AI 能力', '🔔 通知', '🧩 插件', '🖥️ 系统', '💾 备份', '📜 历史']}"
- },
- {
-  "group": "app[normal]",
-  "case": "plugins-面板加载",
-  "round_": 2,
-  "ok": true,
-  "detail": ""
- },
- {
-  "group": "app[normal]",
-  "case": "glance-加载",
-  "round_": 2,
-  "ok": true,
-  "detail": ""
+  "detail": "['开始专注', '打开任务']"
  },
  {
   "group": "app[normal]",
   "case": "form-保存落库",
-  "round_": 2,
+  "round_": 1,
   "ok": true,
   "detail": "42->43"
  },
  {
   "group": "toolbox[normal]",
   "case": "DCL<800ms",
+  "round_": 1,
+  "ok": true,
+  "detail": "123ms"
+ },
+ {
+  "group": "toolbox[normal]",
+  "case": "CM按CDN态启用",
+  "round_": 1,
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "group": "toolbox[normal]",
+  "case": "json-校验合法",
+  "round_": 1,
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "group": "toolbox[normal]",
+  "case": "json-校验非法",
+  "round_": 1,
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "group": "toolbox[normal]",
+  "case": "json-prettify/compress往返",
+  "round_": 1,
+  "ok": true,
+  "detail": "{\n  \"a\": 1,\n  \"b\": {\n    \"c\": 2\n  }\n}"
+ },
+ {
+  "group": "toolbox[normal]",
+  "case": "json-tryfix尾逗号",
+  "round_": 1,
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "group": "toolbox[normal]",
+  "case": "json-sample/clear",
+  "round_": 1,
+  "ok": true,
+  "detail": "310->0"
+ },
+ {
+  "group": "toolbox[normal]",
+  "case": "sql-格式化",
+  "round_": 1,
+  "ok": true,
+  "detail": "SELECT\n  a,\n  b\nFROM\n  t\nWHERE\n  x = 1"
+ },
+ {
+  "group": "toolbox[normal]",
+  "case": "sql-压缩单行",
+  "round_": 1,
+  "ok": true,
+  "detail": "SELECT a,b FROM t WHERE x=1"
+ },
+ {
+  "group": "toolbox[normal]",
+  "case": "sql-语法粗检报错",
+  "round_": 1,
+  "ok": true,
+  "detail": "⚠ 发现 2 处疑似问题（非全量校验）：\n第 1 行起：'(' 未闭合（缺 1 个 ')'）\n第 1"
+ },
+ {
+  "group": "toolbox[normal]",
+  "case": "diff-差异统计",
+  "round_": 1,
+  "ok": true,
+  "detail": "差异块 1 · -1 +1 行 · 相似度 80.0%"
+ },
+ {
+  "group": "toolbox[normal]",
+  "case": "diff-连线画布绘制",
+  "round_": 1,
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "group": "toolbox[normal]",
+  "case": "diff-合并箭头点击不崩",
+  "round_": 1,
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "group": "toolbox[normal]",
+  "case": "diff-忽略大小写",
+  "round_": 1,
+  "ok": true,
+  "detail": "两侧一致"
+ },
+ {
+  "group": "toolbox[normal]",
+  "case": "time-万年历渲染",
+  "round_": 1,
+  "ok": true,
+  "detail": "49"
+ },
+ {
+  "group": "toolbox[normal]",
+  "case": "time-今日详情",
+  "round_": 1,
+  "ok": true,
+  "detail": "99"
+ },
+ {
+  "group": "toolbox[normal]",
+  "case": "time-当日任务区",
+  "round_": 1,
+  "ok": true,
+  "detail": "18"
+ },
+ {
+  "group": "toolbox[normal]",
+  "case": "random-生成64位",
+  "round_": 1,
+  "ok": true,
+  "detail": "len=64 msg=字符集 57 种 · 随机部分 64 字符 · 熵约 373 bit len字段=64"
+ },
+ {
+  "group": "toolbox[normal]",
+  "case": "crypto-md5向量",
+  "round_": 1,
+  "ok": true,
+  "detail": "900150983cd24fb0d6963f7d28e17f72"
+ },
+ {
+  "group": "toolbox[normal]",
+  "case": "crypto-AES往返",
+  "round_": 1,
+  "ok": true,
+  "detail": "自测明文"
+ },
+ {
+  "group": "toolbox[normal]",
+  "case": "真粘贴200KB",
+  "round_": 1,
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "group": "toolbox[blocked]",
+  "case": "DCL<800ms",
+  "round_": 1,
+  "ok": true,
+  "detail": "29ms"
+ },
+ {
+  "group": "toolbox[blocked]",
+  "case": "CM按CDN态启用",
+  "round_": 1,
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "group": "toolbox[blocked]",
+  "case": "json-校验合法",
+  "round_": 1,
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "group": "toolbox[blocked]",
+  "case": "json-校验非法",
+  "round_": 1,
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "group": "toolbox[blocked]",
+  "case": "json-prettify/compress往返",
+  "round_": 1,
+  "ok": true,
+  "detail": "{\n  \"a\": 1,\n  \"b\": {\n    \"c\": 2\n  }\n}"
+ },
+ {
+  "group": "toolbox[blocked]",
+  "case": "json-CDN断降级提示",
+  "round_": 1,
+  "ok": true,
+  "detail": "warn=True jr=undefined"
+ },
+ {
+  "group": "toolbox[blocked]",
+  "case": "json-sample/clear",
+  "round_": 1,
+  "ok": true,
+  "detail": "310->0"
+ },
+ {
+  "group": "toolbox[blocked]",
+  "case": "sql-格式化",
+  "round_": 1,
+  "ok": true,
+  "detail": "SELECT a,b\nFROM t\nWHERE x=1"
+ },
+ {
+  "group": "toolbox[blocked]",
+  "case": "sql-压缩单行",
+  "round_": 1,
+  "ok": true,
+  "detail": "SELECT a,b FROM t WHERE x=1"
+ },
+ {
+  "group": "toolbox[blocked]",
+  "case": "sql-语法粗检报错",
+  "round_": 1,
+  "ok": true,
+  "detail": "⚠ 发现 2 处疑似问题（非全量校验）：\n第 1 行起：'(' 未闭合（缺 1 个 ')'）\n第 1"
+ },
+ {
+  "group": "toolbox[blocked]",
+  "case": "diff-差异统计",
+  "round_": 1,
+  "ok": true,
+  "detail": "差异块 1 · -1 +1 行 · 相似度 80.0%"
+ },
+ {
+  "group": "toolbox[blocked]",
+  "case": "diff-连线画布绘制",
+  "round_": 1,
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "group": "toolbox[blocked]",
+  "case": "diff-合并箭头点击不崩",
+  "round_": 1,
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "group": "toolbox[blocked]",
+  "case": "diff-忽略大小写",
+  "round_": 1,
+  "ok": true,
+  "detail": "两侧一致"
+ },
+ {
+  "group": "toolbox[blocked]",
+  "case": "time-万年历渲染",
+  "round_": 1,
+  "ok": true,
+  "detail": "49"
+ },
+ {
+  "group": "toolbox[blocked]",
+  "case": "time-今日详情",
+  "round_": 1,
+  "ok": true,
+  "detail": "99"
+ },
+ {
+  "group": "toolbox[blocked]",
+  "case": "time-当日任务区",
+  "round_": 1,
+  "ok": true,
+  "detail": "18"
+ },
+ {
+  "group": "toolbox[blocked]",
+  "case": "random-生成64位",
+  "round_": 1,
+  "ok": true,
+  "detail": "len=64 msg=字符集 57 种 · 随机部分 64 字符 · 熵约 373 bit len字段=64"
+ },
+ {
+  "group": "toolbox[blocked]",
+  "case": "crypto-md5向量",
+  "round_": 1,
+  "ok": true,
+  "detail": "900150983cd24fb0d6963f7d28e17f72"
+ },
+ {
+  "group": "toolbox[blocked]",
+  "case": "crypto-AES往返",
+  "round_": 1,
+  "ok": true,
+  "detail": "自测明文"
+ },
+ {
+  "group": "toolbox[blocked]",
+  "case": "真粘贴200KB",
+  "round_": 1,
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "group": "toolbox_bigtext[normal]",
+  "case": "DCL<800ms",
+  "round_": 1,
+  "ok": true,
+  "detail": "21ms"
+ },
+ {
+  "group": "toolbox_bigtext[normal]",
+  "case": "diff-12k行<3.5s",
+  "round_": 1,
+  "ok": true,
+  "detail": "1.6s"
+ },
+ {
+  "group": "toolbox_bigtext[normal]",
+  "case": "diff-12k统计",
+  "round_": 1,
+  "ok": true,
+  "detail": "差异块 1 · -1 +1 行 · 相似度 100.0%"
+ },
+ {
+  "group": "toolbox_bigtext[normal]",
+  "case": "diff-12k行渲染",
+  "round_": 1,
+  "ok": true,
+  "detail": "12001"
+ },
+ {
+  "group": "toolbox_bigtext[normal]",
+  "case": "json-6000键校验",
+  "round_": 1,
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "group": "toolbox_bigtext[normal]",
+  "case": "json-大文本零横向溢出",
+  "round_": 1,
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "group": "toolbox_bigtext[normal]",
+  "case": "sql-3000语句页面有界",
+  "round_": 1,
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "group": "toolbox_bigtext[normal]",
+  "case": "sql-CM钳制在pane内(<1000px)",
+  "round_": 1,
+  "ok": true,
+  "detail": "386px"
+ },
+ {
+  "group": "cdn[hang]",
+  "case": "DCL<800ms",
+  "round_": 1,
+  "ok": true,
+  "detail": "25ms"
+ },
+ {
+  "group": "cdn[hang]",
+  "case": "hang-六工具齐",
+  "round_": 1,
+  "ok": true,
+  "detail": "6"
+ },
+ {
+  "group": "cdn[hang]",
+  "case": "hang-json可用",
+  "round_": 1,
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "group": "cdn[hang]",
+  "case": "hang-降级提示",
+  "round_": 1,
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "group": "cdn[hang]",
+  "case": "hang-CM未启用",
+  "round_": 1,
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "group": "app[normal]",
+  "case": "tasks-列表渲染种子数",
   "round_": 2,
   "ok": true,
-  "detail": "32ms"
+  "detail": "44/40"
+ },
+ {
+  "group": "app[normal]",
+  "case": "form-时间组件渲染(笔刷+月历)",
+  "round_": 2,
+  "ok": true,
+  "detail": "True"
+ },
+ {
+  "group": "app[normal]",
+  "case": "form-周期行式时间区",
+  "round_": 2,
+  "ok": true,
+  "detail": "{'cyc': True, 'hash': '#/tasks/new', 'radios': 2, 'timeText': '⏰ 时间与提醒\\n开始\\n−\\n+\\n:\\n−\\n+\\n截止\\n−\\n+\\n:\\n−\\n+\\n弹窗提醒\\n开启后可设多个周期内弹'}"
+ },
+ {
+  "group": "app[normal]",
+  "case": "settings-导航分组",
+  "round_": 2,
+  "ok": true,
+  "detail": "6"
+ },
+ {
+  "group": "app[normal]",
+  "case": "settings-更新卡片",
+  "round_": 2,
+  "ok": true,
+  "detail": "{'has': True, 'menus': ['📋 任务', '🍅 番茄钟', '✨ AI 能力', '🔔 通知', '🧩 插件', '🖥️ 系统', '💾 备份', '📜 历史']}"
+ },
+ {
+  "group": "app[normal]",
+  "case": "settings-Windows贴边托盘字段",
+  "round_": 2,
+  "ok": true,
+  "detail": "{'edge': 'bottom', 'ratio': 0.75, 'idle': 8, 'monitor': 'primary'}"
+ },
+ {
+  "group": "app[normal]",
+  "case": "plugins-面板加载",
+  "round_": 2,
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "group": "app[normal]",
+  "case": "glance-加载",
+  "round_": 2,
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "group": "app[normal]",
+  "case": "glance-下一步操作卡",
+  "round_": 2,
+  "ok": true,
+  "detail": "{'text': '下一步操作\\n完成子任务 2/2「待办项」\\n预计 25 分钟\\n开始专注\\n打开任务', 'btns': ['开始专注', '打开任务']}"
+ },
+ {
+  "group": "app[normal]",
+  "case": "glance-下一步有动作",
+  "round_": 2,
+  "ok": true,
+  "detail": "['开始专注', '打开任务']"
+ },
+ {
+  "group": "app[normal]",
+  "case": "form-保存落库",
+  "round_": 2,
+  "ok": true,
+  "detail": "43->44"
+ },
+ {
+  "group": "toolbox[normal]",
+  "case": "DCL<800ms",
+  "round_": 2,
+  "ok": true,
+  "detail": "23ms"
  },
  {
   "group": "toolbox[normal]",
@@ -648,7 +690,7 @@
   "case": "DCL<800ms",
   "round_": 2,
   "ok": true,
-  "detail": "26ms"
+  "detail": "25ms"
  },
  {
   "group": "toolbox[blocked]",
@@ -795,14 +837,14 @@
   "case": "DCL<800ms",
   "round_": 2,
   "ok": true,
-  "detail": "23ms"
+  "detail": "22ms"
  },
  {
   "group": "toolbox_bigtext[normal]",
   "case": "diff-12k行<3.5s",
   "round_": 2,
   "ok": true,
-  "detail": "1.7s"
+  "detail": "1.6s"
  },
  {
   "group": "toolbox_bigtext[normal]",
@@ -851,7 +893,7 @@
   "case": "DCL<800ms",
   "round_": 2,
   "ok": true,
-  "detail": "23ms"
+  "detail": "25ms"
  },
  {
   "group": "cdn[hang]",
@@ -886,7 +928,7 @@
   "case": "tasks-列表渲染种子数",
   "round_": 3,
   "ok": true,
-  "detail": "44/150"
+  "detail": "45/150"
  },
  {
   "group": "app[normal]",
@@ -918,6 +960,13 @@
  },
  {
   "group": "app[normal]",
+  "case": "settings-Windows贴边托盘字段",
+  "round_": 3,
+  "ok": true,
+  "detail": "{'edge': 'bottom', 'ratio': 0.75, 'idle': 8, 'monitor': 'primary'}"
+ },
+ {
+  "group": "app[normal]",
   "case": "plugins-面板加载",
   "round_": 3,
   "ok": true,
@@ -932,17 +981,31 @@
  },
  {
   "group": "app[normal]",
+  "case": "glance-下一步操作卡",
+  "round_": 3,
+  "ok": true,
+  "detail": "{'text': '下一步操作\\n完成子任务 2/2「待办项」\\n预计 25 分钟\\n开始专注\\n打开任务', 'btns': ['开始专注', '打开任务']}"
+ },
+ {
+  "group": "app[normal]",
+  "case": "glance-下一步有动作",
+  "round_": 3,
+  "ok": true,
+  "detail": "['开始专注', '打开任务']"
+ },
+ {
+  "group": "app[normal]",
   "case": "form-保存落库",
   "round_": 3,
   "ok": true,
-  "detail": "43->44"
+  "detail": "44->45"
  },
  {
   "group": "toolbox[normal]",
   "case": "DCL<800ms",
   "round_": 3,
   "ok": true,
-  "detail": "26ms"
+  "detail": "24ms"
  },
  {
   "group": "toolbox[normal]",
@@ -1089,7 +1152,7 @@
   "case": "DCL<800ms",
   "round_": 3,
   "ok": true,
-  "detail": "32ms"
+  "detail": "26ms"
  },
  {
   "group": "toolbox[blocked]",
@@ -1236,14 +1299,14 @@
   "case": "DCL<800ms",
   "round_": 3,
   "ok": true,
-  "detail": "32ms"
+  "detail": "23ms"
  },
  {
   "group": "toolbox_bigtext[normal]",
   "case": "diff-12k行<3.5s",
   "round_": 3,
   "ok": true,
-  "detail": "1.7s"
+  "detail": "1.6s"
  },
  {
   "group": "toolbox_bigtext[normal]",
@@ -1292,7 +1355,7 @@
   "case": "DCL<800ms",
   "round_": 3,
   "ok": true,
-  "detail": "29ms"
+  "detail": "26ms"
  },
  {
   "group": "cdn[hang]",
