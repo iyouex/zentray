@@ -83,6 +83,19 @@ class AppServer:
             svc.create_template(
                 {"title": "自测周模板", "category": "工作", "periodicity": "weekly"}
             )
+        # P2a：速览「下一步操作」固定样本（选中当前任务）
+        special = svc.create_task(
+            {
+                "title": "自测下一步",
+                "category": "工作",
+                "priority": "high",
+                "subtasks": [
+                    {"title": "已完成项", "status": "done"},
+                    {"title": "待办项", "status": "active"},
+                ],
+            }
+        )
+        svc.select_task(special.id)
 
         from zentray.api.handlers import ApiContext, set_api_context
 
@@ -123,7 +136,7 @@ class ToolboxServer:
         env["ZENTRAY_PLUGIN_DATA_DIR"] = str(pdir)
         self.proc = subprocess.Popen(
             [
-                str(REPO / "venv/bin/python"),
+                sys.executable,
                 str(REPO / "bundled_plugins/text-toolbox/text_toolbox.py"),
                 "serve",
                 "--no-open",

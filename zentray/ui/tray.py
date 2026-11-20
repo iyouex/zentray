@@ -388,8 +388,8 @@ def create_tray_backend(app) -> TrayImplementation:
     """
     macOS：MacStatusItemTray（NSStatusItem icon+标题轮播 + NSMenu + 系统通知）。
     Linux：优先顶栏 AppIndicator（文字轮播）。
-    Windows：任务栏正上方状态条（图标+完整标题，§3.0 主显示）+ 通知区辅助图标；
-    状态条创建失败回退 WindowsTray（仅通知区图标）。
+    Windows：贴边悬浮胶囊（2026-11-20 重设计，win_edge_tray.WindowsEdgeTray）
+    + 通知区辅助图标；失败回退 AppBar 状态条 → WindowsTray（仅通知区图标）。
     其它平台 / 无 Indicator：Qt 托盘。
     """
     if sys.platform == "darwin":
@@ -401,6 +401,14 @@ def create_tray_backend(app) -> TrayImplementation:
         except Exception:
             logger.exception("MacStatusItemTray 启动失败，回退 Qt 托盘")
     if sys.platform == "win32":
+        try:
+            from zentray.ui.win_edge_tray import WindowsEdgeTray
+
+            backend = WindowsEdgeTray(app)
+            logger.info("托盘后端: WindowsEdgeTray (贴边胶囊 + 通知区辅助)")
+            return backend
+        except Exception:
+            logger.exception("贴边胶囊启动失败，回退状态条托盘")
         try:
             from zentray.ui.win_tray import WindowsStatusStripTray
 

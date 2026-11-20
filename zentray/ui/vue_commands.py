@@ -112,7 +112,7 @@ def try_vue_glance(controller: "TrayController", anchor=None) -> bool:
         "/glance",
         title="ZenTray 速览",
         width=360,
-        height=470,
+        height=540,
         frameless=True,
         anchor=anchor,
         no_activate=True,

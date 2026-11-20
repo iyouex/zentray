@@ -68,6 +68,10 @@ class TrayController(QObject):
         _glance_sig = getattr(self.renderer.backend, "glance_requested", None)
         if _glance_sig is not None:
             _glance_sig.connect(self._on_glance_requested)
+        # Windows 贴边胶囊窄边 flyout 的数据/动作回调（其它后端忽略）
+        _set_flyout_provider = getattr(self.renderer.backend, "set_flyout_provider", None)
+        if _set_flyout_provider is not None:
+            _set_flyout_provider(self)
         self.pomodoro_service.time_updated.connect(self._on_pomodoro_tick)
         self.pomodoro_service.pomodoro_finished.connect(self._on_pomodoro_end)
         self.pomodoro_service.break_finished.connect(self._on_break_end)
@@ -104,6 +108,7 @@ class TrayController(QObject):
     def _show_boot_placeholder(self, update_menu: bool = True) -> None:
         """初始化：仅应用图标，不显示任务饼图/标题。"""
         self.renderer.set_state("app_icon", "")
+        self.renderer.set_detail(self._build_capsule_detail())
         self._last_icon = "app_icon"
         self._last_label = ""
         logger.info("启动占位：仅应用图标，等待首个任务轮播")
@@ -219,6 +224,13 @@ class TrayController(QObject):
 
     def apply_settings(self) -> None:
         self._settings = SettingsManager.reload()
+        # 平台后端热应用（Windows 贴边胶囊：开关/边/位置/收纳/主题等）
+        _apply_backend = getattr(self.renderer.backend, "apply_settings", None)
+        if _apply_backend is not None:
+            try:
+                _apply_backend()
+            except Exception:
+                logger.exception("托盘后端设置热应用失败")
         self.reload_ops_plugins()
         # 空闲时同步专注时长；进行中不打断当前倒计时
         if hasattr(self.pomodoro_service, "sync_duration_from_settings"):
@@ -304,11 +316,144 @@ class TrayController(QObject):
         if icon != self._last_icon or text != self._last_label:
             logger.debug("顶栏 state: icon=%s text=%s", icon, text)
         self.renderer.set_state(icon, text)
+        self.renderer.set_detail(self._build_capsule_detail())
         self._last_icon = icon
         self._last_label = text
 
         if update_menu:
             self._refresh_menu()
+
+    def _build_capsule_detail(self) -> dict:
+        """贴边胶囊的结构化内容：标题/分类/子任务/截止/计时/进度/下一步。
+
+        P2：与托盘轮播槽同源；P4 再补事件/收纳态。其它平台后端忽略该数据。
+        """
+        from zentray.services.next_step import build_next_step
+
+        task = self.task_service.get_current_task()
+        pomo = self.pomodoro_service
+        detail: dict = {
+            "title": "ZenTray",
+            "meta": "暂无活跃任务",
+            "priority": "none",
+            "progress": 0,
+            "timer": "",
+            "phase": "idle",
+            "category": "",
+            "subs_done": 0,
+            "subs_total": 0,
+            "deadline": None,
+            "next_step": build_next_step(task),
+        }
+        if self._ops_active or self.plugin_runtime.is_busy:
+            detail.update(
+                title=(self._ops_tray_text or "插件运行中")[:50],
+                meta="插件运行中",
+                phase="ops",
+                progress=0,
+            )
+            return detail
+        if pomo.is_break:
+            rem = int(pomo.get_remaining() or 0)
+            detail.update(
+                title="休息一下",
+                meta="休息中",
+                phase="break",
+                timer=f"{rem // 60:02d}:{rem % 60:02d}",
+                progress=int(pomo.get_elapsed_progress_percent() or 0),
+                priority="low",
+            )
+            return detail
+        if pomo.is_active:
+            rem = int(pomo.get_remaining() or 0)
+            subs = [x for x in (getattr(task, "subtasks", None) or []) if isinstance(x, dict)]
+            detail.update(
+                title=(getattr(pomo, "task_title", "") or "专注中").strip() or "专注中",
+                meta="专注中",
+                phase="focus",
+                timer=f"{rem // 60:02d}:{rem % 60:02d}",
+                progress=int(pomo.get_elapsed_progress_percent() or 0),
+                priority=(task.priority if task else "high") or "high",
+                category=(task.category if task else "") or "",
+                subs_done=sum(1 for x in subs if x.get("status") == "done"),
+                subs_total=len(subs),
+                deadline=getattr(task, "deadline", None) if task else None,
+            )
+            return detail
+        if self._report_flip:
+            try:
+                active = self.report_rotation.active()
+            except Exception:
+                active = []
+            if active:
+                text = active[self._report_idx % len(active)].get("text") or "报告待查看"
+                detail.update(title=text, meta="报告待查看", phase="report", progress=0)
+                return detail
+        if task:
+            subs = [x for x in (getattr(task, "subtasks", None) or []) if isinstance(x, dict)]
+            total = len(subs)
+            done = sum(1 for x in subs if x.get("status") == "done")
+            detail.update(
+                title=self.task_service.get_task_display_title(task) or task.title or "ZenTray",
+                category=task.category or "",
+                priority=task.priority or "none",
+                subs_done=done,
+                subs_total=total,
+                deadline=task.deadline,
+                progress=int(round(done * 100 / total)) if total else 0,
+                phase="idle",
+                timer="",
+            )
+        return detail
+
+    # ---------------------------------------------------------------- flyout
+    def flyout_snapshot(self) -> dict:
+        """窄边 A 的任务/插件快照：当前 + 下 3 条任务，3 个插件。"""
+        current = self.task_service.get_current_task()
+        all_tasks = self.task_service.get_all_tasks()
+        idx = -1
+        if current is not None:
+            idx = next((i for i, t in enumerate(all_tasks) if t.id == current.id), -1)
+        ordered = all_tasks[idx:] + all_tasks[:idx] if idx >= 0 else all_tasks
+        tasks = []
+        for t in ordered[:4]:
+            tasks.append(
+                {
+                    "id": t.id,
+                    "title": self.task_service.get_task_display_title(t) or t.title or "未命名",
+                    "priority": t.priority or "none",
+                    "deadline": t.deadline,
+                    "current": bool(current is not None and t.id == current.id),
+                }
+            )
+        plugins = []
+        for p in self._ops_plugins[:3]:
+            m = getattr(p, "manifest", None)
+            if m is None:
+                continue
+            plugins.append(
+                {
+                    "id": m.id,
+                    "name": m.name,
+                    "busy": bool(self.plugin_runtime.is_busy),
+                }
+            )
+        return {"tasks": tasks, "plugins": plugins}
+
+    def flyout_select_task(self, task_id: str) -> None:
+        self.task_service.select_task(task_id)
+        self.update_display()
+
+    def flyout_open_tasks(self) -> None:
+        from zentray.ui.vue_commands import try_vue_task_list
+
+        try_vue_task_list(self)
+
+    def flyout_open_plugins(self) -> None:
+        self.handle_action("ops.panel")
+
+    def flyout_action(self, action_id: str) -> None:
+        self.handle_action(action_id)
 
     def _refresh_menu(self) -> None:
         pomo = self.pomodoro_service
@@ -419,6 +564,13 @@ class TrayController(QObject):
         goal = int(getattr(self._settings.pomodoro, "daily_goal_pomodoros", 0) or 0)
         if goal > 0 and count_before < goal <= count_before + 1:
             self.renderer.show_notification("今日目标达成 🎉", f"今天已完成 {goal} 个番茄！")
+        rem = int(svc.get_remaining() or 0)
+        if svc.is_break:
+            kind = "长休" if svc.phase == "long_break" else "短休"
+            msg = f"🍅 番茄完成 · {kind} {rem // 60} 分钟"
+        else:
+            msg = "🍅 番茄完成 · 休息一下"
+        self.renderer.show_event(msg, kind="success")
         self.update_display(update_menu=True)
         self.start_rotation()
 
@@ -428,6 +580,7 @@ class TrayController(QObject):
             self.renderer.show_notification("休息结束", "新一段专注已开始 🍅")
         else:
             self.renderer.show_notification("休息结束", "准备开始下一个番茄吧！")
+        self.renderer.show_event("☕ 休息结束 · 开始下一个番茄", kind="info")
         self._carousel_started = True
         self.update_display(update_menu=True)
         self.start_rotation()
@@ -517,6 +670,19 @@ class TrayController(QObject):
                 self.report_rotation.add(key, f"📄 插件报告待查看: {name}", minutes)
                 self._carousel_started = True
                 self.update_display(update_menu=False)
+
+        # 贴边胶囊事件态（B）：报告完成/失败短暂弹出，不夺焦点
+        try:
+            if ok:
+                self.renderer.show_event(
+                    f"📄 {name} 报告已生成",
+                    kind="report",
+                    on_click=self._make_report_opener(run_id, mark_key=key),
+                )
+            else:
+                self.renderer.show_event(f"⚠ {name} 执行失败", kind="error")
+        except Exception:
+            logger.exception("事件胶囊推送失败")
 
         try:
             from zentray.services.activity_log import log_event

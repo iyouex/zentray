@@ -1,11 +1,11 @@
 name: build-windows
 
-# Windows 安装包构建（feature/win-taskbar-center）
-# 触发：push 到本分支（workflow_dispatch 仅默认分支可注册）
+# Windows 安装包构建（贴边胶囊 / 任务栏状态条分支）
+# 触发：push 到任一 Windows 平台分支（workflow_dispatch 仅默认分支可注册）
 # 产物：zentray_<ver>_windows_x64.zip（onedir 全目录 zip，免安装解压即用）→ release v$ver
 on:
   push:
-    branches: [feature/win-taskbar-center]
+    branches: [feature/win-taskbar-center, feature/win-edge-tray]
 
 permissions:
   contents: write
@@ -41,7 +41,9 @@ jobs:
           $ver = (Select-String -Path zentray/config.py -Pattern 'VERSION = "([^"]+)"').Matches[0].Groups[1].Value
           $zip = "zentray_${ver}_windows_x64.zip"
           Compress-Archive -Path dist/ZenTray -DestinationPath "dist/$zip"
-          gh release upload "v$ver" "dist/$zip" --clobber
+          # release 尚未创建时只出产物；发版后再跑本 workdir 或手动 upload
+          gh release view "v$ver" 2>$null
+          if ($LASTEXITCODE -eq 0) { gh release upload "v$ver" "dist/$zip" --clobber } else { Write-Host "release v$ver 不存在，跳过上传" }
 
       - uses: actions/upload-artifact@v4
         if: always()
