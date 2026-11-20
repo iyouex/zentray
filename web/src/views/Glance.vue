@@ -30,6 +30,22 @@
       暂无活跃任务 — <span class="g-empty-act">⚡ 记一笔？</span>
     </div>
 
+    <!-- 下一步操作：详情第一块先给行动 -->
+    <div v-if="item && item.next_step" class="g-next">
+      <div class="g-next-k">下一步操作</div>
+      <div class="g-next-t">{{ item.next_step.text }}</div>
+      <div class="g-next-s">{{ item.next_step.hint }}</div>
+      <div class="g-next-ops">
+        <template v-if="item.next_step.kind === 'done'">
+          <a-button size="mini" type="primary" status="success" @click="markDone">标记完成</a-button>
+        </template>
+        <template v-else>
+          <a-button size="mini" status="warning" :disabled="pomo.phase !== 'idle' || opsBusy" @click="focusTask">开始专注</a-button>
+          <a-button size="mini" @click="openTasks">打开任务</a-button>
+        </template>
+      </div>
+    </div>
+
     <!-- 番茄态行：进行中才显示；按钮随阶段切换 -->
     <div v-if="pomo.phase !== 'idle'" class="g-pomo">
       <div class="g-pomo-line">
@@ -347,6 +363,36 @@ function onKey(e) {
 }
 .g-empty-act {
   color: rgb(var(--primary-6));
+}
+
+/* 下一步操作 */
+.g-next {
+  border: 1px solid var(--color-primary-light-3, rgba(76, 194, 255, 0.3));
+  border-radius: var(--zt-radius-card, 12px);
+  padding: 9px 11px;
+  background: var(--color-primary-light-1, rgba(76, 194, 255, 0.1));
+}
+.g-next-k {
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  color: rgb(var(--primary-6));
+  margin-bottom: 3px;
+}
+.g-next-t {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-1);
+  line-height: 1.4;
+}
+.g-next-s {
+  font-size: 10.5px;
+  color: var(--color-text-3);
+  margin-top: 2px;
+}
+.g-next-ops {
+  display: flex;
+  gap: 6px;
+  margin-top: 7px;
 }
 
 /* 番茄态行 */

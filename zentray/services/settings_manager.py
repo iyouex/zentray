@@ -179,6 +179,17 @@ class AppearanceSettings:
     skin: str = "neo"
     statusbar_enabled: bool = True
     statusbar_marquee: bool = False
+    # Windows 贴边悬浮托盘（2026-11-21）：默认底部右侧 75%、胶囊、8s 收纳、400ms 长按
+    win_tray_enabled: bool = True
+    win_tray_edge: str = "bottom"
+    win_tray_ratio: float = 0.75
+    win_tray_form: str = "capsule"
+    win_tray_hover_ms: int = 180
+    win_tray_idle_sec: int = 8
+    win_tray_longpress_ms: int = 400
+    win_tray_hide_fullscreen: bool = True
+    win_tray_monitor: str = "primary"
+    win_tray_hotkey: str = ""
 
 
 @dataclass
@@ -697,6 +708,28 @@ class SettingsManager:
             skin = str(a.get("skin") or "neo").lower()
             if skin not in ("neo", "aurora", "synth", "clay"):
                 skin = "neo"
+            edge = str(a.get("win_tray_edge") or "bottom").lower()
+            if edge not in ("top", "bottom", "left", "right"):
+                edge = "bottom"
+            try:
+                ratio = float(a.get("win_tray_ratio", 0.75))
+            except (TypeError, ValueError):
+                ratio = 0.75
+            ratio = max(0.0, min(1.0, ratio))
+            form = str(a.get("win_tray_form") or "capsule").lower()
+            if form not in ("capsule", "island", "ear"):
+                form = "capsule"
+            monitor = str(a.get("win_tray_monitor") or "primary").lower()
+            if monitor not in ("primary", "all"):
+                monitor = "primary"
+
+            def _clamped_int(key: str, default: int, lo: int, hi: int) -> int:
+                try:
+                    v = int(a.get(key, default))
+                except (TypeError, ValueError):
+                    v = default
+                return max(lo, min(hi, v))
+
             self._settings.appearance = AppearanceSettings(
                 theme=theme,
                 autostart=autostart,
@@ -706,6 +739,16 @@ class SettingsManager:
                 # 旧键 taskbar_center_enabled/taskbar_label_marquee（中央按钮方案）作迁移回退
                 statusbar_enabled=bool(a.get("statusbar_enabled", True)),
                 statusbar_marquee=bool(a.get("statusbar_marquee", False)),
+                win_tray_enabled=bool(a.get("win_tray_enabled", True)),
+                win_tray_edge=edge,
+                win_tray_ratio=ratio,
+                win_tray_form=form,
+                win_tray_hover_ms=_clamped_int("win_tray_hover_ms", 180, 80, 1000),
+                win_tray_idle_sec=_clamped_int("win_tray_idle_sec", 8, 2, 120),
+                win_tray_longpress_ms=_clamped_int("win_tray_longpress_ms", 400, 150, 1500),
+                win_tray_hide_fullscreen=bool(a.get("win_tray_hide_fullscreen", True)),
+                win_tray_monitor=monitor,
+                win_tray_hotkey=str(a.get("win_tray_hotkey") or ""),
             )
         if "backup" in data:
             b = data["backup"] or {}

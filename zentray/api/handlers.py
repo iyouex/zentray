@@ -1397,6 +1397,8 @@ def _pomodoro_start(body: dict) -> tuple[int, dict]:
 
 def _glance_state() -> tuple[int, dict]:
     """速览面板复合状态：轮播槽任务 + 活跃序 + 番茄态 + 待看报告 + 脚本占用。"""
+    from zentray.services.next_step import build_next_step
+
     ts = _ctx.task_service
     item = None
     if ts is not None:
@@ -1413,6 +1415,7 @@ def _glance_state() -> tuple[int, dict]:
                 "deadline": d.get("deadline"),
                 "subs_done": sum(1 for s in subs if s.get("status") == "done"),
                 "subs_total": len(subs),
+                "next_step": build_next_step(task),
             }
     active_ids = [t.id for t in ts.get_all_tasks()] if ts is not None else []
 

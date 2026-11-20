@@ -1,5 +1,7 @@
 # ZenTray Windows 版交互与呈现设计（v1.0 草案）
 
+> **2026-11-20 已被 `docs/design/windows-edge-tray-redesign-2026-11-20.md` 取代**：主显示改为贴边悬浮胶囊（宽边详情/拖动、窄边插件/设置、8 个停顿点）；本文 §3.0 的 AppBar 状态条保留为回退方案，其余页面级内容仍可参考。
+
 > 基于 Linux 现网全部功能（v0.7.1：任务轮播+饼图、番茄钟体系、AI 计划/复盘+场景能力、
 > 插件体系、双通知渠道、报告托盘轮播、备份、浅色双皮肤）做 Windows 10/11 平台移植的
 > **逐页面、逐按钮、逐交互**设计。配套原型图：`.superpowers/prototypes/windows-prototype.html`
