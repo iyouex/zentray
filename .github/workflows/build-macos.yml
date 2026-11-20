@@ -4,6 +4,9 @@ name: build-macos
 # 触发：push 到本分支（workflow_dispatch 仅默认分支可注册）
 # 产物：zentray_<ver>_macos_arm64.zip（.app 的 ditto zip，解压拖入 /Applications）→ release v$ver
 # 签名：ad-hoc（无开发者证书；首次打开需右键→打开）
+# runner：macos-15（arm64）。⚠️ 勿改回 macos-14——该镜像已下架，job 会在启动
+#   1 秒内被 cancelled，check-run annotation 为
+#   "The configuration 'macos-14-arm64-us-default' is not supported"。
 on:
   push:
     branches: [feature/mac-support]
@@ -13,7 +16,7 @@ permissions:
 
 jobs:
   build-macos:
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 
