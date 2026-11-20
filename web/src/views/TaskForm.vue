@@ -141,6 +141,12 @@
                     :disabled="!canRunPlugin"
                     @click="onRunPlugin"
                   >▶ 运行</a-button>
+                  <a-button
+                    v-if="todayRun"
+                    size="mini"
+                    type="text"
+                    @click="reportVisible = true"
+                  >📄 查看报告</a-button>
                 </div>
               </div>
               <p v-if="selectedPluginHint" class="hint tf-note">{{ selectedPluginHint }}</p>
@@ -391,6 +397,26 @@
       <a-button type="primary" :loading="saving" @click="onSave">💾 保存任务</a-button>
     </div>
 
+    <!-- 插件运行报告（当天该任务+插件最近一次运行） -->
+    <a-modal
+      v-model:visible="reportVisible"
+      :title="`运行报告 · ${todayRun?.name || form.plugin_id}`"
+      draggable
+      :width="640"
+      :footer="false"
+    >
+      <div v-if="todayRun" class="tf-report">
+        <div class="tf-report-meta">
+          <a-tag :color="todayRun.ok ? 'green' : 'red'">{{ todayRun.ok ? '✓ 成功' : '✗ 失败' }}</a-tag>
+          <span class="hint">{{ todayRun.started_at || todayRun.time }}</span>
+          <a-tag size="small">{{ todayRun.trigger === 'task_popup' ? '任务弹窗触发' : (todayRun.trigger === 'manual' ? '手动' : todayRun.trigger) }}</a-tag>
+        </div>
+        <p v-if="todayRun.summary" class="hint">{{ todayRun.summary }}</p>
+        <pre v-if="todayRun.result_text" class="tf-report-pre">{{ todayRun.result_text }}</pre>
+        <p v-else class="hint">（本次运行无文本结果）</p>
+      </div>
+    </a-modal>
+
     <a-modal
       v-model:visible="showAddSec"
       title="添加二级分类"
@@ -472,6 +498,7 @@ import {
   listPlugins,
   pickPath,
   runPlugin,
+  listPluginRuns,
   updateTask,
   updateTemplate,
 } from '@/api/client'
@@ -512,6 +539,24 @@ const pluginsEnabled = ref(false)
 const pluginItems = ref([])
 const pluginsBusy = ref(false)
 const runningPlugin = ref(false)
+// 当天该任务+插件的最近一次运行（有→显示「查看报告」；任务详情页需求 2026-11-16）
+const todayRun = ref(null)
+const reportVisible = ref(false)
+
+async function refreshTodayRun() {
+  if (!isEdit.value || !form.plugin_id) { todayRun.value = null; return }
+  try {
+    const d = await listPluginRuns({
+      plugin_id: form.plugin_id,
+      task_id: form.id,
+      today: new Date().toISOString().slice(0, 10),
+      limit: 1,
+    })
+    todayRun.value = d.items?.[0] || null
+  } catch (e) {
+    todayRun.value = null
+  }
+}
 
 const form = reactive({
   mode: 'one-time',
@@ -669,6 +714,7 @@ function onRunPlugin() {
             : '插件已开始运行，可在 设置 → 🧩 插件 → 运行历史 查看',
         )
         await loadPlugins()
+        await refreshTodayRun()
       } catch (e) {
         const msg = e?.response?.data?.error || e?.message || '运行失败'
         Message.error(msg)
@@ -718,6 +764,9 @@ function seedSkipHolidays() {
 
 /** 当前笔刷：start=设开始点 due=设截止点 pop=加弹窗时刻（仅一次性） */
 const brush = ref('start')
+watch(() => form.plugin_id, () => { todayRun.value = null; refreshTodayRun() })
+watch(taskId, () => { todayRun.value = null; refreshTodayRun() })  // 同窗切换任务：组件复用须重查
+
 watch(isPeriodic, (v) => {
   if (v && brush.value === 'pop') brush.value = 'start'
 })
@@ -1608,6 +1657,7 @@ onMounted(async () => {
     const m = String(anchor).match(/^(\d{4})-(\d{2})-/)
     if (m && !isPeriodic.value) calYm.value = { y: +m[1], m: +m[2] }
     loadPlugins()
+    refreshTodayRun()
   } finally {
     loading.value = false
   }
@@ -2226,4 +2276,9 @@ onUnmounted(() => {
     opacity: 0.45;
   }
 }
+
+.tf-report-meta{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+.tf-report-pre{max-height:44vh;overflow:auto;background:var(--color-fill-2);
+  border-radius:6px;padding:10px;font:12px/1.6 ui-monospace,Consolas,monospace;
+  white-space:pre-wrap;word-break:break-all;margin:8px 0 0}
 </style>

@@ -21,7 +21,7 @@ async def g_app(ctx, scale):
     presets = None
     for _ in range(12):
         presets = await p.evaluate(
-            """() => {
+            r"""() => {
               const blk = [...document.querySelectorAll('.zt-block')]
                 .find(b => b.textContent.includes('时间与提醒'));
               if (!blk) return null;
@@ -62,6 +62,26 @@ async def g_app(ctx, scale):
         " menus: [...document.querySelectorAll('.arco-menu-item')].map(m => m.innerText.trim()).slice(0, 8)})")
     ctx.check("settings-更新卡片", upd["has"], str(upd)[:160])
 
+    win = await p.evaluate(
+        """() => fetch('/api/settings').then(r => r.json()).then(d => {
+          const a = (d.settings || {}).appearance || {};
+          return {
+            edge: a.win_tray_edge,
+            ratio: a.win_tray_ratio,
+            idle: a.win_tray_idle_sec,
+            monitor: a.win_tray_monitor,
+          };
+        })"""
+    )
+    ctx.check(
+        "settings-Windows贴边托盘字段",
+        win.get("edge") == "bottom"
+        and abs(float(win.get("ratio") or 0) - 0.75) < 1e-6
+        and win.get("idle") == 8
+        and win.get("monitor") == "primary",
+        str(win)[:160],
+    )
+
     # ---- 插件面板页 ----
     await p.goto(base + "/#/plugins-panel", wait_until="domcontentloaded")
     await p.wait_for_timeout(1200)
@@ -70,9 +90,21 @@ async def g_app(ctx, scale):
 
     # ---- 速览页 ----
     await p.goto(base + "/#/glance", wait_until="domcontentloaded")
-    await p.wait_for_timeout(900)
+    await p.wait_for_timeout(1200)
     glance = await p.evaluate("() => document.querySelectorAll('[class*=glance] *').length > 5")
     ctx.check("glance-加载", glance)
+    nxt = await p.evaluate(
+        """() => {
+          const el = document.querySelector('.g-next');
+          if (!el) return null;
+          return {
+            text: el.innerText,
+            btns: [...el.querySelectorAll('button')].map(b => b.innerText.trim()),
+          };
+        }"""
+    )
+    ctx.check("glance-下一步操作卡", bool(nxt) and "下一步操作" in nxt["text"], str(nxt)[:180])
+    ctx.check("glance-下一步有动作", bool(nxt) and len(nxt["btns"]) >= 1, str(nxt["btns"] if nxt else None))
 
     # ---- 表单落库：填标题保存 → API 计数+1 ----
     # 独立新页：同会话内先访问设置/速览等页后再进表单，输入交互会失灵

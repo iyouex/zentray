@@ -390,9 +390,12 @@ export async function runPlugin(id, body = {}) {
   return data
 }
 
-/** 运行历史（时间倒序，limit 上限 200） */
-export async function listPluginRuns(limit = 50) {
-  const { data } = await http.get('/api/plugins/runs', { params: { limit } })
+/** 运行历史（时间倒序，limit 上限 200；filters: plugin_id/task_id/today=YYYY-MM-DD） */
+export async function listPluginRuns(limitOrFilters = 50, extra = {}) {
+  const params = typeof limitOrFilters === 'number'
+    ? { limit: limitOrFilters, ...extra }
+    : { limit: 50, ...limitOrFilters }
+  const { data } = await http.get('/api/plugins/runs', { params })
   return data
 }
 

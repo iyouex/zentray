@@ -2,8 +2,8 @@
 """
 Windows 托盘后端（docs/design/windows-interaction-design.md §3，2026-10-17 重设计）。
 
-- 主显示：任务栏正上方状态条（§3.0，WindowsStatusStripTray）——AppBar 系统级
-  保留条带，动态图标 + 完整标题不截断；左键=速览面板、右键=菜单
+- 主显示：贴边悬浮胶囊（2026-11-20 重设计，见 ``win_edge_tray.WindowsEdgeTray``）
+- 回退：任务栏正上方状态条（WindowsStatusStripTray，AppBar）——旧方案，保留兜底
 - 辅助：通知区图标（WindowsTray）——toast / 设置兜底入口
 - 图标运行时绘制（饼图/番茄/茶绿/转圈/徽标/倒计时叠加），替代预烘焙 PNG
 """
