@@ -437,6 +437,21 @@ def main():
     except Exception:
         logger.exception("Vue 预载挂载失败")
 
+    # 更新：启动 4 秒后静默检查、此后每 6 小时。发现新版 → 托盘菜单项 + 通知（每个版本
+    # 一次），不擅自开窗；状态机的变化经 Qt 信号排队回主线程刷新菜单。
+    try:
+        from zentray.services.update_watcher import UpdateWatcher
+
+        watcher = UpdateWatcher()
+        # 必须连 QObject 的绑定方法：发射方在守护线程，AutoConnection 才会排队回主线程
+        watcher.found.connect(runtime.controller.on_update_found)
+        watcher.swap_failed.connect(runtime.controller.on_update_swap_failed)
+        watcher.changed.connect(runtime.controller.on_update_state_changed)
+        watcher.start()
+        runtime.update_watcher = watcher  # 持有引用：定时器随它存活
+    except Exception:
+        logger.exception("更新检查挂载失败")
+
     # 静默启动：仅托盘（启动占位 → 随后轮播）
     logger.info("静默启动完成：仅顶栏托盘 + 任务标题轮播")
 

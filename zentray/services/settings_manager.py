@@ -232,9 +232,13 @@ class OpsSettings:
 
 @dataclass
 class UpdateSettings:
-    """应用内自更新。proxy 空 = 直连/环境变量（GUI 进程读不到系统代理时手动填）。"""
+    """应用内自更新。proxy 空 = 直连/环境变量（GUI 进程读不到系统代理时手动填）。
+
+    auto_check：启动 4 秒后及每 6 小时静默检查；发现新版只在托盘菜单提示并通知一次。
+    """
 
     proxy: str = ""
+    auto_check: bool = True
 
 
 
@@ -802,6 +806,7 @@ class SettingsManager:
             u = data["update"] or {}
             self._settings.update = UpdateSettings(
                 proxy=str(u.get("proxy") or "").strip(),
+                auto_check=bool(u.get("auto_check", True)),
             )
         if "feishu_sync" in data:
             f = data["feishu_sync"] or {}

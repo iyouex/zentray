@@ -46,9 +46,16 @@ class TrayRenderer:
         """更新右键菜单"""
         self.backend.update_menu(items)
 
-    def show_notification(self, title: str, msg: str, on_click=None) -> None:
-        """弹出系统通知；on_click 非空时点击通知触发（支持则常驻）"""
-        self.backend.show_notification(title, msg, on_click)
+    def show_notification(self, title: str, msg: str, on_click=None, action_label=None) -> None:
+        """弹出系统通知；on_click 非空时点击通知触发（支持则常驻）。
+
+        action_label：通知上动作按钮的文案。只有调用方给了才透传——老调用方与只认
+        三个参数的后端/替身保持原样（后端默认文案仍是「点击查看报告」）。
+        """
+        if action_label:
+            self.backend.show_notification(title, msg, on_click, action_label)
+        else:
+            self.backend.show_notification(title, msg, on_click)
 
     def shutdown(self) -> None:
         """关闭托盘"""

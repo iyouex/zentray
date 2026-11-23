@@ -249,7 +249,9 @@ class MacStatusItemTray(TrayImplementation):
     # 系统通知（UNUserNotificationCenter；拒绝授权则静默降级）
     # ==========================================
 
-    def show_notification(self, title: str, msg: str, on_click=None):
+    def show_notification(self, title: str, msg: str, on_click=None,
+                          action_label: str = "点击查看报告"):
+        # 系统通知没有可定制的动作按钮，action_label 仅用于统一签名
         try:
             self._post_un(str(title), str(msg), on_click)
             return

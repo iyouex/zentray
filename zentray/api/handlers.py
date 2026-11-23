@@ -238,17 +238,23 @@ def handle_request(
         if method == "POST" and path == "/api/reminders/check-conflicts":
             return _check_reminder_conflicts(body)
 
-        # —— 应用内自更新：检查 / 下载 / 进度 / 安装重启 ——
-        if method == "GET" and path == "/api/updates/check":
+        # —— 应用内自更新：检查 / 下载 / 取消 / 进度 / 安装 / 重启确认 ——
+        # check 与 install 只负责后台启动并立即返回（网络、polkit 认证可能等很久），
+        # 结果一律轮询 status；写方法走 POST，享受 Origin 防跨站的那道防线。
+        if method == "POST" and path == "/api/updates/check":
             return _updates_check()
         if method == "POST" and path == "/api/updates/download":
             return _updates_download(body or {})
+        if method == "POST" and path == "/api/updates/cancel":
+            return _updates_cancel()
         if method == "GET" and path == "/api/updates/status":
             return _updates_status()
         if method == "POST" and path == "/api/updates/install":
             return _updates_install()
         if method == "POST" and path == "/api/updates/restart":
             return _updates_restart()
+        if method == "POST" and path == "/api/updates/defer":
+            return _updates_defer()
 
         if method == "POST" and path == "/api/pomodoro/start":
             return _pomodoro_start(body)
@@ -575,30 +581,40 @@ def _check_reminder_conflicts(body: dict) -> tuple[int, dict]:
 
 
 def _updates_check() -> tuple[int, dict]:
-    """查 GitHub latest release（代理取自设置 update.proxy）。"""
+    """后台检查最新版本并立即返回；结果经 /api/updates/status 轮询（代理取设置 update.proxy）。"""
     from zentray.services.settings_manager import SettingsManager
     from zentray.services.updater import UpdaterService
 
     try:
-        result = UpdaterService.instance().check(SettingsManager().update.proxy)
-        return 200, result
+        return 200, UpdaterService.instance().start_check(
+            SettingsManager().update.proxy, manual=True)
     except Exception as e:
-        return 502, {"error": str(e)}
+        return 500, {"error": str(e)}
 
 
 def _updates_download(body: dict) -> tuple[int, dict]:
+    """下载最近一次检查到的安装包。
+
+    地址、大小、哈希只取服务端自己的检查结果；前端只报版本，用来发现「检查结果已变」。
+    """
     from zentray.services.settings_manager import SettingsManager
     from zentray.services.updater import UpdaterService
 
-    url = str(body.get("url") or "")
     version = str(body.get("version") or "").strip().lstrip("v")
-    if not url or not version:
-        return 400, {"error": "url 与 version 必填"}
     try:
-        UpdaterService.instance().start_download(url, version, SettingsManager().update.proxy)
-        return 200, {"started": True}
+        return 200, UpdaterService.instance().start_download(
+            version, SettingsManager().update.proxy)
     except Exception as e:
         return 400, {"error": str(e)}
+
+
+def _updates_cancel() -> tuple[int, dict]:
+    from zentray.services.updater import UpdaterService
+
+    try:
+        return 200, UpdaterService.instance().cancel_download()
+    except Exception as e:
+        return 500, {"error": str(e)}
 
 
 def _updates_status() -> tuple[int, dict]:
@@ -608,12 +624,13 @@ def _updates_status() -> tuple[int, dict]:
 
 
 def _updates_install() -> tuple[int, dict]:
+    """后台安装并立即返回（Linux 的 polkit 认证可能等很久）；结果轮询 status。"""
     from zentray.services.updater import UpdaterService
 
     try:
-        return 200, UpdaterService.instance().install()
+        return 200, UpdaterService.instance().start_install()
     except Exception as e:
-        return 500, {"error": str(e)}
+        return 400, {"error": str(e)}
 
 
 def _updates_restart() -> tuple[int, dict]:
@@ -623,6 +640,16 @@ def _updates_restart() -> tuple[int, dict]:
         return 200, UpdaterService.instance().restart()
     except Exception as e:
         return 500, {"error": str(e)}
+
+
+def _updates_defer() -> tuple[int, dict]:
+    """「稍后」：已安装待重启的更新不在本次退出时拉起应用。"""
+    from zentray.services.updater import UpdaterService
+
+    try:
+        return 200, UpdaterService.instance().defer_restart()
+    except Exception as e:
+        return 400, {"error": str(e)}
 
 
 def _scanned_loader():

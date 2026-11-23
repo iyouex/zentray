@@ -105,6 +105,17 @@ class SettingsCommand(ActionCommand):
             controller.update_display()
 
 
+class UpdateOpenCommand(ActionCommand):
+    """打开 设置 → 系统 → 软件更新（托盘菜单的更新提示项 / 发现新版本通知的落点）"""
+
+    def execute(self, controller: "TrayController") -> None:
+        from zentray.ui.vue_commands import try_vue_update
+
+        if try_vue_update(controller):
+            return
+        SettingsCommand().execute(controller)
+
+
 # ==========================================
 # 命令注册与路由
 # ==========================================
@@ -118,6 +129,7 @@ COMMAND_MAP = {
     "skip_break": SkipBreakCommand(),
     "quit": QuitCommand(),
     "settings": SettingsCommand(),
+    "update.open": UpdateOpenCommand(),
 }
 
 

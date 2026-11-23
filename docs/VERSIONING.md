@@ -39,3 +39,22 @@
 - 后缀必须进 Debian Version 字段：分支包若与 master 同名，apt 视同版本拒绝覆盖安装，装完仍是旧程序（历史踩坑）
 - **来源追溯**：打包时在 `DEBIAN/control` 写入 `X-ZenTray-Branch` / `X-ZenTray-Commit`，`dpkg-deb -I <包>` 即可查构建分支与提交；无法确定分支（分离 HEAD）时打包直接中止
 - 由 `scripts/build_package.sh` 自动生成，勿手改文件名后当正式包
+
+## 更新清单 latest.json
+
+应用内更新以 Release 资产 `latest.json` 为准：版本、发布说明、每个平台安装包的大小与 SHA256。
+客户端（`zentray/services/updater.py`）只认清单里的哈希与地址，所以清单必须**最后**发布、
+且只在一发布就完整；没有清单的旧 Release，客户端会回退到不校验哈希的旧探测路径。
+
+发版最后一步（三端安装包都传齐之后）：
+
+```bash
+python scripts/compose_update_manifest.py vX.Y.Z          # 只核对并打印清单
+python scripts/compose_update_manifest.py vX.Y.Z --upload  # 最后一步：上传 latest.json
+```
+
+脚本会逐个下载三端资产核对，任一条件不满足就直接失败、不碰 Release：
+
+- 三端安装包缺任何一个
+- 下载后的大小与 Release 记录不符
+- deb 内嵌的 Debian 版本与 tag 不符（未升版本号的分支构建覆盖了正式资产）

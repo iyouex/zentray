@@ -466,9 +466,41 @@ class TrayController(QObject):
             pomodoro_today=self._pomodoro_today_stats(),
             focus_task_title=pomo.task_title if pomo.phase == "focus" else "",
             pomodoro_label_format=self._settings.pomodoro.menu_label_format,
+            update_hint=self._update_menu_hint(),
         )
         if self.menu_builder.should_update(items):
             self.renderer.update_menu(items)
+
+    # ---------------------------------------------------------------- 更新提示
+    # 状态源是 services.updater.UpdaterService（单例）；这里只负责呈现。
+
+    def _update_menu_hint(self) -> str:
+        from zentray.services.updater import UpdaterService, tray_hint
+
+        return tray_hint(UpdaterService.instance().status())
+
+    def on_update_found(self, version: str) -> None:
+        """静默检查发现新版本（每个版本只来一次）：通知 + 托盘菜单项，不擅自开窗。"""
+        self.renderer.show_notification(
+            "发现新版本", f"ZenTray v{version} 可用",
+            on_click=self.open_update_page, action_label="查看更新")
+        # Windows 贴边胶囊的事件态提示（其它托盘后端忽略）
+        self.renderer.show_event(f"⬆ 发现新版本 v{version}", kind="info",
+                                 on_click=self.open_update_page)
+        self._refresh_menu()
+
+    def on_update_swap_failed(self, reason: str) -> None:
+        """上次退出后的替换没成功（Windows/macOS helper 写下的结果）：原版本已保留。"""
+        logger.warning("上次更新未能完成替换: %s", reason)
+        self.renderer.show_notification(
+            "更新未完成", "新版本未能替换，已保留原版本。请到 设置 → 系统 重试")
+
+    def on_update_state_changed(self) -> None:
+        """更新状态机有变化：刷新托盘菜单里的提示项（文案随状态变，结构不变则不重建）。"""
+        self._refresh_menu()
+
+    def open_update_page(self) -> None:
+        self.handle_action("update.open")
 
     def reload_data(self) -> None:
         self.task_service.refresh_scheduler()

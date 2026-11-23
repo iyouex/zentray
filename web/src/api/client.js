@@ -441,32 +441,46 @@ export async function yieldPluginToBundled(id) {
   return data
 }
 
-/** 检查 GitHub Release 新版本（代理取设置 update.proxy） */
+// —— 应用内自更新：状态真相在服务端状态机，网络动作都只是「后台启动」，结果轮询 status ——
+
+/** 发起检查更新（后台进行；代理取设置 update.proxy） */
 export async function updatesCheck() {
-  const { data } = await http.get('/api/updates/check')
+  const { data } = await http.post('/api/updates/check', {})
   return data
 }
 
-/** 开始下载更新包（后台线程，进度走 updatesStatus 轮询） */
+/** 下载最近一次检查到的安装包（后台线程，支持断点续传与取消）；version 用于发现检查结果已变 */
 export async function updatesDownload(body) {
   const { data } = await http.post('/api/updates/download', body)
   return data
 }
 
-/** 下载进度/状态轮询 */
+/** 取消当前下载 */
+export async function updatesCancel() {
+  const { data } = await http.post('/api/updates/cancel', {})
+  return data
+}
+
+/** 状态机快照：state / progress / downloaded / total / error / version / manual / result */
 export async function updatesStatus() {
   const { data } = await http.get('/api/updates/status')
   return data
 }
 
-/** 安装并重启（平台分派：Linux pkexec / Win bat / macOS sh） */
+/** 后台安装（平台分派：Linux pkexec / Win bat / macOS sh）；失败原因进状态 */
 export async function updatesInstall() {
-  const { data } = await http.post('/api/updates/install')
+  const { data } = await http.post('/api/updates/install', {})
   return data
 }
 
 /** 确认重启：退出当前进程，由更新 helper 接管换新并重启 */
 export async function updatesRestart() {
-  const { data } = await http.post('/api/updates/restart')
+  const { data } = await http.post('/api/updates/restart', {})
+  return data
+}
+
+/** 「稍后」：已安装的更新不在本次退出时拉起应用，下次启动即新版 */
+export async function updatesDefer() {
+  const { data } = await http.post('/api/updates/defer', {})
   return data
 }

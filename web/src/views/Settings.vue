@@ -23,7 +23,9 @@
             <a-menu-item key="ops">🧩 插件</a-menu-item>
           </a-menu-item-group>
           <a-menu-item-group title="应用与数据">
-            <a-menu-item key="system">🖥️ 系统</a-menu-item>
+            <a-menu-item key="system">
+              🖥️ 系统<span v-if="updBadge" class="nav-dot" title="有可更新的版本"></span>
+            </a-menu-item>
             <a-menu-item key="backup">💾 备份</a-menu-item>
             <a-menu-item key="history">📜 历史</a-menu-item>
           </a-menu-item-group>
@@ -1125,51 +1127,78 @@
               <h3 class="zt-h3">软件更新</h3>
               <section class="zt-block">
                 <div class="sys-row">
-                  <div>
+                  <div class="upd-main">
                     <div class="zt-h4">当前版本 v{{ appVersion || '…' }}</div>
-                    <a-alert v-if="upd.result && !upd.result.has_update" type="success" class="upd-alert">
-                      已是最新版本 v{{ upd.result.version }}
+                    <a-alert v-if="upd.state === 'checking'" type="info" class="upd-alert">
+                      正在检查更新…
                     </a-alert>
-                    <a-alert v-if="upd.state === 'installed'" type="success" class="upd-alert">
-                      新版本 v{{ upd.version || '…' }} 已安装，重启后生效
+                    <a-alert v-else-if="upd.state === 'uptodate'" type="success" class="upd-alert">
+                      已是最新版本
+                    </a-alert>
+                    <a-alert v-else-if="upd.state === 'installed'" type="success" class="upd-alert">
+                      新版本 v{{ upd.version }} 已安装，重启后生效
                     </a-alert>
                     <a-alert v-if="upd.result && upd.result.has_update && upd.state !== 'installed'" type="warning" class="upd-alert">
-                      发现新版本 v{{ upd.result.version }}（{{ (upd.result.asset_size / 1048576).toFixed(1) }}MB）
-                      <a :href="upd.result.notes_url" target="_blank" rel="noreferrer" style="margin-left: 8px">查看发布说明</a>
+                      发现新版本 v{{ upd.result.version }}<template v-if="upd.result.asset_size">（{{ mb(upd.result.asset_size) }}）</template>
+                      <a :href="upd.result.notes_url" target="_blank" rel="noreferrer" style="margin-left: 8px">发布页</a>
+                      <template v-if="!upd.result.asset_ready"><br />本平台安装包发布准备中，请稍后再检查</template>
                     </a-alert>
                     <a-alert v-if="upd.error" type="error" class="upd-alert">{{ upd.error }}</a-alert>
-                    <!-- Arco progress 百分比取 0~1，后端 0~100 需除 100 -->
-                    <a-progress
-                      v-if="upd.state === 'downloading' || upd.state === 'ready'"
-                      :percent="upd.progress / 100"
-                      size="small"
-                      style="max-width: 320px; margin-top: 4px"
-                    />
+                    <!-- Arco progress 百分比取 0~1，后端 0-100 需除 100；安装中不传 percent 为加载态 -->
+                    <div v-if="upd.state === 'downloading' || upd.state === 'installing'" class="upd-progress">
+                      <a-progress
+                        :percent="upd.state === 'installing' ? undefined : updPercent / 100"
+                        size="small"
+                        :show-text="false"
+                      />
+                      <span class="hint">{{ updProgressText }}</span>
+                    </div>
+                    <!-- 更新内容：发布说明就地可读（renderMd 会转义原文里的 HTML 标签） -->
+                    <a
+                      v-if="upd.result && upd.result.has_update && upd.result.body"
+                      class="doc-link upd-notes-toggle"
+                      @click.prevent="updNotesOpen = !updNotesOpen"
+                    >
+                      {{ updNotesOpen ? '收起更新内容 ▴' : '展开更新内容 ▾' }}
+                    </a>
+                    <div v-if="updNotesOpen && releaseNotes" class="upd-notes-body" v-html="releaseNotes"></div>
                   </div>
                   <div class="upd-actions">
-                    <a-button :loading="upd.checking" @click="onUpdatesCheck">检查更新</a-button>
                     <a-button
-                      v-if="upd.result && upd.result.has_update && upd.state !== 'downloading' && upd.state !== 'ready'"
-                      type="primary"
-                      @click="onUpdatesDownload"
+                      v-if="upd.state !== 'downloading' && upd.state !== 'installing'"
+                      :loading="upd.state === 'checking'"
+                      :disabled="upd.state === 'installed'"
+                      @click="onUpdatesCheck"
                     >
-                      下载更新
+                      检查更新
                     </a-button>
-                    <a-button
-                      v-if="upd.state === 'ready'"
-                      type="primary"
-                      status="warning"
-                      :loading="upd.installing"
-                      @click="onUpdatesInstall"
-                    >
-                      安装并重启
+                    <a-button v-if="updCanDownload" type="primary" @click="onUpdatesDownload">
+                      {{ upd.state === 'error' ? '重试下载' : '下载并安装' }}
                     </a-button>
-                    <a-button v-else-if="upd.state === 'installed'" type="primary" status="warning" @click="onUpdatesInstall">
-                      重启应用
+                    <a-button v-if="upd.state === 'downloading'" @click="onUpdatesCancel">
+                      取消下载
                     </a-button>
+                    <a-button v-if="upd.state === 'ready'" type="primary" @click="onUpdatesInstall">
+                      安装
+                    </a-button>
+                    <template v-if="upd.state === 'installed'">
+                      <a-button type="primary" status="warning" @click="confirmUpdatesRestart">
+                        立即重启
+                      </a-button>
+                      <a-button @click="onUpdatesDefer">稍后</a-button>
+                    </template>
                   </div>
                 </div>
-                <div class="field-line" style="margin-top: 8px">
+                <div class="sys-row" style="margin-top: 12px">
+                  <div>
+                    <div class="zt-h4">自动检查更新</div>
+                    <div class="sys-desc">
+                      启动 4 秒后及每 6 小时静默检查；发现新版只在托盘菜单提示，并通知一次。
+                    </div>
+                  </div>
+                  <a-switch v-model="form.update.auto_check" />
+                </div>
+                <div class="field-line">
                   <span class="field-k">下载代理</span>
                   <a-input
                     v-model="form.update.proxy"
@@ -1421,11 +1450,6 @@ import {
   setAutostart,
   updatePlugin,
   yieldPluginToBundled,
-  updatesCheck,
-  updatesDownload,
-  updatesInstall,
-  updatesRestart,
-  updatesStatus,
   validatePluginPath,
 } from '@/api/client'
 import { applyAppearance, applyTheme } from '@/theme'
@@ -1434,9 +1458,12 @@ import HistoryPanel from '@/components/HistoryPanel.vue'
 import NumberSpinner from '@/components/NumberSpinner.vue'
 import TimeSpinner from '@/components/TimeSpinner.vue'
 import PluginDocDrawer from '@/components/PluginDocDrawer.vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
+import { renderMd } from '@/utils/md'
+import { updateStore } from '@/utils/appUpdate'
 
 const router = useRouter()
+const route = useRoute()
 const setThemeMode = inject('setThemeMode', null)
 const loading = ref(false)
 const saving = ref(false)
@@ -1997,7 +2024,7 @@ function emptyForm() {
       report_tray_minutes: 60,
       plugin_notify_channels: {},
     },
-    update: { proxy: '' },
+    update: { proxy: '', auto_check: true },
     calendar: { enabled: false, horizon_mode: 'count', horizon_value: 4 },
   }
 }
@@ -2148,6 +2175,17 @@ function onMainNav(key) {
   if (key === 'ops') loadOpsPage()
 }
 
+// 托盘菜单的更新提示项 / 「发现新版本」通知直达 ?tab=system。保活复用时页面重挂载与
+// 路由 query 更新的先后不定，所以用 watch，而不是只在 onMounted 读一次。
+const MAIN_TABS = ['polling', 'pomodoro', 'ai', 'notify', 'ops', 'system', 'backup', 'history']
+watch(
+  () => route.query.tab,
+  (tab) => {
+    if (MAIN_TABS.includes(tab)) onMainNav(tab)
+  },
+  { immediate: true },
+)
+
 function onThemePreview() {
   const mode = form.appearance?.theme || 'system'
   if (setThemeMode) setThemeMode(mode)
@@ -2192,86 +2230,92 @@ async function onCalendarExport() {
   }
 }
 
-/** —— 软件更新：检查 → 下载（轮询进度）→ 安装并重启 —— */
+/** —— 软件更新：状态真相在服务端状态机（@/utils/updateStore），这里只负责呈现与两道确认 ——
+ *  ① 点「下载并安装」才开始；② 装完不自动重启，等用户点「立即重启」（「稍后」= 下次启动生效）。 */
 const appVersion = ref('')
-const upd = reactive({ checking: false, state: 'idle', progress: 0, error: '', result: null, installing: false, version: '' })
-let updTimer = null
+const upd = ref(updateStore.getState())
+onBeforeUnmount(updateStore.subscribe((snapshot) => { upd.value = snapshot }))
+// 静默检查与托盘侧的变化只发生在服务端：挂载期间定期对齐（关窗即停；进行中的任务自带轮询，不会被重复触发）
+let updSyncTimer = setInterval(() => {
+  updateStore.sync().catch(() => {})
+}, 10000)
+onBeforeUnmount(() => clearInterval(updSyncTimer))
 
-onBeforeUnmount(() => clearInterval(updTimer))
+/** 有新版且未装完（含下载中、失败、待重启）：设置页「系统」导航上的小红点 */
+const updBadge = computed(
+  () => !!upd.value.result?.has_update && ['available', 'downloading', 'ready', 'error', 'installed'].includes(upd.value.state),
+)
+/** 下载失败（error）后可直接重试，不必先重新检查 */
+const updCanDownload = computed(() => {
+  const s = upd.value
+  return !!s.result?.has_update && !!s.result.asset_ready
+    && (s.state === 'available' || s.state === 'error')
+})
+const updPercent = computed(() => {
+  const s = upd.value
+  return s.total ? Math.min(100, Math.floor((s.downloaded * 100) / s.total)) : 0
+})
+const updProgressText = computed(() => {
+  const s = upd.value
+  if (s.state === 'installing') return '正在安装…（系统可能弹出认证窗口，请留意）'
+  return s.total
+    ? `${mb(s.downloaded)} / ${mb(s.total)} · ${updPercent.value}%`
+    : `已下载 ${mb(s.downloaded)}`
+})
+const releaseNotes = computed(() => (upd.value.result?.body ? renderMd(upd.value.result.body) : ''))
+/** 「展开更新内容」的开关状态；换了目标版本就收起 */
+const updNotesOpen = ref(false)
+watch(() => upd.value.version, () => { updNotesOpen.value = false })
+
+function mb(bytes) {
+  return `${(Number(bytes || 0) / 1048576).toFixed(1)} MB`
+}
+
+const updErrText = (e, fallback) => e?.response?.data?.error || e?.message || fallback
 
 async function onUpdatesCheck() {
-  upd.checking = true
-  upd.error = ''
-  try {
-    upd.result = await updatesCheck()
-  } catch (e) {
-    upd.error = e?.response?.data?.error || e?.message || '检查失败'
-  } finally {
-    upd.checking = false
-  }
+  await updateStore.check()
 }
 
+/** 确认闸 ①：按钮本身就是确认。下载在后台跑（可取消），到 ready 自动续安装；装到待重启再弹闸 ② */
 async function onUpdatesDownload() {
-  if (!upd.result || !upd.result.asset_url) return
-  upd.error = ''
-  upd.state = 'downloading'
-  try {
-    await updatesDownload({ url: upd.result.asset_url, version: upd.result.version })
-    clearInterval(updTimer)
-    updTimer = setInterval(async () => {
-      try {
-        const s = await updatesStatus()
-        upd.state = s.state
-        upd.progress = s.progress
-        if (s.error) upd.error = s.error
-        if (s.state === 'ready' || s.state === 'error') clearInterval(updTimer)
-      } catch {
-        clearInterval(updTimer)
-      }
-    }, 500)
-  } catch (e) {
-    upd.state = 'idle'
-    upd.error = e?.response?.data?.error || e?.message || '下载启动失败'
-  }
+  const installed = await updateStore.downloadAndInstall()
+  if (installed) confirmUpdatesRestart()
 }
 
-function onUpdatesInstall() {
-  if (upd.state === 'installed') return confirmUpdatesRestart()
-  Modal.confirm({
-    title: '安装新版本 v' + (upd.result?.version || '…') + '？',
-    content: '安装完成后会再次询问是否重启（Linux 会先弹出系统认证窗口）。',
-    okText: '开始安装',
-    onOk: async () => {
-      upd.installing = true
-      try {
-        await updatesInstall()
-        upd.state = 'installed'
-        upd.version = upd.result?.version || ''
-        confirmUpdatesRestart()
-      } catch (e) {
-        upd.error = e?.response?.data?.error || e?.message || '安装失败'
-      } finally {
-        upd.installing = false
-      }
-    },
-  })
+async function onUpdatesCancel() {
+  await updateStore.cancelDownload()
 }
 
+/** 包已就绪时的（重试）安装 */
+async function onUpdatesInstall() {
+  if (await updateStore.install()) confirmUpdatesRestart()
+}
+
+/** 确认闸 ②：绝不自动重启。「稍后」= 已装好的新版本在下次启动时生效 */
 function confirmUpdatesRestart() {
   Modal.confirm({
     title: '重启 ZenTray？',
-    content: '新版本已安装完成，确认后应用将退出并自动重启。',
+    content: '新版本已安装完成，确认后应用将退出并自动重启；选「稍后」则下次启动时生效。',
     okText: '立即重启',
+    cancelText: '稍后',
     onOk: async () => {
+      Message.info('正在退出并重启…')
       try {
-        await updatesRestart()
-        Message.info('正在退出并重启…')
+        await updateStore.restart()
       } catch (e) {
-        upd.error = e?.response?.data?.error || e?.message || '重启失败'
+        // 应用退出时连接先断开属正常；只有服务端明确给了原因才提示
+        if (e?.response?.data?.error) Message.error(e.response.data.error)
       }
+    },
+    onCancel: () => {
+      updateStore.defer().catch((e) => Message.error(updErrText(e, '操作失败')))
     },
   })
 }
+
+const onUpdatesDefer = () =>
+  updateStore.defer().catch((e) => Message.error(updErrText(e, '操作失败')))
 
 async function onAutostartChange(val) {
   autostartLoading.value = true
@@ -2805,6 +2849,8 @@ onMounted(async () => {
     const s = await getSettings()
     normalizeLoaded(s)
     getMeta().then(m => { appVersion.value = m.version }).catch(() => {})
+    // 接上后台仍在进行的下载/安装，并与托盘里的更新提示保持一致
+    updateStore.sync().catch(() => {})
     onThemePreview()
     await loadSystemStatus()
   } catch (e) {
@@ -3180,15 +3226,80 @@ body.zt-skin-clay .nav-main {
   justify-content: space-between;
   gap: 16px;
 }
+.upd-main {
+  flex: 1;
+  min-width: 0;
+}
 .upd-actions {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 8px;
   flex-shrink: 0;
+  max-width: 280px;
 }
 .upd-alert {
   margin-top: 10px;
   width: fit-content;
+}
+.upd-progress {
+  max-width: 320px;
+  margin-top: 8px;
+}
+.upd-progress .hint {
+  display: block;
+  margin-top: 2px;
+}
+.upd-notes-toggle {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 13px;
+}
+/* 发布说明是次级内容：压到说明字阶、限高滚动，别把下面的设置项顶出视野 */
+.upd-notes-body {
+  max-width: 560px;
+  max-height: 220px;
+  overflow-y: auto;
+  margin-top: 6px;
+  padding: 6px 12px;
+  border-left: 2px solid var(--color-border-2);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--color-text-2);
+  word-break: break-word;
+}
+.upd-notes-body :deep(h1),
+.upd-notes-body :deep(h2),
+.upd-notes-body :deep(h3),
+.upd-notes-body :deep(h4) {
+  margin: 8px 0 2px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--color-text-1);
+}
+.upd-notes-body :deep(h1:first-child),
+.upd-notes-body :deep(h2:first-child),
+.upd-notes-body :deep(h3:first-child) {
+  margin-top: 0;
+}
+.upd-notes-body :deep(p),
+.upd-notes-body :deep(ul),
+.upd-notes-body :deep(ol) {
+  margin: 2px 0;
+}
+.upd-notes-body :deep(ul),
+.upd-notes-body :deep(ol) {
+  padding-left: 18px;
+}
+.nav-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: rgb(var(--primary-6));
+  vertical-align: middle;
 }
 .sys-desc {
   margin-top: 4px;
