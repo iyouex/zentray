@@ -20,6 +20,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")  # 须在 Qt 实例化之�
 
 from zentray.services import updater
 from zentray.services.updater import (
+    asset_name,
     asset_url,
     check,
     extract_archive,
@@ -119,13 +120,14 @@ def _asset(name):
             "browser_download_url": f"{updater.DOWNLOAD_PREFIX}v{NEW}/{name}"}
 
 
-def _release(names=("zentray_9.9.9_amd64.deb",), tag=f"v{NEW}"):
+def _release(tag=f"v{NEW}", names=None):
+    """默认带本平台的包；names 显式给出时可用来构造「缺本平台包」的发布。"""
     return {
         "tag_name": tag,
         "html_url": f"https://github.com/iyouex/zentray/releases/tag/{tag}",
         "published_at": "2026-10-13T00:00:00Z",
         "body": "## 主题\n- 更新内容",
-        "assets": [_asset(n) for n in names],
+        "assets": [_asset(n) for n in (names if names is not None else [asset_name(NEW)])],
     }
 
 
@@ -274,7 +276,10 @@ def test_check_redirect_unavailable_uses_api_tag(net):
 
 
 def test_check_fallback_asset_missing_is_not_ready(net):
-    net.release = _release(names=("zentray_9.9.9_windows_x64.zip",))
+    # 发布里只有别的平台的包
+    other_suffix = next(s for _key, s in updater.PLATFORMS.values()
+                        if s != updater.platform_suffix())
+    net.release = _release(names=[asset_name(NEW, other_suffix)])
     r = check()
     assert r["has_update"] and not r["asset_ready"] and r["asset_url"] == ""
 

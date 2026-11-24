@@ -4,6 +4,7 @@
 用例在任何平台的 CI 上行为一致。
 """
 import hashlib
+import io
 import http.server
 import json
 import os
@@ -716,7 +717,19 @@ def test_cleanup_stale_leaves_a_dev_checkout_alone(tmp_path, monkeypatch):
 # —— 真 socket 集成：本地假 GitHub（清单 + 支持 Range 的资产）———————————————————————
 
 
+def _as_zip(data: bytes) -> bytes:
+    """包成合法 zip：名为 .zip 的平台包会走全成员 CRC 校验，随机字节过不了。"""
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_STORED) as zf:
+        zf.writestr("payload.bin", data)
+    return buffer.getvalue()
+
+
 def test_end_to_end_against_a_local_release_server(monkeypatch):
+    """按真实平台走一遍（清单键、包名后缀都取真的）：清单 → 断线 → Range 续传 → 校验 → ready。"""
+    key, suffix = updater._platform()
+    payload = _as_zip(PAYLOAD)
+    size, sha = len(payload), hashlib.sha256(payload).hexdigest()
     hits, first_asset_request = [], {"yes": True}
 
     class Handler(http.server.BaseHTTPRequestHandler):
@@ -725,27 +738,27 @@ def test_end_to_end_against_a_local_release_server(monkeypatch):
             hits.append((self.path, range_header))
             if self.path.endswith("latest.json"):
                 manifest = {"version": NEW, "notes": "## 主题\n- 更新内容",
-                            "platforms": {updater.platform_key(): {
-                                "url": asset_url(NEW), "size": SIZE, "sha256": SHA}}}
+                            "platforms": {key: {"url": asset_url(NEW, suffix),
+                                                "size": size, "sha256": sha}}}
                 self._reply(200, json.dumps(manifest).encode())
             elif range_header:
                 start = int(range_header.split("=")[1].split("-")[0])
-                self._reply(206, PAYLOAD[start:],
-                            {"Content-Range": f"bytes {start}-{SIZE - 1}/{SIZE}"})
+                self._reply(206, payload[start:],
+                            {"Content-Range": f"bytes {start}-{size - 1}/{size}"})
             elif first_asset_request["yes"]:
                 first_asset_request["yes"] = False  # 首次连接发完一个整块就断开
                 self.send_response(200)
-                self.send_header("Content-Length", str(SIZE))
+                self.send_header("Content-Length", str(size))
                 self.end_headers()
-                self.wfile.write(PAYLOAD[:CHUNK])
+                self.wfile.write(payload[:CHUNK])
             else:
-                self._reply(200, PAYLOAD)
+                self._reply(200, payload)
 
         def _reply(self, status, body, headers=None):
             self.send_response(status)
             self.send_header("Content-Length", str(len(body)))
-            for key, value in (headers or {}).items():
-                self.send_header(key, value)
+            for name, value in (headers or {}).items():
+                self.send_header(name, value)
             self.end_headers()
             self.wfile.write(body)
 
@@ -766,12 +779,12 @@ def test_end_to_end_against_a_local_release_server(monkeypatch):
         svc = UpdaterService()
         svc.start_check()
         found = _wait(svc, "available")
-        assert found["result"]["sha256"] == SHA
-        assert found["result"]["asset_url"] == asset_url(NEW)
+        assert found["result"]["sha256"] == sha
+        assert found["result"]["asset_url"] == asset_url(NEW, suffix)
 
         svc.start_download()
         done = _wait(svc, "ready")
-        assert Path(done["path"]).read_bytes() == PAYLOAD
+        assert Path(done["path"]).read_bytes() == payload
         asset_requests = [r for path, r in hits if not path.endswith("latest.json")]
         assert asset_requests == [None, f"bytes={CHUNK}-"]  # 断线后从断点续传
 
