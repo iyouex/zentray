@@ -1,7 +1,8 @@
 name: test-windows
 
 # Windows 平台逻辑验证（离屏 Qt；不需要真实桌面）
-# 覆盖：贴边几何/停靠、胶囊点击/长按/拖动、flyout、下一步提示、设置字段。
+# 覆盖：贴边几何/停靠、胶囊点击/长按/拖动、flyout、下一步提示、设置字段、
+# 应用内更新的状态机与换目录 helper（update.bat 真执行：等退出/回滚/按标记拉起）。
 on:
   push:
     branches: [feature/win-edge-tray, staging, master]
@@ -19,7 +20,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e . pytest
-      - name: 贴边托盘测试（offscreen）
+      - name: 贴边托盘与更新逻辑测试（offscreen）
         env:
           QT_QPA_PLATFORM: offscreen
         run: >
@@ -31,3 +32,10 @@ jobs:
           tests/unit/test_next_step.py
           tests/unit/test_glance_next_step.py
           tests/unit/test_appearance_settings.py
+          tests/unit/test_updater.py
+          tests/unit/test_updater_service.py
+          tests/unit/test_updates_api.py
+          tests/unit/test_update_manifest_script.py
+          tests/unit/test_update_prompt.py
+          tests/unit/test_update_watcher.py
+          tests/unit/test_windows_update_helper.py

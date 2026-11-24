@@ -50,6 +50,18 @@ def try_vue_settings(controller: "TrayController") -> bool:
     return True
 
 
+def try_vue_update(controller: "TrayController") -> bool:
+    """设置 → 系统 → 软件更新：托盘菜单更新提示项与「发现新版本」通知的落点。"""
+    if not use_vue_ui():
+        return False
+    ok, payload = open_vue_route(
+        "/settings", title="设置", width=1080, height=680, query={"tab": "system"})
+    if ok and isinstance(payload, dict) and not payload.get("cancelled"):
+        controller.apply_settings()
+        controller.update_display()
+    return True
+
+
 def try_vue_reminders(batch) -> tuple[bool, Optional[dict]]:
     """
     打开聚合提醒窗（一窗多卡，卡片式）。

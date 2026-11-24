@@ -61,7 +61,8 @@ class TrayImplementation(QObject):
     def update_menu(self, items: list):
         pass
 
-    def show_notification(self, title: str, msg: str, on_click=None):
+    def show_notification(self, title: str, msg: str, on_click=None,
+                          action_label: str = "点击查看报告"):
         pass
 
     def shutdown(self):
@@ -189,7 +190,8 @@ class LinuxBridgeTray(TrayImplementation):
     def update_menu(self, items: list):
         self._send({"type": "menu", "items": items})
 
-    def show_notification(self, title: str, msg: str, on_click=None):
+    def show_notification(self, title: str, msg: str, on_click=None,
+                          action_label: str = "点击查看报告"):
         # 带 on_click 且 notify-send 支持 --action（libnotify≥0.8）时：
         # --wait 常驻至用户操作，点击通知即触发回调（主线程执行）
         if on_click and _notify_send_supports_actions():
@@ -198,7 +200,7 @@ class LinuxBridgeTray(TrayImplementation):
                     out = subprocess.run(
                         [
                             "notify-send", "-a", "ZenTray",
-                            "--action", "default=点击查看报告",
+                            "--action", f"default={action_label}",
                             "--wait", str(title), str(msg),
                         ],
                         capture_output=True, text=True, timeout=300,
@@ -340,7 +342,9 @@ class QtStandardTray(TrayImplementation):
                 qt_menu.addAction(action)
                 self.actions.append(action)
 
-    def show_notification(self, title: str, msg: str, on_click=None):
+    def show_notification(self, title: str, msg: str, on_click=None,
+                          action_label: str = "点击查看报告"):
+        # 气泡/toast 没有可定制的动作按钮，action_label 仅用于统一签名
         self._pending_click = on_click
         self.tray.showMessage(title, msg, QSystemTrayIcon.Information, 4000)
 
